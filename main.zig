@@ -10,8 +10,8 @@ const prim = @import("primitives.zig");
 
 var tri = prim.Triangle{
     .v0 = .{ 10, 10 },
-    .v1 = .{ 350, 750 },
-    .v2 = .{ 750, 350 },
+    .v1 = .{ 350, 450 },
+    .v2 = .{ 450, 350 },
 };
 
 pub fn main() !void {
@@ -19,14 +19,18 @@ pub fn main() !void {
     // const height: c_int = 135;
     // const scale: c_int = 8;
 
-    const width: c_int = 1920;
-    const height: c_int = 1080;
-    const scale: c_int = 1;
+    const width: c_int = 960;
+    const height: c_int = 540;
+    const scale: c_int = 2;
 
     var gfx = try ctx.SdlGfx.init(width, height, scale);
 
     var running = true;
     var t: usize = 0;
+
+    const freq: u64 = c.SDL_GetPerformanceFrequency();
+    var last: u64 = c.SDL_GetPerformanceCounter();
+    var frames: u64 = 0;
 
     while (running) : (t += 1) {
         var ev: c.SDL_Event = undefined;
@@ -42,17 +46,30 @@ pub fn main() !void {
 
         var framebuffer = try gfx.begin_frame();
 
-        // const bounding_box = tri.get_bounding_box();
-
-        // NOTE: Show triangle bounding box
-
         tri.render_triangle(&framebuffer);
 
-        tri.v0[0] += 1;
+        if (t % 100 == 0) tri.v0[0] += 1;
 
         gfx.end_frame();
         gfx.present();
 
         framebuffer.clear(0x00000000);
+
+        // Show fps
+        frames += 1;
+        const now: u64 = c.SDL_GetPerformanceCounter();
+        const dt_counts: u64 = now - last;
+
+        if (dt_counts >= freq) { // ~1 second
+            const seconds: f64 =
+                @as(f64, @floatFromInt(dt_counts)) / @as(f64, @floatFromInt(freq));
+            const fps: f64 =
+                @as(f64, @floatFromInt(frames)) / seconds;
+
+            std.debug.print("FPS: {d:.1}\n", .{fps});
+
+            frames = 0;
+            last = now;
+        }
     }
 }

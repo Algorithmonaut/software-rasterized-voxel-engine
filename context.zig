@@ -10,14 +10,21 @@ pub const Framebuffer = struct {
     width: usize,
     height: usize,
 
-    pub inline fn set_pixel(self: *const Framebuffer, x: i32, y: i32, color: u32) void {
+    pub inline fn set_pixel(self: *const Framebuffer, x: usize, y: usize, color: u32) void {
         // NOTE: Bounds check, remove for max speed
-        std.debug.assert(x < self.width and y < self.height);
+        // std.debug.assert(x < self.width and y < self.height);
 
         const row_ptr: [*]u8 = self.base + @as(usize, @intCast(y)) * self.pitch;
         const row_u32: [*]u32 = @ptrCast(@alignCast(row_ptr));
 
         row_u32[@as(usize, @intCast(x))] = color;
+    }
+
+    pub inline fn get_scanline(self: *const Framebuffer, y: usize) [*]u32 {
+        const row_ptr: [*]u8 = self.base + @as(usize, @intCast(y)) * self.pitch;
+        const row_u32: [*]u32 = @ptrCast(@alignCast(row_ptr));
+
+        return row_u32;
     }
 
     pub inline fn clear(self: *const Framebuffer, color: u32) void {
