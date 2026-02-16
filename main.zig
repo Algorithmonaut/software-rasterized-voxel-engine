@@ -10,8 +10,11 @@ const prim = @import("primitives.zig");
 
 var tri = prim.Triangle{
     .v0 = .{ 10, 10 },
+    .v0_col = 0xFFFF0000,
     .v1 = .{ 350, 450 },
+    .v1_col = 0xFF00FF00,
     .v2 = .{ 450, 350 },
+    .v2_col = 0xFF0000FF,
 };
 
 pub fn main() !void {
@@ -48,7 +51,7 @@ pub fn main() !void {
 
         tri.render_triangle(&framebuffer);
 
-        if (t % 100 == 0) tri.v0[0] += 1;
+        if (t % 10 == 0) tri.v0[0] += 1;
 
         gfx.end_frame();
         gfx.present();

@@ -1,18 +1,16 @@
 const std = @import("std");
 const ctx = @import("context.zig");
 
-pub const Vertex2D = struct {
-    pos: @Vector(2, i32),
-    col: u32,
-};
-
 pub const Triangle = struct {
     v0: @Vector(2, i32),
+    v0_col: u32,
     v1: @Vector(2, i32),
+    v1_col: u32,
     v2: @Vector(2, i32),
+    v2_col: u32,
 
     const Edge = struct {
-        // Edge function can be refactored E(x,y) = Ax + By + C with A B C constants
+        // Edge function can be refactored: E(x,y) = Ax + By + C with A B C constants
         A: i32,
         B: i32,
         C: i32, // WARN: Change to i64 if overflow
@@ -46,17 +44,31 @@ pub const Triangle = struct {
         return (p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0]);
     }
 
+    inline fn xrgb_to_vec3(c: u32) @Vector(3, u8) {
+        return .{ @truncate(c >> 16), @truncate(c >> 8), @truncate(c) };
+    }
+
+    inline fn vec3_to_xrgb(c: @Vector(3, u8)) u32 {
+        return @as(u32, 0xFF) << 24 |
+            @as(u32, c[0]) << 16 |
+            @as(u32, c[1]) << 8 |
+            @as(u32, c[2]);
+    }
+
     pub inline fn render_triangle(self: *Triangle, fb: *ctx.Framebuffer) void {
         var a = self.v0;
         var b = self.v1;
         var c = self.v2;
 
+        var tri_area = edge(a, b, c);
+
         // If edge func is neg, then the triangle is oriented clockwise.
         // Swap any two vertices to reorient the triangle counter-clockwise.
-        if (edge(a, b, c) < 0) {
+        if (tri_area < 0) {
             const tmp = b;
             b = c;
             c = tmp;
+            tri_area = -tri_area;
         }
 
         // Compute the bbox and clip it to the viewport
@@ -82,6 +94,11 @@ pub const Triangle = struct {
         const e1 = make_edge(b, c);
         const e2 = make_edge(c, a);
 
+        // P: Decompose vertex colors into channels
+        const v0_color_channel_f32 = @as(@Vector(3, f32), @floatFromInt(xrgb_to_vec3(self.v0_col)));
+        const v1_color_channel_f32 = @as(@Vector(3, f32), @floatFromInt(xrgb_to_vec3(self.v1_col)));
+        const v2_color_channel_f32 = @as(@Vector(3, f32), @floatFromInt(xrgb_to_vec3(self.v2_col)));
+
         // Evaluate edges at top-left of bbox
         const start_w0 = e0.eval(x_min_i, y_min_i);
         const start_w1 = e1.eval(x_min_i, y_min_i);
@@ -99,8 +116,6 @@ pub const Triangle = struct {
         var w0_row = start_w0;
         var w1_row = start_w1;
         var w2_row = start_w2;
-
-        const color: u32 = 0xFFFFFFFF;
 
         // Convert bbox to usize for incremental stepping
         const x_min: usize = @intCast(x_min_i);
@@ -122,8 +137,18 @@ pub const Triangle = struct {
 
             var x: usize = x_min;
             while (x <= x_max) : (x += 1) {
+                // If the point is inside the triangle
                 if (w0 >= 0 and w1 >= 0 and w2 >= 0) {
-                    line[x] = color;
+                    const beta = @as(f32, @floatFromInt(w1)) / @as(f32, @floatFromInt(tri_area));
+                    const gamma = @as(f32, @floatFromInt(w2)) / @as(f32, @floatFromInt(tri_area));
+                    const alpha = 1 - beta - gamma;
+
+                    const rgb: @Vector(3, f32) = v0_color_channel_f32 * @as(@Vector(3, f32), @splat(alpha)) + v1_color_channel_f32 * @as(@Vector(3, f32), @splat(beta)) + v2_color_channel_f32 * @as(@Vector(3, f32), @splat(gamma));
+                    const rgb_u8: @Vector(3, u8) = @intFromFloat(rgb);
+
+                    const out_color: u32 = vec3_to_xrgb(rgb_u8);
+
+                    line[x] = out_color;
                 }
 
                 // Step right
