@@ -60,18 +60,21 @@ pub const Triangle = struct {
         var b = self.v1;
         var c = self.v2;
 
-        var tri_area = edge(a, b, c);
+        const tri_area = edge(a, b, c);
 
+        // WARN: Trying without this
         // If edge func is neg, then the triangle is oriented clockwise.
         // Swap any two vertices to reorient the triangle counter-clockwise.
-        if (tri_area < 0) {
-            const tmp = b;
-            b = c;
-            c = tmp;
-            tri_area = -tri_area;
-        }
+        // if (tri_area < 0) {
+        //     const tmp = b;
+        //     b = c;
+        //     c = tmp;
+        //     tri_area = -tri_area;
+        // }
 
-        // Compute the bbox and clip it to the viewport
+        const inv_tri_area_f32 = 1 / @as(f32, @floatFromInt(tri_area));
+
+        // P: Compute the bbox and clip it to the viewport
         var x_min_i: i32 = @min(a[0], b[0], c[0]);
         var x_max_i: i32 = @max(a[0], b[0], c[0]);
         var y_min_i: i32 = @min(a[1], b[1], c[1]);
@@ -81,7 +84,7 @@ pub const Triangle = struct {
         const h: i32 = @intCast(fb.height);
 
         // Reject if the triangle is out of the viewport
-        if (x_max_i < 0 or y_max_i < 0 or x_min_i > w or y_min_i > h) return;
+        if (x_max_i < 0 or y_max_i < 0 or x_min_i >= w or y_min_i >= h) return;
 
         // Clamp the bounding box to the viewport
         x_min_i = std.math.clamp(x_min_i, 0, w - 1);
@@ -89,44 +92,28 @@ pub const Triangle = struct {
         y_min_i = std.math.clamp(y_min_i, 0, h - 1);
         y_max_i = std.math.clamp(y_max_i, 0, h - 1);
 
-        // NOTE: Compute the edges
+        // P: Compute the edges
         const e0 = make_edge(a, b);
         const e1 = make_edge(b, c);
         const e2 = make_edge(c, a);
 
-        // P: Decompose vertex colors into channels
-        const v0_color_channel_f32 = @as(@Vector(3, f32), @floatFromInt(xrgb_to_vec3(self.v0_col)));
-        const v1_color_channel_f32 = @as(@Vector(3, f32), @floatFromInt(xrgb_to_vec3(self.v1_col)));
-        const v2_color_channel_f32 = @as(@Vector(3, f32), @floatFromInt(xrgb_to_vec3(self.v2_col)));
-
         // Evaluate edges at top-left of bbox
-        const start_w0 = e0.eval(x_min_i, y_min_i);
-        const start_w1 = e1.eval(x_min_i, y_min_i);
-        const start_w2 = e2.eval(x_min_i, y_min_i);
+        var w0_row = e0.eval(x_min_i, y_min_i);
+        var w1_row = e1.eval(x_min_i, y_min_i);
+        var w2_row = e2.eval(x_min_i, y_min_i);
 
-        // Incremental stepping
-        const step_x0: i32 = e0.A; // move right: +A
-        const step_x1: i32 = e1.A;
-        const step_x2: i32 = e2.A;
+        // P: Decompose vertex colors into f32 channels
+        const v0_c_f32 = @as(@Vector(3, f32), @floatFromInt(xrgb_to_vec3(self.v0_col)));
+        const v1_c_f32 = @as(@Vector(3, f32), @floatFromInt(xrgb_to_vec3(self.v1_col)));
+        const v2_c_f32 = @as(@Vector(3, f32), @floatFromInt(xrgb_to_vec3(self.v2_col)));
 
-        const step_y0: i32 = e0.B; // move down: +B
-        const step_y1: i32 = e1.B;
-        const step_y2: i32 = e2.B;
-
-        var w0_row = start_w0;
-        var w1_row = start_w1;
-        var w2_row = start_w2;
-
-        // Convert bbox to usize for incremental stepping
+        // P: Convert bbox to usize for incremental stepping
         const x_min: usize = @intCast(x_min_i);
         const x_max: usize = @intCast(x_max_i);
         const y_min: usize = @intCast(y_min_i);
         const y_max: usize = @intCast(y_max_i);
 
-        // NOTE: Incremental stepping
-
-        // Prefer using usize directly
-
+        // P: Main loop
         var y: usize = y_min;
         while (y <= y_max) : (y += 1) {
             const line = fb.get_scanline(y);
@@ -138,12 +125,15 @@ pub const Triangle = struct {
             var x: usize = x_min;
             while (x <= x_max) : (x += 1) {
                 // If the point is inside the triangle
-                if (w0 >= 0 and w1 >= 0 and w2 >= 0) {
-                    const beta = @as(f32, @floatFromInt(w1)) / @as(f32, @floatFromInt(tri_area));
-                    const gamma = @as(f32, @floatFromInt(w2)) / @as(f32, @floatFromInt(tri_area));
+                if ((w0 >= 0 and w1 >= 0 and w2 >= 0) or (w0 < 0 and w1 < 0 and w2 < 0)) {
+                    const beta = @as(f32, @floatFromInt(w1)) * inv_tri_area_f32;
+                    const gamma = @as(f32, @floatFromInt(w2)) * inv_tri_area_f32;
                     const alpha = 1 - beta - gamma;
 
-                    const rgb: @Vector(3, f32) = v0_color_channel_f32 * @as(@Vector(3, f32), @splat(alpha)) + v1_color_channel_f32 * @as(@Vector(3, f32), @splat(beta)) + v2_color_channel_f32 * @as(@Vector(3, f32), @splat(gamma));
+                    const rgb: @Vector(3, f32) = v0_c_f32 * @as(@Vector(3, f32), @splat(alpha)) +
+                        v1_c_f32 * @as(@Vector(3, f32), @splat(beta)) +
+                        v2_c_f32 * @as(@Vector(3, f32), @splat(gamma));
+
                     const rgb_u8: @Vector(3, u8) = @intFromFloat(rgb);
 
                     const out_color: u32 = vec3_to_xrgb(rgb_u8);
@@ -152,15 +142,15 @@ pub const Triangle = struct {
                 }
 
                 // Step right
-                w0 += step_x0;
-                w1 += step_x1;
-                w2 += step_x2;
+                w0 += e0.A;
+                w1 += e1.A;
+                w2 += e2.A;
             }
 
             // Step down
-            w0_row += step_y0;
-            w1_row += step_y1;
-            w2_row += step_y2;
+            w0_row += e0.B;
+            w1_row += e1.B;
+            w2_row += e2.B;
         }
     }
 };

@@ -5,17 +5,27 @@ const c = @cImport({
 });
 const ctx = @import("context.zig");
 const prim = @import("primitives.zig");
+const cube = @import("cube.zig");
 
 // P: Main function
 
 var tri = prim.Triangle{
     .v0 = .{ 10, 10 },
     .v0_col = 0xFFFF0000,
-    .v1 = .{ 350, 450 },
+    .v2 = .{ 950, 450 },
     .v1_col = 0xFF00FF00,
-    .v2 = .{ 450, 350 },
+    .v1 = .{ 450, 350 },
     .v2_col = 0xFF0000FF,
 };
+
+// var tri2 = prim.Triangle{
+//     .v0 = .{ 40, 80 },
+//     .v0_col = 0xFFFF0000,
+//     .v2 = .{ 450, 950 },
+//     .v1_col = 0xFF00FF00,
+//     .v1 = .{ 350, 550 },
+//     .v2_col = 0xFF0000FF,
+// };
 
 pub fn main() !void {
     // const width: c_int = 240;
@@ -31,9 +41,20 @@ pub fn main() !void {
     var running = true;
     var t: usize = 0;
 
+    var vertical_dir: i32 = 1;
+    var horizontal_dir: i32 = 1;
+
     const freq: u64 = c.SDL_GetPerformanceFrequency();
     var last: u64 = c.SDL_GetPerformanceCounter();
     var frames: u64 = 0;
+
+    var framebuffer = try gfx.begin_frame();
+
+    var cube1 = cube.Cube{
+        .vertices = cube.vertices,
+        .idx = cube.idx,
+    };
+    cube1.move_back(10);
 
     while (running) : (t += 1) {
         var ev: c.SDL_Event = undefined;
@@ -47,11 +68,23 @@ pub fn main() !void {
             }
         }
 
-        var framebuffer = try gfx.begin_frame();
+        // tri.render_triangle(&framebuffer);
 
-        tri.render_triangle(&framebuffer);
+        cube1.render_cube(&framebuffer);
 
-        if (t % 10 == 0) tri.v0[0] += 1;
+        tri.v0[0] += vertical_dir;
+        tri.v1[1] += horizontal_dir;
+
+        if (tri.v0[0] == framebuffer.width) {
+            vertical_dir = -vertical_dir;
+        } else if (tri.v0[0] == 0) {
+            vertical_dir = -vertical_dir;
+        }
+        if (tri.v1[1] == framebuffer.height) {
+            horizontal_dir = -horizontal_dir;
+        } else if (tri.v1[1] == 0) {
+            horizontal_dir = -horizontal_dir;
+        }
 
         gfx.end_frame();
         gfx.present();
@@ -59,7 +92,7 @@ pub fn main() !void {
         framebuffer.clear(0x00000000);
 
         // Show fps
-        frames += 1;
+        frames += 1 % 0xFFFF;
         const now: u64 = c.SDL_GetPerformanceCounter();
         const dt_counts: u64 = now - last;
 
@@ -75,4 +108,7 @@ pub fn main() !void {
             last = now;
         }
     }
+
+    // var cu: cube.Cube = .{};
+    // cube1.render_cube(&framebuffer);
 }
