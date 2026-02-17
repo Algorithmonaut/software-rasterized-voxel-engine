@@ -9,6 +9,7 @@ pub const Framebuffer = struct {
     pitch: usize, // bytes per row (maybe aligned)
     width: usize,
     height: usize,
+    z_buffer: [960 * 540]f32,
 
     pub inline fn set_pixel(self: *const Framebuffer, x: usize, y: usize, color: u32) void {
         // NOTE: Bounds check, remove for max speed
@@ -45,6 +46,11 @@ pub const Framebuffer = struct {
                 @memset(row_u32[0..self.width], color);
             }
         }
+    }
+
+    pub inline fn clear_z(self: *Framebuffer) void {
+        const neg_inf: f32 = -std.math.inf(f32);
+        @memset(self.z_buffer[0..], neg_inf);
     }
 };
 
@@ -116,6 +122,7 @@ pub const SdlGfx = struct {
             .pitch = pitch,
             .width = self.width,
             .height = self.height,
+            .z_buffer = undefined,
         }; // Returns a framebuffer object
     }
 

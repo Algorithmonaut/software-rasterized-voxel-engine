@@ -8,6 +8,7 @@ pub const Triangle = struct {
     v1_col: u32,
     v2: @Vector(2, i32),
     v2_col: u32,
+    // depth: @Vector(3, f32),
 
     const Edge = struct {
         // Edge function can be refactored: E(x,y) = Ax + By + C with A B C constants
@@ -62,7 +63,7 @@ pub const Triangle = struct {
 
         const tri_area = edge(a, b, c);
 
-        // WARN: Trying without this
+        // WARN: Trying without this (backface culling)
         // If edge func is neg, then the triangle is oriented clockwise.
         // Swap any two vertices to reorient the triangle counter-clockwise.
         // if (tri_area < 0) {

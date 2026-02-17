@@ -30,11 +30,15 @@ var tri = prim.Triangle{
 pub fn main() !void {
     // const width: c_int = 240;
     // const height: c_int = 135;
-    // const scale: c_int = 8;
+    // const scale: c_int = 4;
 
     const width: c_int = 960;
     const height: c_int = 540;
     const scale: c_int = 2;
+
+    // const width: c_int = 1920;
+    // const height: c_int = 1080;
+    // const scale: c_int = 1;
 
     var gfx = try ctx.SdlGfx.init(width, height, scale);
 
@@ -54,7 +58,7 @@ pub fn main() !void {
         .vertices = cube.vertices,
         .idx = cube.idx,
     };
-    cube1.move_back(10);
+    // cube1.move_back(10);
 
     while (running) : (t += 1) {
         var ev: c.SDL_Event = undefined;
@@ -90,6 +94,7 @@ pub fn main() !void {
         gfx.present();
 
         framebuffer.clear(0x00000000);
+        framebuffer.clear_z();
 
         // Show fps
         frames += 1 % 0xFFFF;

@@ -1,6 +1,7 @@
 const std = @import("std");
 const tri = @import("primitives.zig");
 const ctx = @import("context.zig");
+const matrix = @import("matrix.zig");
 
 const Vec4 = @Vector(4, f32);
 
@@ -35,8 +36,22 @@ pub const Cube = struct {
     }
 
     pub inline fn render_cube(self: *Cube, fb: *ctx.Framebuffer) void {
+        const angle: f32 = 3.14 / 2000.0;
+        const rotation_mat = matrix.Mat4f.rotate_y(angle);
+        for (&self.vertices) |*vertex| {
+            vertex.* = rotation_mat.mul_vec(vertex.*);
+        }
+
+        var translated_vertices = self.vertices;
+
+        for (&translated_vertices) |*v| {
+            v.*[2] -= 10;
+            v.*[1] += 2;
+            v.*[0] += 4;
+        }
+
         var proj_vertices: [8]Vec4 = undefined;
-        for (self.vertices, 0..) |vertex, i| {
+        for (translated_vertices, 0..) |vertex, i| {
             proj_vertices[i][0] = vertex[0] * 1000 / -(vertex[2]);
             proj_vertices[i][1] = vertex[1] * 1000 / -(vertex[2]);
             proj_vertices[i][2] = vertex[2];
@@ -61,23 +76,11 @@ pub const Cube = struct {
                 .v0_col = 0xFFFF0000,
                 .v1_col = 0xFF00FF00,
                 .v2_col = 0xFF0000FF,
+
+                // .depth = undefined,
             };
 
             triangle.render_triangle(fb);
-        }
-    }
-
-    pub inline fn move_back(self: *Cube, factor: f32) void {
-        for (&self.vertices) |*v| {
-            v.*[2] -= factor;
-        }
-
-        for (&self.vertices) |*v| {
-            v.*[1] += 2;
-        }
-
-        for (&self.vertices) |*v| {
-            v.*[0] += 4;
         }
     }
 };

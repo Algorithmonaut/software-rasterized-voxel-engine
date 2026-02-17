@@ -1,10 +1,13 @@
+// NOTE: Vectors are column-major
+//       Matrices are row-major
+
 const std = @import("std");
 
 pub const T = f32;
-pub const V = @Vector(3, T);
+pub const V3 = @Vector(3, T);
 
 pub const Vec3f = struct {
-    v: V,
+    v: V3,
 
     pub inline fn length_squared(self: Vec3f) T {
         const p = self.v * self.v;
@@ -19,7 +22,7 @@ pub const Vec3f = struct {
         const lsq = self.length_squared();
         if (lsq == 0) return;
 
-        self.v = self.v / @as(V, @splat(self.get_magnitude()));
+        self.v = self.v / @as(V3, @splat(self.get_magnitude()));
     }
 };
 
@@ -59,6 +62,6 @@ pub inline fn sub(a: Vec3f, b: Vec3f) Vec3f {
 
 pub inline fn scale(a: Vec3f, scalar: T) Vec3f {
     return .{
-        .v = a * @as(V, @splat(scalar)),
+        .v = a * @as(V3, @splat(scalar)),
     };
 }
