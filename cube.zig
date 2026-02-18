@@ -1,9 +1,11 @@
 const std = @import("std");
-const tri = @import("primitives.zig");
-const ctx = @import("context.zig");
+const tri = @import("triangle.zig");
 const matrix = @import("matrix.zig");
+const fb = @import("framebuffer.zig");
+const cfg = @import("config.zig");
+const float = cfg.f;
 
-const Vec4 = @Vector(4, f32);
+const Vec4 = @Vector(4, float);
 
 pub const vertices: [8]Vec4 = .{
     .{ -1, -1, -1, 1 },
@@ -31,13 +33,16 @@ pub const Cube = struct {
 
     // Triangles are oriented counter-clockwise
 
-    inline fn perspective_divide(v: Vec4) Vec4 {
-        return .{ v[0] / v[2], v[1] / v[2], v[2], v[3] };
-    }
+    // inline fn perspective_divide(v: Vec4) Vec4 {
+    //     return .{ v[0] / v[2], v[1] / v[2], v[2], v[3] };
+    // }
 
-    pub inline fn render_cube(self: *Cube, fb: *ctx.Framebuffer) void {
-        const angle: f32 = 3.14 / 2000.0;
-        const rotation_mat = matrix.Mat4f.rotate_y(angle);
+    pub inline fn render_cube(self: *Cube, buf: *fb.Framebuffer) void {
+        const angle: float = 3.14 / 200.0;
+        const rotation_mat_y = matrix.Mat4f.rotate_y(angle);
+        const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
+
+        const rotation_mat = rotation_mat_y.mul(rotation_mat_z);
         for (&self.vertices) |*vertex| {
             vertex.* = rotation_mat.mul_vec(vertex.*);
         }
@@ -45,42 +50,28 @@ pub const Cube = struct {
         var translated_vertices = self.vertices;
 
         for (&translated_vertices) |*v| {
-            v.*[2] -= 10;
-            v.*[1] += 2;
-            v.*[0] += 4;
-        }
-
-        var proj_vertices: [8]Vec4 = undefined;
-        for (translated_vertices, 0..) |vertex, i| {
-            proj_vertices[i][0] = vertex[0] * 1000 / -(vertex[2]);
-            proj_vertices[i][1] = vertex[1] * 1000 / -(vertex[2]);
-            proj_vertices[i][2] = vertex[2];
-            proj_vertices[i][3] = vertex[3];
+            v.*[2] += 10;
+            v.*[0] *= 1000;
+            v.*[1] *= 1000;
         }
 
         var i: usize = 0;
         while (i < idx.len) : (i += 3) {
-            const v0 = proj_vertices[idx[i]];
-            const v1 = proj_vertices[idx[i + 1]];
-            const v2 = proj_vertices[idx[i + 2]];
-
-            const v0_2di = @Vector(2, i32){ @intFromFloat(v0[0]), @intFromFloat(v0[1]) };
-            const v1_2di = @Vector(2, i32){ @intFromFloat(v1[0]), @intFromFloat(v1[1]) };
-            const v2_2di = @Vector(2, i32){ @intFromFloat(v2[0]), @intFromFloat(v2[1]) };
+            const v0 = translated_vertices[idx[i]];
+            const v1 = translated_vertices[idx[i + 1]];
+            const v2 = translated_vertices[idx[i + 2]];
 
             var triangle = tri.Triangle{
-                .v0 = v0_2di,
-                .v1 = v1_2di,
-                .v2 = v2_2di,
+                .v0 = v0,
+                .v1 = v1,
+                .v2 = v2,
 
                 .v0_col = 0xFFFF0000,
                 .v1_col = 0xFF00FF00,
                 .v2_col = 0xFF0000FF,
-
-                // .depth = undefined,
             };
 
-            triangle.render_triangle(fb);
+            triangle.render_triangle(buf);
         }
     }
 };
