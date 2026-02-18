@@ -18,6 +18,8 @@ pub const Triangle = struct {
         B: i32,
         C: i32, // WARN: Change to i64 if overflow
 
+        bias: i32, // This is used for the top left rule
+
         /// Evaluate the point (x, y) against the edge
         inline fn eval(self: Edge, x: i32, y: i32) i32 {
             return self.A * x + self.B * y + self.C; // WARN: Cast to i64 if overflow
@@ -30,12 +32,17 @@ pub const Triangle = struct {
         const y0 = a[1];
         const x1 = b[0];
         const y1 = b[1];
+        const dy = y1 - y0;
+        const dx = x1 - x0;
+
+        const is_top_left: bool = (dy > 0) or (dy == 0 and dx < 0);
 
         // E(x,y) = (y1 - y0)*x + (x0 - x1)*y + (y0*x1 - x0*y1)
         return .{
             .A = y1 - y0,
             .B = x0 - x1,
             .C = y0 * x1 - x0 * y1,
+            .bias = if (is_top_left) 0 else -1,
         };
     }
 
@@ -107,7 +114,9 @@ pub const Triangle = struct {
 
         const tri_area = edge(a, b, c);
 
-        // WARN: Trying without this (backface culling)
+        // Doing backface culling instead
+
+        if (tri_area < 0) return;
 
         // If edge func is neg, then the triangle is oriented clockwise.
         // Swap any two vertices to reorient the triangle counter-clockwise.
@@ -171,7 +180,7 @@ pub const Triangle = struct {
             var x: usize = x_min;
             while (x <= x_max) : (x += 1) {
                 // If the point is inside the triangle
-                if ((w0 >= 0 and w1 >= 0 and w2 >= 0) or (w0 < 0 and w1 < 0 and w2 < 0)) {
+                if (w0 + e0.bias >= 0 and w1 + e1.bias >= 0 and w2 + e2.bias >= 0) {
                     const beta = @as(float, @floatFromInt(w1)) * inv_tri_area_f32;
                     const gamma = @as(float, @floatFromInt(w2)) * inv_tri_area_f32;
                     const alpha = 1 - beta - gamma;
