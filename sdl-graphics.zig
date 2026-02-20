@@ -5,18 +5,15 @@ const c = @cImport({
 });
 const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const cfg = @import("config.zig");
-const float = cfg.f;
+const float = cfg.float;
 
 pub const SdlGfx = struct {
     window: *c.SDL_Window,
     renderer: *c.SDL_Renderer,
     texture: *c.SDL_Texture,
-    width: usize,
-    height: usize,
-    scale: c_int,
     z_buffer: [cfg.width * cfg.height]float,
 
-    pub fn init(width: c_int, height: c_int, scale: c_int) !SdlGfx {
+    pub fn init() !SdlGfx {
         if (c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS) != 0) {
             std.debug.print("SDL_Init failed: {s}\n", .{c.SDL_GetError()});
             return error.SDLInitFailed;
@@ -26,8 +23,8 @@ pub const SdlGfx = struct {
             "Software Rasterizer",
             c.SDL_WINDOWPOS_CENTERED,
             c.SDL_WINDOWPOS_CENTERED,
-            width * scale,
-            height * scale,
+            cfg.width * cfg.scale,
+            cfg.height * cfg.scale,
             0,
         ) orelse {
             std.debug.print("SDL_CreateWindow failed: {s}\n", .{c.SDL_GetError()});
@@ -43,8 +40,8 @@ pub const SdlGfx = struct {
             renderer,
             c.SDL_PIXELFORMAT_ARGB8888,
             c.SDL_TEXTUREACCESS_STREAMING, // the texture's pixels will be frequently updated
-            width,
-            height,
+            cfg.width,
+            cfg.height,
         ) orelse {
             std.debug.print("SDL_CreateTexture failed: {s}\n", .{c.SDL_GetError()});
             return error.SDLTextureFailed;
@@ -54,9 +51,6 @@ pub const SdlGfx = struct {
             .window = win,
             .renderer = renderer,
             .texture = tex,
-            .width = @intCast(width),
-            .height = @intCast(height),
-            .scale = scale,
             .z_buffer = undefined,
         };
     }
@@ -77,8 +71,6 @@ pub const SdlGfx = struct {
         return .{
             .base = base,
             .pitch = pitch,
-            .width = self.width,
-            .height = self.height,
             .z_buffer = zslice,
         }; // Returns a framebuffer object
     }
@@ -91,8 +83,8 @@ pub const SdlGfx = struct {
         var dst: c.SDL_Rect = .{
             .x = 0,
             .y = 0,
-            .w = @intCast(@as(c_int, @intCast(self.width)) * self.scale),
-            .h = @intCast(@as(c_int, @intCast(self.height)) * self.scale),
+            .w = @intCast(@as(c_int, @intCast(cfg.width)) * cfg.scale),
+            .h = @intCast(@as(c_int, @intCast(cfg.height)) * cfg.scale),
         };
 
         _ = c.SDL_RenderCopy(self.renderer, self.texture, null, &dst);

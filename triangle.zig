@@ -1,8 +1,9 @@
 const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const std = @import("std");
 const cfg = @import("config.zig");
-const float = cfg.f;
-const int = cfg.i;
+const float = cfg.float;
+const int = cfg.int;
+const vec3f = cfg.vec3f;
 
 pub const Triangle = struct {
     v0: @Vector(4, f32),
@@ -57,17 +58,6 @@ pub const Triangle = struct {
             @as(u32, c[2]);
     }
 
-    /// Project the triangle from camera space to screen space
-    inline fn camera_to_screen(self: *Triangle) void {
-        const vertices = .{ &self.v0, &self.v1, &self.v2 };
-
-        inline for (vertices) |v| {
-            const z_inv = 1 / v.*[2];
-            v.*[0] *= z_inv;
-            v.*[1] *= z_inv;
-        }
-    }
-
     inline fn edge(a: @Vector(2, i32), b: @Vector(2, i32), p: @Vector(2, i32)) i32 {
         return (p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0]);
     }
@@ -115,18 +105,7 @@ pub const Triangle = struct {
 
         const tri_area = edge(a, b, c);
 
-        // Doing backface culling instead
-
-        if (tri_area < 0) return;
-
-        // If edge func is neg, then the triangle is oriented clockwise.
-        // Swap any two vertices to reorient the triangle counter-clockwise.
-        // if (tri_area < 0) {
-        //     const tmp = b;
-        //     b = c;
-        //     c = tmp;
-        //     tri_area = -tri_area;
-        // }
+        if (tri_area < 0) return; // backface culling
 
         const inv_tri_area_f32 = 1 / @as(float, @floatFromInt(tri_area));
 
@@ -136,8 +115,8 @@ pub const Triangle = struct {
         var y_min_i: i32 = @min(a[1], b[1], c[1]);
         var y_max_i: i32 = @max(a[1], b[1], c[1]);
 
-        const w: i32 = @intCast(fb.width);
-        const h: i32 = @intCast(fb.height);
+        const w: i32 = @intCast(cfg.width);
+        const h: i32 = @intCast(cfg.height);
 
         // Reject if the triangle is out of the viewport
         if (x_max_i < 0 or y_max_i < 0 or x_min_i >= w or y_min_i >= h) return;
@@ -159,9 +138,9 @@ pub const Triangle = struct {
         var w2_row = e2.eval(x_min_i, y_min_i);
 
         // P: Decompose vertex colors into f32 channels
-        const v0_c_f32 = @as(@Vector(3, float), @floatFromInt(xrgb_to_vec3(self.v0_col)));
-        const v1_c_f32 = @as(@Vector(3, float), @floatFromInt(xrgb_to_vec3(self.v1_col)));
-        const v2_c_f32 = @as(@Vector(3, float), @floatFromInt(xrgb_to_vec3(self.v2_col)));
+        const v0_c_f32 = @as(vec3f, @floatFromInt(xrgb_to_vec3(self.v0_col)));
+        const v1_c_f32 = @as(vec3f, @floatFromInt(xrgb_to_vec3(self.v1_col)));
+        const v2_c_f32 = @as(vec3f, @floatFromInt(xrgb_to_vec3(self.v2_col)));
 
         // P: Convert bbox to usize for incremental stepping
         const x_min: usize = @intCast(x_min_i);
@@ -169,10 +148,16 @@ pub const Triangle = struct {
         const y_min: usize = @intCast(y_min_i);
         const y_max: usize = @intCast(y_max_i);
 
+        // Reciprocal depth at the vertices
+        const q0: float = 1 / self.v0[2];
+        const q1: float = 1 / self.v1[2];
+        const q2: float = 1 / self.v2[2];
+
         // P: Main loop
         var y: usize = y_min;
         while (y <= y_max) : (y += 1) {
             const line = fb.get_scanline(y);
+            const z_row_base: usize = y * cfg.width;
 
             var w0: i32 = w0_row;
             var w1: i32 = w1_row;
@@ -187,15 +172,15 @@ pub const Triangle = struct {
                     const gamma = @as(float, @floatFromInt(w2)) * inv_tri_area_f32;
                     const alpha = 1 - beta - gamma;
 
-                    const inv_z: float = 1 / self.v0[2] * alpha + 1 / self.v1[2] * beta + 1 / self.v2[2] * gamma;
+                    const inv_z: float = q0 * alpha + q1 * beta + q2 * gamma;
 
                     if (inv_z <= fb.z_buffer[x + cfg.width * y]) continue;
 
-                    fb.z_buffer[x + cfg.width * y] = inv_z;
+                    fb.z_buffer[z_row_base + x] = inv_z;
 
-                    const rgb: @Vector(3, float) = (v0_c_f32 * @as(@Vector(3, float), @splat(alpha / self.v0[2])) +
-                        v1_c_f32 * @as(@Vector(3, float), @splat(beta / self.v1[2])) +
-                        v2_c_f32 * @as(@Vector(3, float), @splat(gamma / self.v2[2]))) / @as(@Vector(3, float), @splat(inv_z));
+                    const rgb: vec3f = (v0_c_f32 * @as(vec3f, @splat(alpha / self.v0[2])) +
+                        v1_c_f32 * @as(vec3f, @splat(beta / self.v1[2])) +
+                        v2_c_f32 * @as(vec3f, @splat(gamma / self.v2[2]))) / @as(vec3f, @splat(inv_z));
 
                     const rgb_u8: @Vector(3, u8) = @intFromFloat(rgb);
 

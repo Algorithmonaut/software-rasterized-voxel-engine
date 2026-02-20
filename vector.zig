@@ -2,19 +2,20 @@
 //       Matrices are row-major
 
 const std = @import("std");
+const cfg = @import("config.zig");
 
-pub const T = f32;
-pub const V3 = @Vector(3, T);
+pub const float = cfg.float;
+pub const vec3f = cfg.vec3f;
 
 pub const Vec3f = struct {
-    v: V3,
+    v: vec3f,
 
-    pub inline fn length_squared(self: Vec3f) T {
+    pub inline fn length_squared(self: Vec3f) float {
         const p = self.v * self.v;
         return @reduce(.Add, p);
     }
 
-    pub inline fn length(self: Vec3f) T {
+    pub inline fn length(self: Vec3f) float {
         return std.math.sqrt(self.length_squared());
     }
 
@@ -22,11 +23,11 @@ pub const Vec3f = struct {
         const lsq = self.length_squared();
         if (lsq == 0) return;
 
-        self.v = self.v / @as(V3, @splat(self.get_magnitude()));
+        self.v = self.v / @as(vec3f, @splat(std.math.sqrt(lsq)));
     }
 };
 
-pub inline fn dot_product(v1: Vec3f, v2: Vec3f) T {
+pub inline fn dot_product(v1: Vec3f, v2: Vec3f) float {
     const prod = v1.v * v2.v; // lane wise multiply
     return @reduce(.Add, prod); // return the sum of the lanes
 }
@@ -60,8 +61,8 @@ pub inline fn sub(a: Vec3f, b: Vec3f) Vec3f {
     };
 }
 
-pub inline fn scale(a: Vec3f, scalar: T) Vec3f {
+pub inline fn scale(a: Vec3f, scalar: float) Vec3f {
     return .{
-        .v = a * @as(V3, @splat(scalar)),
+        .v = a * @as(vec3f, @splat(scalar)),
     };
 }

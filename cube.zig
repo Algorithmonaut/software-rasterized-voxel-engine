@@ -3,11 +3,10 @@ const tri = @import("triangle.zig");
 const matrix = @import("matrix.zig");
 const fb = @import("framebuffer.zig");
 const cfg = @import("config.zig");
-const float = cfg.f;
+const float = cfg.float;
+const vec4f = cfg.vec4f;
 
-const Vec4 = @Vector(4, float);
-
-pub const vertices: [8]Vec4 = .{
+const vertices: [8]vec4f = .{
     .{ -1, -1, -1, 1 },
     .{ 1, -1, -1, 1 },
     .{ 1, 1, -1, 1 },
@@ -18,7 +17,7 @@ pub const vertices: [8]Vec4 = .{
     .{ -1, 1, 1, 1 },
 };
 
-pub const idx: [36]u16 = .{
+const idx: [36]u16 = .{
     0, 1, 2, 0, 2, 3, // back
     4, 6, 5, 4, 7, 6, // front
     0, 3, 7, 0, 7, 4, //left
@@ -28,16 +27,17 @@ pub const idx: [36]u16 = .{
 };
 
 pub const Cube = struct {
-    vertices: [8]Vec4,
+    vertices: [8]vec4f,
     idx: [36]u16,
 
-    // Triangles are oriented counter-clockwise
+    pub fn init() Cube {
+        return .{
+            .vertices = vertices,
+            .idx = idx,
+        };
+    }
 
-    // inline fn perspective_divide(v: Vec4) Vec4 {
-    //     return .{ v[0] / v[2], v[1] / v[2], v[2], v[3] };
-    // }
-
-    pub inline fn render_cube(self: *Cube, buf: *fb.Framebuffer) void {
+    pub inline fn render(self: *Cube, buf: *fb.Framebuffer) void {
         const angle: float = 3.14 / 2000.0;
         const rotation_mat_y = matrix.Mat4f.rotate_y(angle);
         const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
@@ -69,42 +69,6 @@ pub const Cube = struct {
                 .v0_col = 0xFFFF0000,
                 .v1_col = 0xFF00FF00,
                 .v2_col = 0xFF0000FF,
-            };
-
-            triangle.render_triangle(buf);
-        }
-    }
-
-    pub inline fn render_cube_2(self: *Cube, buf: *fb.Framebuffer, move: float) void {
-        const angle: float = 3.14 / 2000.0;
-        const rotation_mat = matrix.Mat4f.rotate_y(angle);
-
-        for (&self.vertices) |*vertex| {
-            vertex.* = rotation_mat.mul_vec(vertex.*);
-        }
-
-        var translated_vertices = self.vertices;
-
-        for (&translated_vertices) |*v| {
-            v.*[2] += move + 2;
-            v.*[0] *= 500;
-            v.*[1] *= 500;
-        }
-
-        var i: usize = 0;
-        while (i < idx.len) : (i += 3) {
-            const v0 = translated_vertices[idx[i]];
-            const v1 = translated_vertices[idx[i + 1]];
-            const v2 = translated_vertices[idx[i + 2]];
-
-            var triangle = tri.Triangle{
-                .v0 = v0,
-                .v1 = v1,
-                .v2 = v2,
-
-                .v0_col = 0xFF000000,
-                .v1_col = 0xFFFFFFFF,
-                .v2_col = 0xFFFFFF00,
             };
 
             triangle.render_triangle(buf);
