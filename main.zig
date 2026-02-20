@@ -26,6 +26,11 @@ pub fn main() !void {
         .vertices = cube.vertices,
         .idx = cube.idx,
     };
+
+    var cube2 = cube.Cube{
+        .vertices = cube.vertices,
+        .idx = cube.idx,
+    };
     // cube1.move_back(10);
 
     while (running) : (t += 1) {
@@ -43,12 +48,12 @@ pub fn main() !void {
         // tri.render_triangle(&framebuffer);
 
         cube1.render_cube(&framebuffer);
+        cube2.render_cube_2(&framebuffer);
 
         gfx.end_frame();
         gfx.present();
 
         framebuffer.clear(0x00000000);
-        framebuffer.clear_z();
 
         // Show fps
         frames += 1 % 0xFFFF;

@@ -1,4 +1,5 @@
 const std = @import("std");
+const cfg = @import("config.zig");
 const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");
     @cInclude("SDL2/SDL.h");
@@ -9,7 +10,7 @@ pub const Framebuffer = struct {
     pitch: usize, // bytes per row (maybe aligned)
     width: usize,
     height: usize,
-    z_buffer: [960 * 540]f32,
+    z_buffer: []f32,
 
     pub inline fn set_pixel(self: *const Framebuffer, x: usize, y: usize, color: u32) void {
         // NOTE: Bounds check, remove for max speed
@@ -46,10 +47,5 @@ pub const Framebuffer = struct {
                 @memset(row_u32[0..self.width], color);
             }
         }
-    }
-
-    pub inline fn clear_z(self: *Framebuffer) void {
-        const neg_inf: f32 = -std.math.inf(f32);
-        @memset(self.z_buffer[0..], neg_inf);
     }
 };

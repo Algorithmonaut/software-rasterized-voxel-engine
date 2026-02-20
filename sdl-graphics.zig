@@ -4,6 +4,7 @@ const c = @cImport({
     @cInclude("SDL2/SDL.h");
 });
 const Framebuffer = @import("framebuffer.zig").Framebuffer;
+const cfg = @import("config.zig");
 
 pub const SdlGfx = struct {
     window: *c.SDL_Window,
@@ -12,6 +13,7 @@ pub const SdlGfx = struct {
     width: usize,
     height: usize,
     scale: c_int,
+    z_buffer: [cfg.width * cfg.height]f32,
 
     pub fn init(width: c_int, height: c_int, scale: c_int) !SdlGfx {
         if (c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS) != 0) {
@@ -54,6 +56,7 @@ pub const SdlGfx = struct {
             .width = @intCast(width),
             .height = @intCast(height),
             .scale = scale,
+            .z_buffer = undefined,
         };
     }
 
@@ -68,12 +71,21 @@ pub const SdlGfx = struct {
         const pitch: usize = @intCast(pitch_c);
         const base: [*]u8 = @ptrCast(pixels.?);
 
+        const zslice = self.z_buffer[0..];
+        @memset(zslice, std.math.inf(f32));
+
+        for (self.z_buffer) |val| {
+            if (val != std.math.inf(f32)) {
+                std.debug.print("Not neg inf", .{});
+            }
+        }
+
         return .{
             .base = base,
             .pitch = pitch,
             .width = self.width,
             .height = self.height,
-            .z_buffer = undefined,
+            .z_buffer = zslice,
         }; // Returns a framebuffer object
     }
 

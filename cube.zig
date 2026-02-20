@@ -74,4 +74,40 @@ pub const Cube = struct {
             triangle.render_triangle(buf);
         }
     }
+
+    pub inline fn render_cube_2(self: *Cube, buf: *fb.Framebuffer) void {
+        const angle: float = 3.14 / 2000.0;
+        const rotation_mat = matrix.Mat4f.rotate_y(angle);
+
+        for (&self.vertices) |*vertex| {
+            vertex.* = rotation_mat.mul_vec(vertex.*);
+        }
+
+        var translated_vertices = self.vertices;
+
+        for (&translated_vertices) |*v| {
+            v.*[2] += 10;
+            v.*[0] *= 1000;
+            v.*[1] *= 1000;
+        }
+
+        var i: usize = 0;
+        while (i < idx.len) : (i += 3) {
+            const v0 = translated_vertices[idx[i]];
+            const v1 = translated_vertices[idx[i + 1]];
+            const v2 = translated_vertices[idx[i + 2]];
+
+            var triangle = tri.Triangle{
+                .v0 = v0,
+                .v1 = v1,
+                .v2 = v2,
+
+                .v0_col = 0xFFFF0000,
+                .v1_col = 0xFF00FF00,
+                .v2_col = 0xFF0000FF,
+            };
+
+            triangle.render_triangle(buf);
+        }
+    }
 };

@@ -97,19 +97,20 @@ pub const Triangle = struct {
         }
 
         // NDC -> raster
+        // NOTE: We add 0.5 such that we test against the center of the pixel, not its top left
         const a = @Vector(2, int){
-            @intFromFloat(self.v0[0] * cfg.width),
-            @intFromFloat((1 - self.v0[1]) * cfg.height),
+            @intFromFloat(self.v0[0] * cfg.width + 0.5),
+            @intFromFloat((1 - self.v0[1]) * cfg.height + 0.5),
         };
 
         const b = @Vector(2, int){
-            @intFromFloat(self.v1[0] * cfg.width),
-            @intFromFloat((1 - self.v1[1]) * cfg.height),
+            @intFromFloat(self.v1[0] * cfg.width + 0.5),
+            @intFromFloat((1 - self.v1[1]) * cfg.height + 0.5),
         };
 
         const c = @Vector(2, int){
-            @intFromFloat(self.v2[0] * cfg.width),
-            @intFromFloat((1 - self.v2[1]) * cfg.height),
+            @intFromFloat(self.v2[0] * cfg.width + 0.5),
+            @intFromFloat((1 - self.v2[1]) * cfg.height + 0.5),
         };
 
         const tri_area = edge(a, b, c);
@@ -184,6 +185,14 @@ pub const Triangle = struct {
                     const beta = @as(float, @floatFromInt(w1)) * inv_tri_area_f32;
                     const gamma = @as(float, @floatFromInt(w2)) * inv_tri_area_f32;
                     const alpha = 1 - beta - gamma;
+
+                    const z = 1 / (1 / self.v0[2] * alpha + 1 / self.v1[2] * beta + 1 / self.v2[2] * gamma);
+
+                    if (z > fb.z_buffer[x + cfg.width * y]) continue;
+
+                    // std.debug.print("{}\n", .{z});
+
+                    fb.z_buffer[x + cfg.width * y - 10] = z;
 
                     const rgb: @Vector(3, float) = v0_c_f32 * @as(@Vector(3, float), @splat(alpha)) +
                         v1_c_f32 * @as(@Vector(3, float), @splat(beta)) +

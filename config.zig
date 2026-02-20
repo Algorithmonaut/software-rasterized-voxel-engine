@@ -1,8 +1,8 @@
 // P: Framebuffer dimensions/scale
 
-// const width: c_int = 1920;
-// const height: c_int = 1080;
-// const scale: c_int = 1;
+// pub const width: c_int = 1920;
+// pub const height: c_int = 1080;
+// pub const scale: c_int = 1;
 
 pub const width: c_int = 960;
 pub const height: c_int = 540;
