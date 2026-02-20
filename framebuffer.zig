@@ -4,13 +4,14 @@ const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");
     @cInclude("SDL2/SDL.h");
 });
+const float = cfg.f;
 
 pub const Framebuffer = struct {
     base: [*]u8, // ptr to the first byte of pixels
     pitch: usize, // bytes per row (maybe aligned)
     width: usize,
     height: usize,
-    z_buffer: []f32,
+    z_buffer: []float,
 
     pub inline fn set_pixel(self: *const Framebuffer, x: usize, y: usize, color: u32) void {
         // NOTE: Bounds check, remove for max speed
@@ -47,5 +48,10 @@ pub const Framebuffer = struct {
                 @memset(row_u32[0..self.width], color);
             }
         }
+    }
+
+    pub inline fn clear_z(self: *const Framebuffer) void {
+        const zslice = self.z_buffer[0..];
+        @memset(zslice, -std.math.inf(float));
     }
 };

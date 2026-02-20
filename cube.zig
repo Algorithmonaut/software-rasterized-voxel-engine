@@ -75,7 +75,7 @@ pub const Cube = struct {
         }
     }
 
-    pub inline fn render_cube_2(self: *Cube, buf: *fb.Framebuffer) void {
+    pub inline fn render_cube_2(self: *Cube, buf: *fb.Framebuffer, move: float) void {
         const angle: float = 3.14 / 2000.0;
         const rotation_mat = matrix.Mat4f.rotate_y(angle);
 
@@ -86,9 +86,9 @@ pub const Cube = struct {
         var translated_vertices = self.vertices;
 
         for (&translated_vertices) |*v| {
-            v.*[2] += 10;
-            v.*[0] *= 1000;
-            v.*[1] *= 1000;
+            v.*[2] += move + 2;
+            v.*[0] *= 500;
+            v.*[1] *= 500;
         }
 
         var i: usize = 0;
@@ -102,9 +102,9 @@ pub const Cube = struct {
                 .v1 = v1,
                 .v2 = v2,
 
-                .v0_col = 0xFFFF0000,
-                .v1_col = 0xFF00FF00,
-                .v2_col = 0xFF0000FF,
+                .v0_col = 0xFF000000,
+                .v1_col = 0xFFFFFFFF,
+                .v2_col = 0xFFFFFF00,
             };
 
             triangle.render_triangle(buf);

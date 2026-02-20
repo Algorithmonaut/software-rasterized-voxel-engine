@@ -48,12 +48,13 @@ pub fn main() !void {
         // tri.render_triangle(&framebuffer);
 
         cube1.render_cube(&framebuffer);
-        cube2.render_cube_2(&framebuffer);
+        cube2.render_cube_2(&framebuffer, @as(f32, @floatFromInt(t)) / 100);
 
         gfx.end_frame();
         gfx.present();
 
         framebuffer.clear(0x00000000);
+        framebuffer.clear_z();
 
         // Show fps
         frames += 1 % 0xFFFF;

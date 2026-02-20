@@ -179,6 +179,7 @@ pub const Triangle = struct {
             var w2: i32 = w2_row;
 
             var x: usize = x_min;
+
             while (x <= x_max) : (x += 1) {
                 // If the point is inside the triangle
                 if (w0 + e0.bias >= 0 and w1 + e1.bias >= 0 and w2 + e2.bias >= 0) {
@@ -186,13 +187,11 @@ pub const Triangle = struct {
                     const gamma = @as(float, @floatFromInt(w2)) * inv_tri_area_f32;
                     const alpha = 1 - beta - gamma;
 
-                    const z = 1 / (1 / self.v0[2] * alpha + 1 / self.v1[2] * beta + 1 / self.v2[2] * gamma);
+                    const inv_z: float = 1 / self.v0[2] * alpha + 1 / self.v1[2] * beta + 1 / self.v2[2] * gamma;
 
-                    if (z > fb.z_buffer[x + cfg.width * y]) continue;
+                    if (inv_z <= fb.z_buffer[x + cfg.width * y]) continue;
 
-                    // std.debug.print("{}\n", .{z});
-
-                    fb.z_buffer[x + cfg.width * y - 10] = z;
+                    fb.z_buffer[x + cfg.width * y] = inv_z;
 
                     const rgb: @Vector(3, float) = v0_c_f32 * @as(@Vector(3, float), @splat(alpha)) +
                         v1_c_f32 * @as(@Vector(3, float), @splat(beta)) +
