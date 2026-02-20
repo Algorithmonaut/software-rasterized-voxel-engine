@@ -193,9 +193,9 @@ pub const Triangle = struct {
 
                     fb.z_buffer[x + cfg.width * y] = inv_z;
 
-                    const rgb: @Vector(3, float) = v0_c_f32 * @as(@Vector(3, float), @splat(alpha)) +
-                        v1_c_f32 * @as(@Vector(3, float), @splat(beta)) +
-                        v2_c_f32 * @as(@Vector(3, float), @splat(gamma));
+                    const rgb: @Vector(3, float) = (v0_c_f32 * @as(@Vector(3, float), @splat(alpha / self.v0[2])) +
+                        v1_c_f32 * @as(@Vector(3, float), @splat(beta / self.v1[2])) +
+                        v2_c_f32 * @as(@Vector(3, float), @splat(gamma / self.v2[2]))) / @as(@Vector(3, float), @splat(inv_z));
 
                     const rgb_u8: @Vector(3, u8) = @intFromFloat(rgb);
 

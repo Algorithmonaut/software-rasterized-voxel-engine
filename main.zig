@@ -27,12 +27,6 @@ pub fn main() !void {
         .idx = cube.idx,
     };
 
-    var cube2 = cube.Cube{
-        .vertices = cube.vertices,
-        .idx = cube.idx,
-    };
-    // cube1.move_back(10);
-
     while (running) : (t += 1) {
         var ev: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&ev) != 0) {
@@ -48,7 +42,6 @@ pub fn main() !void {
         // tri.render_triangle(&framebuffer);
 
         cube1.render_cube(&framebuffer);
-        cube2.render_cube_2(&framebuffer, @as(f32, @floatFromInt(t)) / 100);
 
         gfx.end_frame();
         gfx.present();
