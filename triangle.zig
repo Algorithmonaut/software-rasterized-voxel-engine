@@ -103,11 +103,11 @@ pub const Triangle = struct {
             @intFromFloat((1 - self.v2[1]) * cfg.height + 0.5),
         };
 
-        const tri_area = edge(a, b, c);
+        const area = edge(a, b, c);
 
-        if (tri_area < 0) return; // backface culling
+        if (area < 0) return; // backface culling
 
-        const inv_tri_area_f32 = 1 / @as(float, @floatFromInt(tri_area));
+        const inv_area = 1 / @as(float, @floatFromInt(area));
 
         // P: Compute the bbox and clip it to the viewport
         var x_min_i: i32 = @min(a[0], b[0], c[0]);
@@ -128,9 +128,9 @@ pub const Triangle = struct {
         y_max_i = std.math.clamp(y_max_i, 0, h - 1);
 
         // P: Compute the edges
-        const e0 = make_edge(a, b);
-        const e1 = make_edge(b, c);
-        const e2 = make_edge(c, a);
+        const e0 = make_edge(b, c);
+        const e1 = make_edge(c, a);
+        const e2 = make_edge(a, b);
 
         // Evaluate edges at top-left of bbox
         var w0_row = e0.eval(x_min_i, y_min_i);
@@ -153,6 +153,10 @@ pub const Triangle = struct {
         const q1: float = 1 / self.v1[2];
         const q2: float = 1 / self.v2[2];
 
+        const c0q: vec3f = v0_c_f32 * @as(vec3f, @splat(q0));
+        const c1q: vec3f = v1_c_f32 * @as(vec3f, @splat(q1));
+        const c2q: vec3f = v2_c_f32 * @as(vec3f, @splat(q2));
+
         // P: Main loop
         var y: usize = y_min;
         while (y <= y_max) : (y += 1) {
@@ -166,26 +170,28 @@ pub const Triangle = struct {
             var x: usize = x_min;
 
             while (x <= x_max) : (x += 1) {
-                // If the point is inside the triangle
                 if (w0 + e0.bias >= 0 and w1 + e1.bias >= 0 and w2 + e2.bias >= 0) {
-                    const beta = @as(float, @floatFromInt(w1)) * inv_tri_area_f32;
-                    const gamma = @as(float, @floatFromInt(w2)) * inv_tri_area_f32;
-                    const alpha = 1 - beta - gamma;
+                    const w0f: float = @floatFromInt(w0);
+                    const w1f: float = @floatFromInt(w1);
+                    const w2f: float = @floatFromInt(w2);
 
-                    const inv_z: float = q0 * alpha + q1 * beta + q2 * gamma;
+                    const den_scaled = (w0f * q0 + w1f * q1 + w2f * q2); // maybe called q in litterature
+                    const inv_z = den_scaled * inv_area;
 
-                    if (inv_z <= fb.z_buffer[x + cfg.width * y]) continue;
+                    const z_idx = z_row_base + x;
+                    if (inv_z <= fb.z_buffer[z_idx]) continue;
+                    fb.z_buffer[z_idx] = inv_z;
 
-                    fb.z_buffer[z_row_base + x] = inv_z;
+                    const col_num: vec3f = c0q * @as(vec3f, @splat(w0f)) +
+                        c1q * @as(vec3f, @splat(w1f)) +
+                        c2q * @as(vec3f, @splat(w2f));
 
-                    const rgb: vec3f = (v0_c_f32 * @as(vec3f, @splat(alpha / self.v0[2])) +
-                        v1_c_f32 * @as(vec3f, @splat(beta / self.v1[2])) +
-                        v2_c_f32 * @as(vec3f, @splat(gamma / self.v2[2]))) / @as(vec3f, @splat(inv_z));
+                    const rcp_den: float = 1.0 / den_scaled;
+
+                    const rgb: vec3f = col_num * @as(vec3f, @splat(rcp_den));
 
                     const rgb_u8: @Vector(3, u8) = @intFromFloat(rgb);
-
                     const out_color: u32 = vec3_to_xrgb(rgb_u8);
-
                     line[x] = out_color;
                 }
 

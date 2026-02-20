@@ -38,8 +38,8 @@ pub const Cube = struct {
     }
 
     pub inline fn render(self: *Cube, buf: *fb.Framebuffer) void {
-        const angle: float = 3.14 / 2000.0;
-        const rotation_mat_y = matrix.Mat4f.rotate_y(angle);
+        const angle: float = 3.14 / 800.0;
+        const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
         const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
 
         const rotation_mat = rotation_mat_y.mul(rotation_mat_z);
