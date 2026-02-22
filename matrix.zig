@@ -3,9 +3,12 @@
 
 const std = @import("std");
 const cfg = @import("config.zig");
+const ctx = @import("context.zig");
+const vec = @import("vector.zig");
 
-pub const float = f32;
-pub const vec4f = cfg.vec4f;
+const float = f32;
+const vec4f = cfg.vec4f;
+const vec3f = cfg.vec3f;
 
 pub const Mat4f = struct {
     r: [4]vec4f,
@@ -94,5 +97,24 @@ pub fn create_projection_matrix() Mat4f {
         .{ 0, y_scale, 0, 0 },
         .{ 0, 0, (-far) / (far - near), -(far * near) / (far - near) },
         .{ 0, 0, -1, 0 },
+    } };
+}
+
+pub inline fn world_to_camera() Mat4f {
+    const from = ctx.from;
+    const to = ctx.to;
+    const world_up = vec3f{ 0, 1, 0 };
+
+    const f = vec.normalize(to - from); // forward (world)
+    var s = vec.normalize(vec.cross_product(f, world_up)); // right
+
+    const u = vec.cross_product(s, f); // up (already orthogonal if r,f are)
+
+    // Right-handed view: camera forward is -Z, so use -f in the basis
+    return .{ .r = .{
+        .{ s[0], s[1], s[2], -vec.dot_product(s, from) },
+        .{ u[0], u[1], u[2], -vec.dot_product(u, from) },
+        .{ -f[0], -f[1], -f[2], vec.dot_product(f, from) },
+        .{ 0, 0, 0, 1 },
     } };
 }

@@ -36,6 +36,8 @@ pub const SdlGfx = struct {
             return error.SDLRendererFailed;
         };
 
+        _ = c.SDL_SetRelativeMouseMode(c.SDL_TRUE); // locks cursor + gives relative deltas
+
         const tex = c.SDL_CreateTexture(
             renderer,
             c.SDL_PIXELFORMAT_ARGB8888,

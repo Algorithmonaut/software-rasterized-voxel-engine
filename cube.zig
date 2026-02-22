@@ -38,9 +38,11 @@ pub const Cube = struct {
     }
 
     pub inline fn render(self: *Cube, buf: *fb.Framebuffer) void {
-        const angle: float = 3.14 / 3600.0;
+        // const angle: float = 3.14 / 3600.0;
+        const angle: float = 3.14 / 4000.0;
         const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
         const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
+        const world_to_camera = matrix.world_to_camera();
 
         const rotation_mat = rotation_mat_y.mul(rotation_mat_z);
         for (&self.vertices) |*vertex| {
@@ -49,10 +51,9 @@ pub const Cube = struct {
 
         var translated_vertices = self.vertices;
 
-        for (&translated_vertices) |*v| {
-            v.*[2] -= 15;
-            v.*[0] *= 5;
-            v.*[1] *= 5;
+        for (&translated_vertices) |*vertex| {
+            vertex.* = world_to_camera.mul_vec(vertex.*);
+            // vertex.*[2] -= 20;
         }
 
         var i: usize = 0;

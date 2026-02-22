@@ -6,7 +6,7 @@ const int = cfg.int;
 const vec3f = cfg.vec3f;
 const vec4f = cfg.vec4f;
 const mat = @import("matrix.zig");
-const csts = @import("constants.zig");
+const ctx = @import("context.zig");
 
 pub const Triangle = struct {
     v0: @Vector(4, f32),
@@ -74,8 +74,10 @@ pub const Triangle = struct {
         inline for (verts, 0..) |vp, i| {
             var v = vec4f{ vp.*[0], vp.*[1], vp.*[2], 1 };
 
-            v = csts.projection_matrix.mul_vec(v);
+            v = ctx.projection_matrix.mul_vec(v);
+
             const rec_w = 1 / v[3];
+
             v = v * @as(vec4f, @splat(rec_w));
 
             z[i] = v[2];
@@ -85,6 +87,16 @@ pub const Triangle = struct {
         const v0 = verts_h[0];
         const v1 = verts_h[1];
         const v2 = verts_h[2];
+
+        // Basic clipping
+        if ((v0[0] > 1 and v1[0] > 1 and v2[0] > 1) or
+            v0[0] < -1 and v1[0] < -1 and v2[0] < -1) return;
+
+        if ((v0[1] > 1 and v1[1] > 1 and v2[1] > 1) or
+            v0[1] < -1 and v1[1] < -1 and v2[1] < -1) return;
+
+        if ((v0[2] > 1 or v1[2] > 1 or v2[2] > 1) or
+            v0[2] < 0 or v1[2] < 0 or v2[2] < 0) return;
 
         const fw: float = (cfg.width);
         const fh: float = (cfg.height);
@@ -110,16 +122,10 @@ pub const Triangle = struct {
         const e1 = make_edge(a, c);
         const e2 = make_edge(b, a);
 
-        var area = e0.eval(a[0], a[1]);
+        const area = e0.eval(a[0], a[1]);
 
         if (area < 0) return; // backface culling
 
-        if (area < 0) {
-            const tmp = b;
-            b = c;
-            c = tmp;
-            area = -area;
-        }
         const inv_area = 1 / @as(float, @floatFromInt(area));
 
         // P: Compute the bbox and clip it to the viewport

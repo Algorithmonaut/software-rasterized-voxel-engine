@@ -12,7 +12,7 @@ pub const scale: usize = 2;
 // pub const height: c_int = 135;
 // pub const scale: c_int = 4;
 
-pub const fov: float = 100;
+pub const fov: float = 90;
 pub const view_distance: float = 200;
 
 // P: Default types
@@ -25,3 +25,7 @@ pub const vec3f = @Vector(3, float);
 // P: Debug
 
 pub const show_fps = true;
+
+// P: Input
+
+pub const mouse_sensivity: f32 = 0.0025;
