@@ -12,6 +12,9 @@ pub const scale: usize = 2;
 // pub const height: c_int = 135;
 // pub const scale: c_int = 4;
 
+pub const fov: float = 100;
+pub const view_distance: float = 200;
+
 // P: Default types
 
 pub const float = f32;

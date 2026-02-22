@@ -42,7 +42,7 @@ pub const Framebuffer = struct {
 
     inline fn clear_z(self: *const Framebuffer) void {
         const z_slice = self.z_buffer[0..];
-        @memset(z_slice, -std.math.inf(float));
+        @memset(z_slice, std.math.inf(float));
     }
 
     pub inline fn clear_all(self: *const Framebuffer) void {

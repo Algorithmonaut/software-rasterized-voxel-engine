@@ -4,6 +4,9 @@ const cfg = @import("config.zig");
 const float = cfg.float;
 const int = cfg.int;
 const vec3f = cfg.vec3f;
+const vec4f = cfg.vec4f;
+const mat = @import("matrix.zig");
+const csts = @import("constants.zig");
 
 pub const Triangle = struct {
     v0: @Vector(4, f32),
@@ -64,49 +67,59 @@ pub const Triangle = struct {
 
     /// Render a triangle that is IN camera space
     pub inline fn render_triangle(self: *Triangle, fb: *Framebuffer) void {
-        const inv_w = 1 / @as(float, @floatFromInt(cfg.width));
-        const inv_h = 1 / @as(float, @floatFromInt(cfg.height));
-
-        const bias = @Vector(4, float){ 0.5, 0.5, 0, 0 };
-        const scale = @Vector(4, float){ inv_w, inv_h, 1.0, 1.0 };
+        var z: [3]float = undefined;
 
         const verts = .{ &self.v0, &self.v1, &self.v2 };
+        var verts_h: [3]vec4f = undefined;
+        inline for (verts, 0..) |vp, i| {
+            var v = vec4f{ vp.*[0], vp.*[1], vp.*[2], 1 };
 
-        // P: Project the vertices from camera space to screen space
-        inline for (verts) |vp| {
-            var v = vp.*; // NOTE: Local copy in register, so we only do one store and one load
-            const inv_z = 1 / v[2];
+            v = csts.projection_matrix.mul_vec(v);
+            const rec_w = 1 / v[3];
+            v = v * @as(vec4f, @splat(rec_w));
 
-            // Perspective divide
-            v *= @Vector(4, float){ -inv_z, -inv_z, 1.0, 1.0 };
-
-            // Screen -> NDC
-            v = @mulAdd(@Vector(4, float), v, scale, bias);
-
-            vp.* = v;
+            z[i] = v[2];
+            verts_h[i] = v;
         }
 
-        // NDC -> raster
-        // NOTE: We add 0.5 such that we test against the center of the pixel, not its top left
+        const v0 = verts_h[0];
+        const v1 = verts_h[1];
+        const v2 = verts_h[2];
+
+        const fw: float = (cfg.width);
+        const fh: float = (cfg.height);
+
         const a = @Vector(2, int){
-            @intFromFloat(self.v0[0] * cfg.width + 0.5),
-            @intFromFloat((1 - self.v0[1]) * cfg.height + 0.5),
+            @intFromFloat((v0[0] + 1.0) * 0.5 * fw + 0.5),
+            // WARN: THIS SWAPS THE WINDING ORDER OF THE VERTICES FUCKING FIVE HOURS LOST TO THE WIND :(
+            @intFromFloat((1 - (v0[1] + 1.0) * 0.5) * fh + 0.5),
         };
 
-        const b = @Vector(2, int){
-            @intFromFloat(self.v1[0] * cfg.width + 0.5),
-            @intFromFloat((1 - self.v1[1]) * cfg.height + 0.5),
+        var b = @Vector(2, int){
+            @intFromFloat((v1[0] + 1.0) * 0.5 * fw + 0.5),
+            @intFromFloat((1 - (v1[1] + 1.0) * 0.5) * fh + 0.5),
         };
 
-        const c = @Vector(2, int){
-            @intFromFloat(self.v2[0] * cfg.width + 0.5),
-            @intFromFloat((1 - self.v2[1]) * cfg.height + 0.5),
+        var c = @Vector(2, int){
+            @intFromFloat((v2[0] + 1.0) * 0.5 * fw + 0.5),
+            @intFromFloat((1 - (v2[1] + 1.0) * 0.5) * fh + 0.5),
         };
 
-        const area = edge(a, b, c);
+        // P: Compute the edges
+        const e0 = make_edge(c, b);
+        const e1 = make_edge(a, c);
+        const e2 = make_edge(b, a);
+
+        var area = e0.eval(a[0], a[1]);
 
         if (area < 0) return; // backface culling
 
+        if (area < 0) {
+            const tmp = b;
+            b = c;
+            c = tmp;
+            area = -area;
+        }
         const inv_area = 1 / @as(float, @floatFromInt(area));
 
         // P: Compute the bbox and clip it to the viewport
@@ -127,11 +140,6 @@ pub const Triangle = struct {
         y_min_i = std.math.clamp(y_min_i, 0, h - 1);
         y_max_i = std.math.clamp(y_max_i, 0, h - 1);
 
-        // P: Compute the edges
-        const e0 = make_edge(b, c);
-        const e1 = make_edge(c, a);
-        const e2 = make_edge(a, b);
-
         // Evaluate edges at top-left of bbox
         var w0_row = e0.eval(x_min_i, y_min_i);
         var w1_row = e1.eval(x_min_i, y_min_i);
@@ -149,9 +157,9 @@ pub const Triangle = struct {
         const y_max: usize = @intCast(y_max_i);
 
         // Reciprocal depth at the vertices
-        const q0: float = 1 / self.v0[2];
-        const q1: float = 1 / self.v1[2];
-        const q2: float = 1 / self.v2[2];
+        const q0: float = 1 / z[0];
+        const q1: float = 1 / z[1];
+        const q2: float = 1 / z[2];
 
         const c0q: vec3f = v0_c_f32 * @as(vec3f, @splat(q0));
         const c1q: vec3f = v1_c_f32 * @as(vec3f, @splat(q1));
@@ -179,7 +187,7 @@ pub const Triangle = struct {
                     const inv_z = den_scaled * inv_area;
 
                     const z_idx = z_row_base + x;
-                    if (inv_z <= fb.z_buffer[z_idx]) continue;
+                    if (inv_z >= fb.z_buffer[z_idx]) continue;
                     fb.z_buffer[z_idx] = inv_z;
 
                     const col_num: vec3f = c0q * @as(vec3f, @splat(w0f)) +

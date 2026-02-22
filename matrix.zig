@@ -43,7 +43,7 @@ pub const Mat4f = struct {
         const c0: vec4f = .{ b.r[0][0], b.r[1][0], b.r[2][0], b.r[3][0] };
         const c1: vec4f = .{ b.r[0][1], b.r[1][1], b.r[2][1], b.r[3][1] };
         const c2: vec4f = .{ b.r[0][2], b.r[1][2], b.r[2][2], b.r[3][2] };
-        const c3: vec4f = .{ b.r[0][3], b.r[1][3], b.r[2][3], b.r[3][2] };
+        const c3: vec4f = .{ b.r[0][3], b.r[1][3], b.r[2][3], b.r[3][3] };
 
         return .{ .r = .{
             row_times_cols(self.r[0], c0, c1, c2, c3),
@@ -77,3 +77,22 @@ pub const Mat4f = struct {
         } };
     }
 };
+
+pub fn create_projection_matrix() Mat4f {
+    const far = cfg.view_distance;
+    const near = 1;
+
+    const w: float = @floatFromInt(cfg.width);
+    const h: float = @floatFromInt(cfg.height);
+    const aspect: float = w / h;
+
+    const y_scale: float = 1.0 / @tan(cfg.fov * std.math.pi / 360.0);
+    const x_scale: float = y_scale / aspect;
+
+    return .{ .r = .{
+        .{ x_scale, 0, 0, 0 },
+        .{ 0, y_scale, 0, 0 },
+        .{ 0, 0, (-far) / (far - near), -(far * near) / (far - near) },
+        .{ 0, 0, -1, 0 },
+    } };
+}
