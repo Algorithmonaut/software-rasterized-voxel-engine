@@ -21,6 +21,8 @@ pub const float = f32;
 pub const int = i32;
 pub const vec4f = @Vector(4, float);
 pub const vec3f = @Vector(3, float);
+pub const vec3i = @Vector(3, int);
+pub const vec4i = @Vector(4, int);
 
 // P: Debug
 

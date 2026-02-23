@@ -3,8 +3,10 @@ const tri = @import("triangle.zig");
 const matrix = @import("matrix.zig");
 const fb = @import("framebuffer.zig");
 const cfg = @import("config.zig");
+const tex = @import("textures.zig");
 const float = cfg.float;
 const vec4f = cfg.vec4f;
+const vec3f = cfg.vec3f;
 
 const vertices: [8]vec4f = .{
     .{ -1, -1, -1, 1 },
@@ -29,38 +31,49 @@ const idx: [36]u16 = .{
 pub const Cube = struct {
     vertices: [8]vec4f,
     idx: [36]u16,
+    pos: vec4f,
+    kind: tex.BlockTypes,
 
-    pub fn init() Cube {
+    pub fn init(pos: vec4f, kind: tex.BlockTypes) Cube {
         return .{
             .vertices = vertices,
             .idx = idx,
+            .pos = pos,
+            .kind = kind,
         };
     }
 
     pub inline fn render(self: *Cube, buf: *fb.Framebuffer) void {
-        // const angle: float = 3.14 / 3600.0;
-        const angle: float = 3.14 / 4000.0;
-        const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
-        const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
+        // const angle: float = 3.14 / 4000.0;
+        // const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
+        // const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
+
+        // const rotation_mat = rotation_mat_y.mul(rotation_mat_z);
+        // for (&self.vertices) |*vertex| {
+        //     vertex.* = rotation_mat.mul_vec(vertex.*);
+        // }
+
         const world_to_camera = matrix.world_to_camera();
+        var verts_cpy = self.vertices;
 
-        const rotation_mat = rotation_mat_y.mul(rotation_mat_z);
-        for (&self.vertices) |*vertex| {
-            vertex.* = rotation_mat.mul_vec(vertex.*);
-        }
-
-        var translated_vertices = self.vertices;
-
-        for (&translated_vertices) |*vertex| {
+        for (&verts_cpy) |*vertex| {
+            vertex.* += self.pos;
             vertex.* = world_to_camera.mul_vec(vertex.*);
-            // vertex.*[2] -= 20;
         }
+
+        const cube_tex_pos = @intFromEnum(self.kind) * tex.atlas_w * tex.tex_h;
 
         var i: usize = 0;
-        while (i < idx.len) : (i += 3) {
-            const v0 = translated_vertices[idx[i]];
-            const v1 = translated_vertices[idx[i + 1]];
-            const v2 = translated_vertices[idx[i + 2]];
+        while (i < idx.len) : (i += 6) {
+            const tex_pos = cube_tex_pos + (i / 6) * tex.tex_w;
+            _ = tex_pos;
+
+            const v0 = verts_cpy[idx[i]];
+            const v1 = verts_cpy[idx[i + 1]];
+            const v2 = verts_cpy[idx[i + 2]];
+            const v3 = verts_cpy[idx[i + 3]];
+            const v4 = verts_cpy[idx[i + 4]];
+            const v5 = verts_cpy[idx[i + 5]];
 
             var triangle = tri.Triangle{
                 .v0 = v0,
@@ -72,7 +85,18 @@ pub const Cube = struct {
                 .v2_col = 0xFF0000FF,
             };
 
+            var triangle2 = tri.Triangle{
+                .v0 = v3,
+                .v1 = v4,
+                .v2 = v5,
+
+                .v0_col = 0xFFFF0000,
+                .v1_col = 0xFF00FF00,
+                .v2_col = 0xFF0000FF,
+            };
+
             triangle.render_triangle(buf);
+            triangle2.render_triangle(buf);
         }
     }
 };

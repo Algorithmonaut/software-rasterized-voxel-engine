@@ -70,7 +70,7 @@ pub const SdlPlatform = struct {
         const speed: f32 = 10.0;
         const step: f32 = speed * dt;
 
-        // derive forward from yaw/pitch (same as look)
+        // forward from yaw/pitch (used for look)
         var forward = cfg.vec3f{
             @cos(ctx.pitch) * @sin(ctx.yaw),
             @sin(ctx.pitch),
@@ -80,51 +80,54 @@ pub const SdlPlatform = struct {
 
         const world_up = cfg.vec3f{ 0, 1, 0 };
 
-        // IMPORTANT: cross order controls left/right direction (RH vs LH)
-        const right = vec.normalize(vec.cross_product(forward, world_up));
+        // movement basis constrained to horizontal plane
+        var fwd_move = forward;
+        fwd_move[1] = 0; // y = 0
+        if (vec.length_squared(fwd_move) > 0) {
+            fwd_move = vec.normalize(fwd_move);
+        } else {
+            // looking straight up/down: fall back to yaw-only forward
+            fwd_move = vec.normalize(cfg.vec3f{ @sin(ctx.yaw), 0, @cos(ctx.yaw) });
+        }
 
-        // build wish direction, normalize to avoid faster diagonals
+        const right = vec.normalize(vec.cross_product(fwd_move, world_up));
+
+        // build wish dir from horizontal basis
         var wish = cfg.vec3f{ 0, 0, 0 };
-
-        if (keys[c.SDL_SCANCODE_W] != 0) wish += forward;
-        if (keys[c.SDL_SCANCODE_S] != 0) wish -= forward;
+        if (keys[c.SDL_SCANCODE_W] != 0) wish += fwd_move;
+        if (keys[c.SDL_SCANCODE_S] != 0) wish -= fwd_move;
         if (keys[c.SDL_SCANCODE_D] != 0) wish += right;
         if (keys[c.SDL_SCANCODE_A] != 0) wish -= right;
 
         if (vec.length_squared(wish) > 0) {
             wish = vec.normalize(wish);
             ctx.from += wish * @as(cfg.vec3f, @splat(step));
+            ctx.from[1] = 0; // optional: hard clamp to plane y=0
         }
     }
-
-    pub fn update_camera_look(self: *SdlPlatform, dt: f32) void {
-        var dx: c_int = 0;
-        var dy: c_int = 0;
-        _ = c.SDL_GetRelativeMouseState(&dx, &dy);
-
-        const sens = cfg.mouse_sensivity;
-
-        ctx.yaw -= @as(f32, @floatFromInt(dx)) * sens;
-        ctx.pitch -= @as(f32, @floatFromInt(dy)) * sens;
-
-        // Clamp pitch to avoid flipping at +-90°
-        const max_pitch: f32 = 89.0 / 180.0 * std.math.pi;
-        ctx.pitch = std.math.clamp(ctx.pitch, -max_pitch, max_pitch);
-
-        var forward = cfg.vec3f{
-            @cos(ctx.pitch) * @sin(ctx.yaw),
-            @sin(ctx.pitch),
-            @cos(ctx.pitch) * @cos(ctx.yaw),
-        };
-        forward = vec.normalize(forward);
-
-        // set target point
-        ctx.to = ctx.from + forward;
-
-        _ = dt; // dt not used here; you can keep it if you want smoothing
-
-        std.debug.print("{} {} \n", .{ dx, dy });
-
-        _ = self;
-    }
 };
+
+pub fn update_camera_look() void {
+    var dx: c_int = 0;
+    var dy: c_int = 0;
+    _ = c.SDL_GetRelativeMouseState(&dx, &dy);
+
+    const sens = cfg.mouse_sensivity;
+
+    ctx.yaw -= @as(f32, @floatFromInt(dx)) * sens;
+    ctx.pitch -= @as(f32, @floatFromInt(dy)) * sens;
+
+    // Clamp pitch to avoid flipping at +-90°
+    const max_pitch: f32 = 89.0 / 180.0 * std.math.pi;
+    ctx.pitch = std.math.clamp(ctx.pitch, -max_pitch, max_pitch);
+
+    var forward = cfg.vec3f{
+        @cos(ctx.pitch) * @sin(ctx.yaw),
+        @sin(ctx.pitch),
+        @cos(ctx.pitch) * @cos(ctx.yaw),
+    };
+    forward = vec.normalize(forward);
+
+    // set target point
+    ctx.to = ctx.from + forward;
+}

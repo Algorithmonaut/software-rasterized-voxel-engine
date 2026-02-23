@@ -5,6 +5,8 @@ const float = cfg.float;
 const int = cfg.int;
 const vec3f = cfg.vec3f;
 const vec4f = cfg.vec4f;
+const vec3i = cfg.vec3i;
+const vec4i = cfg.vec4i;
 const mat = @import("matrix.zig");
 const ctx = @import("context.zig");
 
@@ -67,20 +69,17 @@ pub const Triangle = struct {
 
     /// Render a triangle that is IN camera space
     pub inline fn render_triangle(self: *Triangle, fb: *Framebuffer) void {
-        var z: [3]float = undefined;
-
+        // P: Camera space -> clip space
         const verts = .{ &self.v0, &self.v1, &self.v2 };
         var verts_h: [3]vec4f = undefined;
-        inline for (verts, 0..) |vp, i| {
-            var v = vec4f{ vp.*[0], vp.*[1], vp.*[2], 1 };
 
+        inline for (verts, 0..) |vp, i| {
+            var v = vec4f{ vp.*[0], vp.*[1], vp.*[2], 1.0 };
             v = ctx.projection_matrix.mul_vec(v);
 
             const rec_w = 1 / v[3];
-
             v = v * @as(vec4f, @splat(rec_w));
 
-            z[i] = v[2];
             verts_h[i] = v;
         }
 
@@ -88,7 +87,7 @@ pub const Triangle = struct {
         const v1 = verts_h[1];
         const v2 = verts_h[2];
 
-        // Basic clipping
+        // P: Basic clipping
         if ((v0[0] > 1 and v1[0] > 1 and v2[0] > 1) or
             v0[0] < -1 and v1[0] < -1 and v2[0] < -1) return;
 
@@ -98,12 +97,12 @@ pub const Triangle = struct {
         if ((v0[2] > 1 or v1[2] > 1 or v2[2] > 1) or
             v0[2] < 0 or v1[2] < 0 or v2[2] < 0) return;
 
-        const fw: float = (cfg.width);
-        const fh: float = (cfg.height);
+        // P: Clip -> raster
+        const fw: float = cfg.width;
+        const fh: float = cfg.height;
 
         const a = @Vector(2, int){
             @intFromFloat((v0[0] + 1.0) * 0.5 * fw + 0.5),
-            // WARN: THIS SWAPS THE WINDING ORDER OF THE VERTICES FUCKING FIVE HOURS LOST TO THE WIND :(
             @intFromFloat((1 - (v0[1] + 1.0) * 0.5) * fh + 0.5),
         };
 
@@ -134,22 +133,19 @@ pub const Triangle = struct {
         var y_min_i: i32 = @min(a[1], b[1], c[1]);
         var y_max_i: i32 = @max(a[1], b[1], c[1]);
 
-        const w: i32 = @intCast(cfg.width);
-        const h: i32 = @intCast(cfg.height);
+        const width: i32 = @intCast(cfg.width);
+        const height: i32 = @intCast(cfg.height);
 
-        // Reject if the triangle is out of the viewport
-        if (x_max_i < 0 or y_max_i < 0 or x_min_i >= w or y_min_i >= h) return;
+        x_min_i = std.math.clamp(x_min_i, 0, width - 1);
+        x_max_i = std.math.clamp(x_max_i, 0, width - 1);
+        y_min_i = std.math.clamp(y_min_i, 0, height - 1);
+        y_max_i = std.math.clamp(y_max_i, 0, height - 1);
 
-        // Clamp the bounding box to the viewport
-        x_min_i = std.math.clamp(x_min_i, 0, w - 1);
-        x_max_i = std.math.clamp(x_max_i, 0, w - 1);
-        y_min_i = std.math.clamp(y_min_i, 0, h - 1);
-        y_max_i = std.math.clamp(y_max_i, 0, h - 1);
-
-        // Evaluate edges at top-left of bbox
-        var w0_row = e0.eval(x_min_i, y_min_i);
-        var w1_row = e1.eval(x_min_i, y_min_i);
-        var w2_row = e2.eval(x_min_i, y_min_i);
+        // P: Evaluate edges at top-left of bbox
+        const w0_row = e0.eval(x_min_i, y_min_i);
+        const w1_row = e1.eval(x_min_i, y_min_i);
+        const w2_row = e2.eval(x_min_i, y_min_i);
+        var w_row = vec3i{ w0_row, w1_row, w2_row };
 
         // P: Decompose vertex colors into f32 channels
         const v0_c_f32 = @as(vec3f, @floatFromInt(xrgb_to_vec3(self.v0_col)));
@@ -162,14 +158,20 @@ pub const Triangle = struct {
         const y_min: usize = @intCast(y_min_i);
         const y_max: usize = @intCast(y_max_i);
 
-        // Reciprocal depth at the vertices
-        const q0: float = 1 / z[0];
-        const q1: float = 1 / z[1];
-        const q2: float = 1 / z[2];
+        // P: Reciprocal depth at the vertices
+        const q0: float = v0[2];
+        const q1: float = v1[2];
+        const q2: float = v2[2];
+
+        std.debug.print("z: {} {} {}\n", .{ v0[2], v1[2], v2[2] });
 
         const c0q: vec3f = v0_c_f32 * @as(vec3f, @splat(q0));
         const c1q: vec3f = v1_c_f32 * @as(vec3f, @splat(q1));
         const c2q: vec3f = v2_c_f32 * @as(vec3f, @splat(q2));
+
+        // P: Step vectors
+        const right_inc = vec3i{ e0.A, e1.A, e2.A };
+        const down_inc = vec3i{ e0.B, e1.B, e2.B };
 
         // P: Main loop
         var y: usize = y_min;
@@ -177,28 +179,22 @@ pub const Triangle = struct {
             const line = fb.get_scanline(y);
             const z_row_base: usize = y * cfg.width;
 
-            var w0: i32 = w0_row;
-            var w1: i32 = w1_row;
-            var w2: i32 = w2_row;
+            var w = w_row;
 
             var x: usize = x_min;
-
             while (x <= x_max) : (x += 1) {
-                if (w0 + e0.bias >= 0 and w1 + e1.bias >= 0 and w2 + e2.bias >= 0) {
-                    const w0f: float = @floatFromInt(w0);
-                    const w1f: float = @floatFromInt(w1);
-                    const w2f: float = @floatFromInt(w2);
-
-                    const den_scaled = (w0f * q0 + w1f * q1 + w2f * q2); // maybe called q in litterature
+                if (w[0] + e0.bias >= 0 and w[1] + e1.bias >= 0 and w[2] + e2.bias >= 0) {
+                    const wf: vec3f = @floatFromInt(w);
+                    const den_scaled = (wf[0] * q0 + wf[1] * q1 + wf[2] * q2);
                     const inv_z = den_scaled * inv_area;
 
                     const z_idx = z_row_base + x;
                     if (inv_z >= fb.z_buffer[z_idx]) continue;
                     fb.z_buffer[z_idx] = inv_z;
 
-                    const col_num: vec3f = c0q * @as(vec3f, @splat(w0f)) +
-                        c1q * @as(vec3f, @splat(w1f)) +
-                        c2q * @as(vec3f, @splat(w2f));
+                    const col_num: vec3f = c0q * @as(vec3f, @splat(wf[0])) +
+                        c1q * @as(vec3f, @splat(wf[1])) +
+                        c2q * @as(vec3f, @splat(wf[2]));
 
                     const rcp_den: float = 1.0 / den_scaled;
 
@@ -210,15 +206,11 @@ pub const Triangle = struct {
                 }
 
                 // Step right
-                w0 += e0.A;
-                w1 += e1.A;
-                w2 += e2.A;
+                w += right_inc;
             }
 
             // Step down
-            w0_row += e0.B;
-            w1_row += e1.B;
-            w2_row += e2.B;
+            w_row += down_inc;
         }
     }
 };
