@@ -11,6 +11,7 @@ const ctx = @import("context.zig");
 const mat = @import("matrix.zig");
 const tex = @import("textures.zig");
 const fb = @import("framebuffer.zig");
+const tile = @import("tile.zig");
 
 fn render_job(wg: *std.Thread.WaitGroup, prim: *cube.Cube, buf: *fb.Framebuffer) void {
     defer wg.finish();
@@ -32,6 +33,8 @@ pub fn main() !void {
 
     var gfx = try sdl_gfx.SdlGfx.init();
     var platform = sdl_platform.SdlPlatform.init();
+
+    var tiles = tile.TilePool.init();
 
     var cube1 = cube.Cube.init(.{ 0, 0, 0, 0 }, tex.BlockTypes.grass);
     var cube2 = cube.Cube.init(.{ 4, 0, 0, 0 }, tex.BlockTypes.stone);
@@ -55,6 +58,8 @@ pub fn main() !void {
         cube3.render(&framebuffer, view);
 
         if (cfg.show_tex_atlas) ctx.atlas.debug_show_atlas(&framebuffer);
+
+        tiles.debug_show_tiles_border(framebuffer);
 
         gfx.end_frame();
         gfx.present();

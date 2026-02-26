@@ -2,13 +2,14 @@ const tex = @import("textures.zig");
 
 // P: Framebuffer dimensions/scale
 
-pub const width: c_int = 1920;
-pub const height: c_int = 1080;
-pub const scale: c_int = 1;
+// pub const width: c_int = 1920;
+// pub const height: c_int = 1080;
+// pub const scale: c_int = 1;
+pub const tile_dimensions: usize = 32;
 
-// pub const width: usize = 960;
-// pub const height: usize = 540;
-// pub const scale: usize = 2;
+pub const width: usize = 960;
+pub const height: usize = 540;
+pub const scale: usize = 2;
 
 // pub const width: c_int = 240;
 // pub const height: c_int = 135;
@@ -39,7 +40,7 @@ pub const atlas_w = 96;
 pub const atlas_h = 48;
 pub const tex_w = 16;
 pub const tex_h = 16;
-pub const atlas_channels = 4;
+pub const atlas_channels = 1;
 pub const atlas_size = atlas_w * atlas_h * atlas_channels;
 
 pub const atlas_channels_rgb = 3;

@@ -48,12 +48,11 @@ pub const Atlas = struct {
 
     pub fn debug_show_atlas(self: *const Atlas, buf: *fb.Framebuffer) void {
         var y: usize = 0;
-        while (y < cfg.atlas_w) : (y += 1) {
+        while (y < cfg.atlas_h) : (y += 1) {
             const base_addr_src = y * cfg.atlas_w;
 
             const src = self.atlas[base_addr_src .. base_addr_src + cfg.atlas_w];
             const dst = buf.get_scanline(y)[0..cfg.atlas_w];
-
             @memcpy(dst, src);
         }
     }
