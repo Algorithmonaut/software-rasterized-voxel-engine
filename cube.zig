@@ -43,17 +43,17 @@ pub const Cube = struct {
         };
     }
 
-    pub inline fn render(self: *Cube, buf: *fb.Framebuffer) void {
-        // const angle: float = 3.14 / 4000.0;
-        // const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
-        // const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
+    pub inline fn render(self: *Cube, buf: *fb.Framebuffer, view: matrix.Mat4f) void {
+        const angle: float = 3.14 / 4000.0;
+        const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
+        const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
 
-        // const rotation_mat = rotation_mat_y.mul(rotation_mat_z);
-        // for (&self.vertices) |*vertex| {
-        //     vertex.* = rotation_mat.mul_vec(vertex.*);
-        // }
+        const rotation_mat = rotation_mat_y.mul(rotation_mat_z);
+        for (&self.vertices) |*vertex| {
+            vertex.* = rotation_mat.mul_vec(vertex.*);
+        }
 
-        const world_to_camera = matrix.world_to_camera();
+        const world_to_camera = view;
         var verts_cpy = self.vertices;
 
         for (&verts_cpy) |*vertex| {
@@ -61,12 +61,15 @@ pub const Cube = struct {
             vertex.* = world_to_camera.mul_vec(vertex.*);
         }
 
-        const cube_tex_pos = @intFromEnum(self.kind) * tex.atlas_w * tex.tex_h;
+        const cube_start_x = 0;
+        const cube_start_y = @intFromEnum(self.kind) * cfg.tex_h;
 
         var i: usize = 0;
         while (i < idx.len) : (i += 6) {
-            const tex_pos = cube_tex_pos + (i / 6) * tex.tex_w;
-            _ = tex_pos;
+            const face: usize = i / 6;
+
+            const tex_start_x = cube_start_x + face * cfg.tex_w;
+            const tex_start_y = cube_start_y;
 
             const v0 = verts_cpy[idx[i]];
             const v1 = verts_cpy[idx[i + 1]];
@@ -75,24 +78,98 @@ pub const Cube = struct {
             const v4 = verts_cpy[idx[i + 4]];
             const v5 = verts_cpy[idx[i + 5]];
 
+            const u_0 = tex_start_x;
+            const u_1 = tex_start_x + (cfg.tex_w - 1);
+            const v_0 = tex_start_y;
+            const v_1 = tex_start_y + (cfg.tex_h - 1);
+
+            // Canonical corners
+            const uv_tl = @Vector(2, usize){ u_0, v_0 }; // top left
+            const uv_tr = @Vector(2, usize){ u_1, v_0 };
+            const uv_bl = @Vector(2, usize){ u_0, v_1 };
+            const uv_br = @Vector(2, usize){ u_1, v_1 };
+
+            var uv0: @Vector(2, usize) = undefined;
+            var uv1: @Vector(2, usize) = undefined;
+            var uv2: @Vector(2, usize) = undefined;
+            var uv3: @Vector(2, usize) = undefined;
+            var uv4: @Vector(2, usize) = undefined;
+            var uv5: @Vector(2, usize) = undefined;
+
+            switch (face) {
+                // back (0,1,2) and (0,2,3)
+                0 => {
+                    uv0 = uv_bl;
+                    uv1 = uv_br;
+                    uv2 = uv_tr;
+                    uv3 = uv_bl;
+                    uv4 = uv_tr;
+                    uv5 = uv_tl;
+                },
+                // front (4,6,5) and (4,7,6)
+                1 => {
+                    uv0 = uv_bl;
+                    uv1 = uv_tr;
+                    uv2 = uv_br;
+                    uv3 = uv_bl;
+                    uv4 = uv_tl;
+                    uv5 = uv_tr;
+                },
+                // left (0,3,7) and (0,7,4)
+                2 => {
+                    uv0 = uv_bl;
+                    uv1 = uv_tl;
+                    uv2 = uv_tr;
+                    uv3 = uv_bl;
+                    uv4 = uv_tr;
+                    uv5 = uv_br;
+                },
+                // right (1,5,6) and (1,6,2)
+                3 => {
+                    uv0 = uv_bl;
+                    uv1 = uv_br;
+                    uv2 = uv_tr;
+                    uv3 = uv_bl;
+                    uv4 = uv_tr;
+                    uv5 = uv_tl;
+                },
+                // bottom (0,4,5) and (0,5,1)
+                4 => {
+                    uv0 = uv_tr;
+                    uv1 = uv_tl;
+                    uv2 = uv_bl;
+                    uv3 = uv_tr;
+                    uv4 = uv_bl;
+                    uv5 = uv_br;
+                },
+                // top (3,2,6) and (3,6,7)
+                5 => {
+                    uv0 = uv_tl;
+                    uv1 = uv_tr;
+                    uv2 = uv_br;
+                    uv3 = uv_tl;
+                    uv4 = uv_br;
+                    uv5 = uv_bl;
+                },
+                else => unreachable,
+            }
+
             var triangle = tri.Triangle{
                 .v0 = v0,
                 .v1 = v1,
                 .v2 = v2,
-
-                .v0_col = 0xFFFF0000,
-                .v1_col = 0xFF00FF00,
-                .v2_col = 0xFF0000FF,
+                .v0_uv = uv0,
+                .v1_uv = uv1,
+                .v2_uv = uv2,
             };
 
             var triangle2 = tri.Triangle{
                 .v0 = v3,
                 .v1 = v4,
                 .v2 = v5,
-
-                .v0_col = 0xFFFF0000,
-                .v1_col = 0xFF00FF00,
-                .v2_col = 0xFF0000FF,
+                .v0_uv = uv3,
+                .v1_uv = uv4,
+                .v2_uv = uv5,
             };
 
             triangle.render_triangle(buf);

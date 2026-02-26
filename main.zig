@@ -10,29 +10,51 @@ const sdl_platform = @import("sdl-platform.zig");
 const ctx = @import("context.zig");
 const mat = @import("matrix.zig");
 const tex = @import("textures.zig");
+const fb = @import("framebuffer.zig");
+
+fn render_job(wg: *std.Thread.WaitGroup, prim: *cube.Cube, buf: *fb.Framebuffer) void {
+    defer wg.finish();
+    prim.render(buf);
+}
 
 pub fn main() !void {
+    @setFloatMode(.optimized);
+
+    // Init thread pool
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // const allocator = gpa.allocator();
+    // var pool: std.Thread.Pool = undefined;
+    // try pool.init(.{
+    //     .allocator = allocator,
+    // });
+    // var wg: std.Thread.WaitGroup = undefined;
+    // wg.reset();
+
     var gfx = try sdl_gfx.SdlGfx.init();
     var platform = sdl_platform.SdlPlatform.init();
 
-    var cube1 = cube.Cube.init(.{ 0, 1, 0, 0 }, tex.BlockTypes.dirt);
-    var cube2 = cube.Cube.init(.{ 4, 0, 7, 0 }, tex.BlockTypes.dirt);
+    var cube1 = cube.Cube.init(.{ 0, 0, 0, 0 }, tex.BlockTypes.grass);
+    var cube2 = cube.Cube.init(.{ 4, 0, 0, 0 }, tex.BlockTypes.stone);
+    var cube3 = cube.Cube.init(.{ 8, 0, 0, 0 }, tex.BlockTypes.dirt);
 
     ctx.projection_matrix = mat.create_projection_matrix();
 
-    const atlas = try tex.Atlas.init();
+    ctx.atlas = try tex.Atlas.init();
 
     var t: usize = 0;
 
     while (platform.running) : (t += 1) {
         const dt = platform.begin_frame();
+
         var framebuffer = try gfx.begin_frame();
         framebuffer.clear_all();
 
-        cube2.render(&framebuffer);
-        cube1.render(&framebuffer);
+        const view: mat.Mat4f = mat.world_to_camera();
+        cube2.render(&framebuffer, view);
+        cube1.render(&framebuffer, view);
+        cube3.render(&framebuffer, view);
 
-        atlas.debug_show_atlas(&framebuffer);
+        if (cfg.show_tex_atlas) ctx.atlas.debug_show_atlas(&framebuffer);
 
         gfx.end_frame();
         gfx.present();

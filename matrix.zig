@@ -106,7 +106,7 @@ pub inline fn world_to_camera() Mat4f {
     const world_up = vec3f{ 0, 1, 0 };
 
     const f = vec.normalize(to - from); // forward (world)
-    var s = vec.normalize(vec.cross_product(f, world_up)); // right
+    const s = vec.normalize(vec.cross_product(f, world_up)); // right
 
     const u = vec.cross_product(s, f); // up (already orthogonal if r,f are)
 

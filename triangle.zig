@@ -9,14 +9,15 @@ const vec3i = cfg.vec3i;
 const vec4i = cfg.vec4i;
 const mat = @import("matrix.zig");
 const ctx = @import("context.zig");
+const tex = @import("textures.zig");
 
 pub const Triangle = struct {
     v0: @Vector(4, f32),
-    v0_col: u32,
+    v0_uv: @Vector(2, usize),
     v1: @Vector(4, f32),
-    v1_col: u32,
+    v1_uv: @Vector(2, usize),
     v2: @Vector(4, f32),
-    v2_col: u32,
+    v2_uv: @Vector(2, usize),
 
     const Edge = struct {
         // NOTE: Edge function can be refactored: E(x,y) = Ax + By + C with A B C constants
@@ -52,17 +53,6 @@ pub const Triangle = struct {
         };
     }
 
-    inline fn xrgb_to_vec3(c: u32) @Vector(3, u8) {
-        return .{ @truncate(c >> 16), @truncate(c >> 8), @truncate(c) };
-    }
-
-    inline fn vec3_to_xrgb(c: @Vector(3, u8)) u32 {
-        return @as(u32, 0xFF) << 24 |
-            @as(u32, c[0]) << 16 |
-            @as(u32, c[1]) << 8 |
-            @as(u32, c[2]);
-    }
-
     inline fn edge(a: @Vector(2, i32), b: @Vector(2, i32), p: @Vector(2, i32)) i32 {
         return (p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0]);
     }
@@ -72,13 +62,16 @@ pub const Triangle = struct {
         // P: Camera space -> clip space
         const verts = .{ &self.v0, &self.v1, &self.v2 };
         var verts_h: [3]vec4f = undefined;
+        var inv_ws: vec3f = undefined;
 
         inline for (verts, 0..) |vp, i| {
             var v = vec4f{ vp.*[0], vp.*[1], vp.*[2], 1.0 };
             v = ctx.projection_matrix.mul_vec(v);
 
-            const rec_w = 1 / v[3];
-            v = v * @as(vec4f, @splat(rec_w));
+            const clip_w = v[3];
+            const inv_w = 1.0 / clip_w;
+            inv_ws[i] = inv_w;
+            v = v * @as(vec4f, @splat(inv_w));
 
             verts_h[i] = v;
         }
@@ -106,12 +99,12 @@ pub const Triangle = struct {
             @intFromFloat((1 - (v0[1] + 1.0) * 0.5) * fh + 0.5),
         };
 
-        var b = @Vector(2, int){
+        const b = @Vector(2, int){
             @intFromFloat((v1[0] + 1.0) * 0.5 * fw + 0.5),
             @intFromFloat((1 - (v1[1] + 1.0) * 0.5) * fh + 0.5),
         };
 
-        var c = @Vector(2, int){
+        const c = @Vector(2, int){
             @intFromFloat((v2[0] + 1.0) * 0.5 * fw + 0.5),
             @intFromFloat((1 - (v2[1] + 1.0) * 0.5) * fh + 0.5),
         };
@@ -147,11 +140,6 @@ pub const Triangle = struct {
         const w2_row = e2.eval(x_min_i, y_min_i);
         var w_row = vec3i{ w0_row, w1_row, w2_row };
 
-        // P: Decompose vertex colors into f32 channels
-        const v0_c_f32 = @as(vec3f, @floatFromInt(xrgb_to_vec3(self.v0_col)));
-        const v1_c_f32 = @as(vec3f, @floatFromInt(xrgb_to_vec3(self.v1_col)));
-        const v2_c_f32 = @as(vec3f, @floatFromInt(xrgb_to_vec3(self.v2_col)));
-
         // P: Convert bbox to usize for incremental stepping
         const x_min: usize = @intCast(x_min_i);
         const x_max: usize = @intCast(x_max_i);
@@ -159,15 +147,19 @@ pub const Triangle = struct {
         const y_max: usize = @intCast(y_max_i);
 
         // P: Reciprocal depth at the vertices
-        const q0: float = v0[2];
-        const q1: float = v1[2];
-        const q2: float = v2[2];
+        const q0: float = inv_ws[0];
+        const q1: float = inv_ws[1];
+        const q2: float = inv_ws[2];
 
-        std.debug.print("z: {} {} {}\n", .{ v0[2], v1[2], v2[2] });
+        const Uvf = @Vector(2, float);
 
-        const c0q: vec3f = v0_c_f32 * @as(vec3f, @splat(q0));
-        const c1q: vec3f = v1_c_f32 * @as(vec3f, @splat(q1));
-        const c2q: vec3f = v2_c_f32 * @as(vec3f, @splat(q2));
+        const uv0f: Uvf = @floatFromInt(self.v0_uv);
+        const uv1f: Uvf = @floatFromInt(self.v1_uv);
+        const uv2f: Uvf = @floatFromInt(self.v2_uv);
+
+        const uv0q: Uvf = uv0f * @as(Uvf, @splat(q0));
+        const uv1q: Uvf = uv1f * @as(Uvf, @splat(q1));
+        const uv2q: Uvf = uv2f * @as(Uvf, @splat(q2));
 
         // P: Step vectors
         const right_inc = vec3i{ e0.A, e1.A, e2.A };
@@ -189,20 +181,28 @@ pub const Triangle = struct {
                     const inv_z = den_scaled * inv_area;
 
                     const z_idx = z_row_base + x;
-                    if (inv_z >= fb.z_buffer[z_idx]) continue;
+                    if (inv_z <= fb.z_buffer[z_idx]) continue;
                     fb.z_buffer[z_idx] = inv_z;
 
-                    const col_num: vec3f = c0q * @as(vec3f, @splat(wf[0])) +
-                        c1q * @as(vec3f, @splat(wf[1])) +
-                        c2q * @as(vec3f, @splat(wf[2]));
+                    const uv_num = uv0q * @as(Uvf, @splat(wf[0])) +
+                        uv1q * @as(Uvf, @splat(wf[1])) +
+                        uv2q * @as(Uvf, @splat(wf[2]));
 
                     const rcp_den: float = 1.0 / den_scaled;
+                    const uv = uv_num * @as(Uvf, @splat(rcp_den));
 
-                    const rgb: vec3f = col_num * @as(vec3f, @splat(rcp_den));
+                    const max_u_f: float = @floatFromInt(cfg.atlas_w - 1);
+                    const max_v_f: float = @floatFromInt(cfg.atlas_h - 1);
 
-                    const rgb_u8: @Vector(3, u8) = @intFromFloat(rgb);
-                    const out_color: u32 = vec3_to_xrgb(rgb_u8);
-                    line[x] = out_color;
+                    const u_f = std.math.clamp(uv[0], 0.0, max_u_f);
+                    const v_f = std.math.clamp(uv[1], 0.0, max_v_f);
+
+                    const u: usize = @intFromFloat(u_f);
+                    const v: usize = @intFromFloat(v_f);
+
+                    const base: usize = (u + v * cfg.atlas_w);
+                    const argb = ctx.atlas.atlas[base];
+                    line[x] = argb;
                 }
 
                 // Step right

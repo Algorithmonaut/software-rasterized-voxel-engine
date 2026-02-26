@@ -16,17 +16,13 @@ const atlas_size: usize = atlas_w * atlas_h * channels;
 // P: Read from file, write to file
 
 fn read_file(filename: []const u8) ![bytes_count]u8 {
-    var threaded: std.Io.Threaded = .init_single_threaded;
-    defer threaded.deinit();
-    const io = threaded.io();
+    const cwd = std.fs.cwd();
 
-    const cwd = std.Io.Dir.cwd();
-
-    var file = try cwd.openFile(io, filename, .{ .mode = .read_only });
-    defer file.close(io);
+    var file = try cwd.openFile(filename, .{ .mode = .read_only });
+    defer file.close();
 
     var read_buf: [bytes_count]u8 = undefined;
-    var file_reader = file.reader(io, &read_buf);
+    var file_reader = file.reader(&read_buf);
     const reader = &file_reader.interface;
 
     var rgb: [bytes_count]u8 = undefined;
@@ -41,22 +37,18 @@ fn read_file(filename: []const u8) ![bytes_count]u8 {
 }
 
 fn write_to_file(a: [out_size]u8, filename: []const u8) !void {
-    var threaded: std.Io.Threaded = .init_single_threaded;
-    defer threaded.deinit();
-    const io = threaded.io();
-
-    const cwd = std.Io.Dir.cwd();
+    const cwd = std.fs.cwd();
 
     // Create/overwrite output file
-    var file = try cwd.createFile(io, filename, .{
+    var file = try cwd.createFile(filename, .{
         .truncate = true,
         // .read = false, // usually default for write-only create, depends on current flags shape
     });
-    defer file.close(io);
+    defer file.close();
 
     // Buffered writer (caller-provided buffer)
     var write_buf: [a.len]u8 = undefined;
-    var file_writer = file.writer(io, &write_buf);
+    var file_writer = file.writer(&write_buf);
     const writer = &file_writer.interface;
 
     // Write exactly all bytes
