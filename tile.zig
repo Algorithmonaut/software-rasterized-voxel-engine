@@ -1,6 +1,6 @@
 const cfg = @import("config.zig");
 const size = cfg.tile_dimensions;
-const Float = cfg.float;
+const Float = cfg.Float;
 const std = @import("std");
 const fb = @import("framebuffer.zig");
 

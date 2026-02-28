@@ -7,6 +7,8 @@ const cfg = @import("config.zig");
 const ctx = @import("context.zig");
 const vec = @import("vector.zig");
 
+const Vec3f = cfg.Vec3f;
+
 pub const SdlPlatform = struct {
     freq: u64, // tick counter
     last_frame: u64, // ticks per second
@@ -71,14 +73,14 @@ pub const SdlPlatform = struct {
         const step: f32 = speed * dt;
 
         // forward from yaw/pitch (used for look)
-        var forward = cfg.vec3f{
+        var forward = Vec3f{
             @cos(ctx.pitch) * @sin(ctx.yaw),
             @sin(ctx.pitch),
             @cos(ctx.pitch) * @cos(ctx.yaw),
         };
         forward = vec.normalize(forward);
 
-        const world_up = cfg.vec3f{ 0, 1, 0 };
+        const world_up = Vec3f{ 0, 1, 0 };
 
         // movement basis constrained to horizontal plane
         var fwd_move = forward;
@@ -87,13 +89,13 @@ pub const SdlPlatform = struct {
             fwd_move = vec.normalize(fwd_move);
         } else {
             // looking straight up/down: fall back to yaw-only forward
-            fwd_move = vec.normalize(cfg.vec3f{ @sin(ctx.yaw), 0, @cos(ctx.yaw) });
+            fwd_move = vec.normalize(Vec3f{ @sin(ctx.yaw), 0, @cos(ctx.yaw) });
         }
 
         const right = vec.normalize(vec.cross_product(fwd_move, world_up));
 
         // build wish dir from horizontal basis
-        var wish = cfg.vec3f{ 0, 0, 0 };
+        var wish = Vec3f{ 0, 0, 0 };
         if (keys[c.SDL_SCANCODE_W] != 0) wish += fwd_move;
         if (keys[c.SDL_SCANCODE_S] != 0) wish -= fwd_move;
         if (keys[c.SDL_SCANCODE_D] != 0) wish += right;
@@ -101,7 +103,7 @@ pub const SdlPlatform = struct {
 
         if (vec.length_squared(wish) > 0) {
             wish = vec.normalize(wish);
-            ctx.from += wish * @as(cfg.vec3f, @splat(step));
+            ctx.from += wish * @as(Vec3f, @splat(step));
             ctx.from[1] = 0; // optional: hard clamp to plane y=0
         }
     }
@@ -121,7 +123,7 @@ pub fn update_camera_look() void {
     const max_pitch: f32 = 89.0 / 180.0 * std.math.pi;
     ctx.pitch = std.math.clamp(ctx.pitch, -max_pitch, max_pitch);
 
-    var forward = cfg.vec3f{
+    var forward = Vec3f{
         @cos(ctx.pitch) * @sin(ctx.yaw),
         @sin(ctx.pitch),
         @cos(ctx.pitch) * @cos(ctx.yaw),

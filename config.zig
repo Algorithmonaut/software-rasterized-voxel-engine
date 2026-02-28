@@ -2,31 +2,22 @@ const tex = @import("textures.zig");
 
 // P: Framebuffer dimensions/scale
 
-// pub const width: c_int = 1920;
-// pub const height: c_int = 1080;
-// pub const scale: c_int = 1;
-pub const tile_dimensions: usize = 32;
-
+pub const tile_dimensions: usize = 16;
 pub const width: usize = 960;
 pub const height: usize = 540;
 pub const scale: usize = 2;
 
-// pub const width: c_int = 240;
-// pub const height: c_int = 135;
-// pub const scale: c_int = 8;
-
-pub const fov: float = 90;
-pub const view_distance: float = 200;
+pub const fov: Float = 90;
+pub const view_distance: Float = 200;
 
 // P: Default types
-
-pub const float = f32;
-pub const int = i32;
-pub const uint = u32;
-pub const vec4f = @Vector(4, float);
-pub const vec3f = @Vector(3, float);
-pub const vec3i = @Vector(3, int);
-pub const vec4i = @Vector(4, int);
+pub const Float = f32;
+pub const Int = i32;
+pub const Uint = u32;
+pub const Vec4f = @Vector(4, Float);
+pub const Vec3f = @Vector(3, Float);
+pub const Vec3i = @Vector(3, Int);
+pub const Vec4i = @Vector(4, Int);
 
 // P: Debug
 pub const show_fps = true;

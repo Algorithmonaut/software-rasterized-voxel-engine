@@ -5,13 +5,12 @@ const c = @cImport({
 });
 const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const cfg = @import("config.zig");
-const float = cfg.float;
+const Float = cfg.Float;
 
 pub const SdlGfx = struct {
     window: *c.SDL_Window,
     renderer: *c.SDL_Renderer,
     texture: *c.SDL_Texture,
-    z_buffer: [cfg.width * cfg.height]float,
 
     pub fn init() !SdlGfx {
         if (c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS) != 0) {
@@ -53,7 +52,6 @@ pub const SdlGfx = struct {
             .window = win,
             .renderer = renderer,
             .texture = tex,
-            .z_buffer = undefined,
         };
     }
 
@@ -68,12 +66,9 @@ pub const SdlGfx = struct {
         const pitch: usize = @intCast(pitch_c);
         const base: [*]u8 = @ptrCast(pixels.?);
 
-        const zslice = self.z_buffer[0..];
-
         return .{
             .base = base,
             .pitch = pitch,
-            .z_buffer = zslice,
         }; // Returns a framebuffer object
     }
 

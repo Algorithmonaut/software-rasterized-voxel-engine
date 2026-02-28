@@ -3,10 +3,39 @@ const cfg = @import("config.zig");
 const tri = @import("triangle.zig");
 const tile = @import("tile.zig");
 const fb = @import("framebuffer.zig");
-const int = cfg.int;
-const uint = cfg.uint;
+const Int = cfg.Int;
+const Uint = cfg.Uint;
 
 pub const cube_count = 3;
+
+const TileRenderJob = struct {
+    wg: *std.Thread.WaitGroup,
+    renderer: *const Renderer,
+    tiles_pool: *tile.TilePool,
+    buf: fb.Framebuffer,
+    tile_offsets: *const [tile.tiles_count + 1]usize,
+    tile_refs: []const cfg.Uint,
+    tile_i: usize,
+
+    pub fn run(job: *TileRenderJob) void {
+        defer job.wg.finish();
+
+        const tile_i = job.tile_i;
+        const start = job.tile_offsets[tile_i];
+        const end = job.tile_offsets[tile_i + 1];
+        if (start == end) return;
+
+        var t = &job.tiles_pool.tiles[tile_i];
+        t.clear();
+
+        for (job.tile_refs[start..end]) |tri_i_u| {
+            const tri_i: usize = @intCast(tri_i_u);
+            job.renderer.triangles.items[tri_i].render_triangle_in_tile(t);
+        }
+
+        t.write_to_fb(job.buf);
+    }
+};
 
 pub const Renderer = struct {
     triangles: std.ArrayList(tri.RasterTriangle),
@@ -51,11 +80,15 @@ pub const Renderer = struct {
         return .{ .min_tx = min_tx, .max_tx = max_tx, .min_ty = min_ty, .max_ty = max_ty };
     }
 
-    pub fn render(self: *Renderer, tiles_pool: *tile.TilePool, buf: fb.Framebuffer, allocator: std.mem.Allocator) !void {
-        for (&tiles_pool.tiles) |*t| t.clear();
-
+    pub fn render(
+        self: *Renderer,
+        pool: *std.Thread.Pool,
+        tiles_pool: *tile.TilePool,
+        buf: fb.Framebuffer,
+        allocator: std.mem.Allocator,
+    ) !void {
         // P: First pass (count the triangles for each tile)
-        var tile_counts: [tile.tiles_count]uint = [_]uint{0} ** tile.tiles_count;
+        var tile_counts: [tile.tiles_count]Uint = [_]Uint{0} ** tile.tiles_count;
         for (self.triangles.items) |triangle| {
             const range = tile_range_for_tri(triangle);
 
@@ -83,7 +116,7 @@ pub const Renderer = struct {
         }
         tile_offsets[tile.tiles_count] = sum;
 
-        var tile_refs = try allocator.alloc(uint, sum);
+        var tile_refs = try allocator.alloc(Uint, sum);
 
         // Per tile write cursor
         var write_pos: [tile.tiles_count]usize = undefined;
@@ -106,23 +139,32 @@ pub const Renderer = struct {
             }
         }
 
-        // Third pass (render per tile and blit)
-        for (0..tile.tiles_count) |tile_i| {
-            const count: usize = @intCast(tile_counts[tile_i]);
-            if (count == 0) continue;
+        // Third pass (render per tile and blit) - PARALLEL
+        var wg = std.Thread.WaitGroup{};
 
+        // jobs must remain valid until wg.wait() returns
+        var jobs = try allocator.alloc(TileRenderJob, tile.tiles_count);
+        defer allocator.free(jobs);
+
+        for (0..tile.tiles_count) |tile_i| {
             const start = tile_offsets[tile_i];
             const end = tile_offsets[tile_i + 1];
+            if (start == end) continue; // skip empty tiles
 
-            var t = &tiles_pool.tiles[tile_i];
-            t.clear(); // NOTE: clear only touched tiles
+            wg.start();
+            jobs[tile_i] = .{
+                .wg = &wg,
+                .renderer = self,
+                .tiles_pool = tiles_pool,
+                .buf = buf,
+                .tile_offsets = &tile_offsets,
+                .tile_refs = tile_refs,
+                .tile_i = tile_i,
+            };
 
-            for (tile_refs[start..end]) |tri_i_u| {
-                const tri_i: usize = @intCast(tri_i_u);
-                self.triangles.items[tri_i].render_triangle_in_tile(t);
-            }
-
-            t.write_to_fb(buf);
+            try pool.spawn(TileRenderJob.run, .{&jobs[tile_i]});
         }
+
+        wg.wait();
     }
 };

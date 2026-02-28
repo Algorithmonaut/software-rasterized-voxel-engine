@@ -2,24 +2,24 @@ const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const Tile = @import("tile.zig");
 const std = @import("std");
 const cfg = @import("config.zig");
-const float = cfg.float;
-const int = cfg.int;
-const vec3f = cfg.vec3f;
-const vec4f = cfg.vec4f;
-const vec3i = cfg.vec3i;
-const vec4i = cfg.vec4i;
+const Float = cfg.Float;
+const Int = cfg.Int;
+const Vec3f = cfg.Vec3f;
+const Vec4f = cfg.Vec4f;
+const Vec3i = cfg.Vec3i;
+const Vec4i = cfg.Vec4i;
 const mat = @import("matrix.zig");
 const ctx = @import("context.zig");
 const tex = @import("textures.zig");
 
 pub const RasterTriangle = struct {
-    v0: @Vector(2, int),
+    v0: @Vector(2, Int),
     v0_uv: @Vector(2, usize),
     v0_rec_z: f32,
-    v1: @Vector(2, int),
+    v1: @Vector(2, Int),
     v1_uv: @Vector(2, usize),
     v1_rec_z: f32,
-    v2: @Vector(2, int),
+    v2: @Vector(2, Int),
     v2_uv: @Vector(2, usize),
     v2_rec_z: f32,
 
@@ -102,7 +102,7 @@ pub const RasterTriangle = struct {
 
         if (area < 0) return; // backface culling
 
-        const inv_area = 1 / @as(float, @floatFromInt(area));
+        const inv_area = 1 / @as(Float, @floatFromInt(area));
 
         const tx0: i32 = @intCast(tile.pos[0]);
         const ty0: i32 = @intCast(tile.pos[1]);
@@ -111,14 +111,14 @@ pub const RasterTriangle = struct {
         const w0_row = e0.eval(tx0, ty0);
         const w1_row = e1.eval(tx0, ty0);
         const w2_row = e2.eval(tx0, ty0);
-        var w_row = vec3i{ w0_row, w1_row, w2_row };
+        var w_row = Vec3i{ w0_row, w1_row, w2_row };
 
         // P: Reciprocal depth at the vertices
-        const q0: float = self.v0_rec_z;
-        const q1: float = self.v1_rec_z;
-        const q2: float = self.v2_rec_z;
+        const q0: Float = self.v0_rec_z;
+        const q1: Float = self.v1_rec_z;
+        const q2: Float = self.v2_rec_z;
 
-        const Uvf = @Vector(2, float);
+        const Uvf = @Vector(2, Float);
 
         const uv0f: Uvf = @floatFromInt(self.v0_uv);
         const uv1f: Uvf = @floatFromInt(self.v1_uv);
@@ -129,8 +129,8 @@ pub const RasterTriangle = struct {
         const uv2q: Uvf = uv2f * @as(Uvf, @splat(q2));
 
         // P: Step vectors
-        const right_inc = vec3i{ e0.A, e1.A, e2.A };
-        const down_inc = vec3i{ e0.B, e1.B, e2.B };
+        const right_inc = Vec3i{ e0.A, e1.A, e2.A };
+        const down_inc = Vec3i{ e0.B, e1.B, e2.B };
 
         // P: Main loop
         var y: usize = 0;
@@ -143,7 +143,7 @@ pub const RasterTriangle = struct {
             var x: usize = 0;
             while (x < cfg.tile_dimensions) : (x += 1) {
                 if (w[0] + e0.bias >= 0 and w[1] + e1.bias >= 0 and w[2] + e2.bias >= 0) {
-                    const wf: vec3f = @floatFromInt(w);
+                    const wf: Vec3f = @floatFromInt(w);
                     const den_scaled = (wf[0] * q0 + wf[1] * q1 + wf[2] * q2);
                     const inv_z = den_scaled * inv_area;
 
@@ -155,11 +155,11 @@ pub const RasterTriangle = struct {
                         uv1q * @as(Uvf, @splat(wf[1])) +
                         uv2q * @as(Uvf, @splat(wf[2]));
 
-                    const rcp_den: float = 1.0 / den_scaled;
+                    const rcp_den: Float = 1.0 / den_scaled;
                     const uv = uv_num * @as(Uvf, @splat(rcp_den));
 
-                    const max_u_f: float = @floatFromInt(cfg.atlas_w - 1);
-                    const max_v_f: float = @floatFromInt(cfg.atlas_h - 1);
+                    const max_u_f: Float = @floatFromInt(cfg.atlas_w - 1);
+                    const max_v_f: Float = @floatFromInt(cfg.atlas_h - 1);
 
                     const u_f = std.math.clamp(uv[0], 0.0, max_u_f);
                     const v_f = std.math.clamp(uv[1], 0.0, max_v_f);
@@ -195,7 +195,7 @@ pub const RasterTriangle = struct {
 
         if (area < 0) return; // backface culling
 
-        const inv_area = 1 / @as(float, @floatFromInt(area));
+        const inv_area = 1 / @as(Float, @floatFromInt(area));
 
         // P: Compute the bbox and clip it to the viewport
         var x_min_i: i32 = @min(a[0], b[0], c[0]);
@@ -215,7 +215,7 @@ pub const RasterTriangle = struct {
         const w0_row = e0.eval(x_min_i, y_min_i);
         const w1_row = e1.eval(x_min_i, y_min_i);
         const w2_row = e2.eval(x_min_i, y_min_i);
-        var w_row = vec3i{ w0_row, w1_row, w2_row };
+        var w_row = Vec3i{ w0_row, w1_row, w2_row };
 
         // P: Convert bbox to usize for incremental stepping
         const x_min: usize = @intCast(x_min_i);
@@ -224,11 +224,11 @@ pub const RasterTriangle = struct {
         const y_max: usize = @intCast(y_max_i);
 
         // P: Reciprocal depth at the vertices
-        const q0: float = self.v0_rec_z;
-        const q1: float = self.v1_rec_z;
-        const q2: float = self.v2_rec_z;
+        const q0: Float = self.v0_rec_z;
+        const q1: Float = self.v1_rec_z;
+        const q2: Float = self.v2_rec_z;
 
-        const Uvf = @Vector(2, float);
+        const Uvf = @Vector(2, Float);
 
         const uv0f: Uvf = @floatFromInt(self.v0_uv);
         const uv1f: Uvf = @floatFromInt(self.v1_uv);
@@ -239,8 +239,8 @@ pub const RasterTriangle = struct {
         const uv2q: Uvf = uv2f * @as(Uvf, @splat(q2));
 
         // P: Step vectors
-        const right_inc = vec3i{ e0.A, e1.A, e2.A };
-        const down_inc = vec3i{ e0.B, e1.B, e2.B };
+        const right_inc = Vec3i{ e0.A, e1.A, e2.A };
+        const down_inc = Vec3i{ e0.B, e1.B, e2.B };
 
         // P: Main loop
         var y: usize = y_min;
@@ -253,7 +253,7 @@ pub const RasterTriangle = struct {
             var x: usize = x_min;
             while (x <= x_max) : (x += 1) {
                 if (w[0] + e0.bias >= 0 and w[1] + e1.bias >= 0 and w[2] + e2.bias >= 0) {
-                    const wf: vec3f = @floatFromInt(w);
+                    const wf: Vec3f = @floatFromInt(w);
                     const den_scaled = (wf[0] * q0 + wf[1] * q1 + wf[2] * q2);
                     const inv_z = den_scaled * inv_area;
 
@@ -265,11 +265,11 @@ pub const RasterTriangle = struct {
                         uv1q * @as(Uvf, @splat(wf[1])) +
                         uv2q * @as(Uvf, @splat(wf[2]));
 
-                    const rcp_den: float = 1.0 / den_scaled;
+                    const rcp_den: Float = 1.0 / den_scaled;
                     const uv = uv_num * @as(Uvf, @splat(rcp_den));
 
-                    const max_u_f: float = @floatFromInt(cfg.atlas_w - 1);
-                    const max_v_f: float = @floatFromInt(cfg.atlas_h - 1);
+                    const max_u_f: Float = @floatFromInt(cfg.atlas_w - 1);
+                    const max_v_f: Float = @floatFromInt(cfg.atlas_h - 1);
 
                     const u_f = std.math.clamp(uv[0], 0.0, max_u_f);
                     const v_f = std.math.clamp(uv[1], 0.0, max_v_f);
@@ -305,17 +305,17 @@ pub const Triangle = struct {
     ) ?RasterTriangle {
         // P: Camera space -> clip space
         const verts = .{ &self.v0, &self.v1, &self.v2 };
-        var verts_h: [3]vec4f = undefined;
-        var inv_ws: vec3f = undefined;
+        var verts_h: [3]Vec4f = undefined;
+        var inv_ws: Vec3f = undefined;
 
         inline for (verts, 0..) |vp, i| {
-            var v = vec4f{ vp.*[0], vp.*[1], vp.*[2], 1.0 };
+            var v = Vec4f{ vp.*[0], vp.*[1], vp.*[2], 1.0 };
             v = ctx.projection_matrix.mul_vec(v);
 
             const clip_w = v[3];
             const inv_w = 1.0 / clip_w;
             inv_ws[i] = inv_w;
-            v = v * @as(vec4f, @splat(inv_w));
+            v = v * @as(Vec4f, @splat(inv_w));
 
             verts_h[i] = v;
         }
@@ -335,20 +335,20 @@ pub const Triangle = struct {
             v0[2] < 0 or v1[2] < 0 or v2[2] < 0) return null;
 
         // P: Clip -> raster
-        const fw: float = cfg.width;
-        const fh: float = cfg.height;
+        const fw: Float = cfg.width;
+        const fh: Float = cfg.height;
 
-        const a = @Vector(2, int){
+        const a = @Vector(2, Int){
             @intFromFloat((v0[0] + 1.0) * 0.5 * fw + 0.5),
             @intFromFloat((1 - (v0[1] + 1.0) * 0.5) * fh + 0.5),
         };
 
-        const b = @Vector(2, int){
+        const b = @Vector(2, Int){
             @intFromFloat((v1[0] + 1.0) * 0.5 * fw + 0.5),
             @intFromFloat((1 - (v1[1] + 1.0) * 0.5) * fh + 0.5),
         };
 
-        const c = @Vector(2, int){
+        const c = @Vector(2, Int){
             @intFromFloat((v2[0] + 1.0) * 0.5 * fw + 0.5),
             @intFromFloat((1 - (v2[1] + 1.0) * 0.5) * fh + 0.5),
         };

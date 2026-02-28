@@ -5,11 +5,11 @@ const fb = @import("framebuffer.zig");
 const cfg = @import("config.zig");
 const tex = @import("textures.zig");
 const Renderer = @import("renderer.zig");
-const float = cfg.float;
-const vec4f = cfg.vec4f;
-const vec3f = cfg.vec3f;
+const Float = cfg.Float;
+const Vec4f = cfg.Vec4f;
+const Vec3f = cfg.Vec3f;
 
-const vertices: [8]vec4f = .{
+const vertices: [8]Vec4f = .{
     .{ -1, -1, -1, 1 },
     .{ 1, -1, -1, 1 },
     .{ 1, 1, -1, 1 },
@@ -30,12 +30,12 @@ const idx: [36]u16 = .{
 };
 
 pub const Cube = struct {
-    vertices: [8]vec4f,
+    vertices: [8]Vec4f,
     idx: [36]u16,
-    pos: vec4f,
+    pos: Vec4f,
     kind: tex.BlockTypes,
 
-    pub fn init(pos: vec4f, kind: tex.BlockTypes) Cube {
+    pub fn init(pos: Vec4f, kind: tex.BlockTypes) Cube {
         return .{
             .vertices = vertices,
             .idx = idx,
@@ -44,12 +44,12 @@ pub const Cube = struct {
         };
     }
 
-    pub inline fn render(
+    pub inline fn genRasterTriangles(
         self: *Cube,
         view: matrix.Mat4f,
-        renderer: *Renderer.Renderer,
-    ) !void {
-        const angle: float = 3.14 / 40000.0;
+        out: *std.ArrayList(tri.RasterTriangle),
+    ) void {
+        const angle: Float = 3.14 / 40000.0;
         const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
         const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
 
@@ -178,11 +178,11 @@ pub const Cube = struct {
             };
 
             if (triangle.gen_raster_triangle()) |tri_1| {
-                try renderer.triangles.appendBounded(tri_1);
+                out.appendBounded(tri_1) catch unreachable;
             }
 
             if (triangle2.gen_raster_triangle()) |tri_2| {
-                try renderer.triangles.appendBounded(tri_2);
+                out.appendBounded(tri_2) catch unreachable;
             }
         }
     }
