@@ -4,6 +4,7 @@ const matrix = @import("matrix.zig");
 const fb = @import("framebuffer.zig");
 const cfg = @import("config.zig");
 const tex = @import("textures.zig");
+const Renderer = @import("renderer.zig");
 const float = cfg.float;
 const vec4f = cfg.vec4f;
 const vec3f = cfg.vec3f;
@@ -43,8 +44,12 @@ pub const Cube = struct {
         };
     }
 
-    pub inline fn render(self: *Cube, buf: *fb.Framebuffer, view: matrix.Mat4f) void {
-        const angle: float = 3.14 / 4000.0;
+    pub inline fn render(
+        self: *Cube,
+        view: matrix.Mat4f,
+        renderer: *Renderer.Renderer,
+    ) !void {
+        const angle: float = 3.14 / 40000.0;
         const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
         const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
 
@@ -172,8 +177,13 @@ pub const Cube = struct {
                 .v2_uv = uv5,
             };
 
-            triangle.render_triangle(buf);
-            triangle2.render_triangle(buf);
+            if (triangle.gen_raster_triangle()) |tri_1| {
+                try renderer.triangles.appendBounded(tri_1);
+            }
+
+            if (triangle2.gen_raster_triangle()) |tri_2| {
+                try renderer.triangles.appendBounded(tri_2);
+            }
         }
     }
 };

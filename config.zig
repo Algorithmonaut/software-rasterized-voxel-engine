@@ -22,6 +22,7 @@ pub const view_distance: float = 200;
 
 pub const float = f32;
 pub const int = i32;
+pub const uint = u32;
 pub const vec4f = @Vector(4, float);
 pub const vec3f = @Vector(3, float);
 pub const vec3i = @Vector(3, int);
@@ -30,6 +31,7 @@ pub const vec4i = @Vector(4, int);
 // P: Debug
 pub const show_fps = true;
 pub const show_tex_atlas = true;
+pub const show_tiles = true;
 
 // P: Input
 
