@@ -141,17 +141,15 @@ pub const RasterTriangle = struct {
 
             var x: usize = 0;
             while (x < cfg.tile_dimensions) : (x += 1) {
+                // Step right (still runs if z-buf test fails)
+                defer w += right_inc;
                 if (w[0] + e0.bias >= 0 and w[1] + e1.bias >= 0 and w[2] + e2.bias >= 0) {
                     const wf: Vec3f = @floatFromInt(w);
                     const den_scaled = (wf[0] * q0 + wf[1] * q1 + wf[2] * q2);
                     const inv_z = den_scaled * inv_area;
 
                     const z_idx = z_row_base + x;
-                    if (inv_z <= tile.z_buf[z_idx]) {
-                        w += right_inc;
-                        continue;
-                    }
-
+                    if (inv_z <= tile.z_buf[z_idx]) continue;
                     tile.z_buf[z_idx] = inv_z;
 
                     const uv_num = uv0q * @as(Uvf, @splat(wf[0])) +
@@ -174,9 +172,6 @@ pub const RasterTriangle = struct {
                     const argb = ctx.atlas.atlas[base];
                     tile.buf[buf_row_base + x] = argb;
                 }
-
-                // Step right
-                w += right_inc;
             }
 
             // Step down

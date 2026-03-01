@@ -1,4 +1,5 @@
 const std = @import("std");
+const main = @import("main.zig");
 const tri = @import("triangle.zig");
 const matrix = @import("matrix.zig");
 const cfg = @import("config.zig");
@@ -27,6 +28,11 @@ const idx: [36]u16 = .{
     3, 2, 6, 3, 6, 7, //top
 };
 
+pub const PerCubeOut = struct {
+    tris: [12]tri.RasterTriangle = undefined,
+    len: u8 = 0,
+};
+
 pub const Cube = struct {
     vertices: [8]Vec4f,
     idx: [36]u16,
@@ -45,8 +51,10 @@ pub const Cube = struct {
     pub inline fn genRasterTriangles(
         self: *Cube,
         view: matrix.Mat4f,
-        out: *std.ArrayList(tri.RasterTriangle),
+        out: *PerCubeOut,
     ) void {
+        var n: u8 = 0;
+
         const angle: Float = 3.14 / 40000.0 * self.pos[1];
         const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
         const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
@@ -175,13 +183,17 @@ pub const Cube = struct {
                 .v2_uv = uv5,
             };
 
-            if (triangle.gen_raster_triangle()) |tri_1| {
-                out.appendBounded(tri_1) catch unreachable;
+            if (triangle.gen_raster_triangle()) |rt| {
+                out.tris[n] = rt;
+                n += 1;
             }
 
-            if (triangle2.gen_raster_triangle()) |tri_2| {
-                out.appendBounded(tri_2) catch unreachable;
+            if (triangle2.gen_raster_triangle()) |rt| {
+                out.tris[n] = rt;
+                n += 1;
             }
+
+            out.len = n;
         }
     }
 };

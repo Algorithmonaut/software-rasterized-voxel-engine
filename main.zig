@@ -14,11 +14,13 @@ const Scene = @import("scene.zig");
 
 const Engine = @import("Engine.zig");
 
+const PerCubeOut = cube.PerCubeOut;
+
 const GenRasterTrianglesJob = struct {
     wg: *std.Thread.WaitGroup,
     cube: *cube.Cube,
     view: mat.Mat4f,
-    out: *std.ArrayList(tri.RasterTriangle),
+    out: *PerCubeOut,
 
     pub fn run(job: *GenRasterTrianglesJob) void {
         defer job.wg.finish();
@@ -65,8 +67,8 @@ pub fn main() !void {
         var jobs = try arena_allocator.alloc(GenRasterTrianglesJob, scene.cubes.len);
 
         // Per cube output buffers
-        var outs = try arena_allocator.alloc(std.ArrayList(tri.RasterTriangle), 100);
-        for (outs) |*lst| lst.* = try std.ArrayList(tri.RasterTriangle).initCapacity(allocator, 6 * 2);
+        var outs = try arena_allocator.alloc(PerCubeOut, scene.cubes.len);
+        @memset(outs, .{});
 
         for (&scene.cubes, 0..) |*cu, i| {
             wg.start();
@@ -85,7 +87,8 @@ pub fn main() !void {
 
         // Merge results
         for (outs) |*lst| {
-            engine.renderer.triangles.appendSliceAssumeCapacity(lst.items);
+            const src = lst.tris[0..lst.len];
+            engine.renderer.triangles.appendSliceAssumeCapacity(src);
         }
 
         if (cfg.show_tiles) tiles.debug_show_tiles_border(&frame.framebuffer);

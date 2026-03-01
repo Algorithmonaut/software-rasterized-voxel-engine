@@ -3,13 +3,13 @@ const tex = @import("textures.zig");
 // P: Framebuffer dimensions/scale
 
 pub const tile_dimensions: usize = 32;
-// pub const width: usize = 960;
-// pub const height: usize = 540;
-// pub const scale: usize = 2;
+pub const width: usize = 960;
+pub const height: usize = 540;
+pub const scale: usize = 2;
 
-pub const width: usize = 1920;
-pub const height: usize = 1080;
-pub const scale: usize = 1;
+// pub const width: usize = 1920;
+// pub const height: usize = 1080;
+// pub const scale: usize = 1;
 
 pub const fov: Float = 90;
 pub const view_distance: Float = 200;
