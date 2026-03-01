@@ -1,7 +1,6 @@
 const std = @import("std");
 const tri = @import("triangle.zig");
 const matrix = @import("matrix.zig");
-const fb = @import("framebuffer.zig");
 const cfg = @import("config.zig");
 const tex = @import("textures.zig");
 const Float = cfg.Float;

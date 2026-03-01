@@ -2,7 +2,7 @@ const cfg = @import("config.zig");
 const size = cfg.tile_dimensions;
 const Float = cfg.Float;
 const std = @import("std");
-const fb = @import("framebuffer.zig");
+const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 
 pub const Tile = struct {
     z_buf: [size * size]Float,
@@ -17,7 +17,7 @@ pub const Tile = struct {
         };
     }
 
-    pub fn debug_show_tiles_border_green(self: *Tile, buf: fb.Framebuffer) void {
+    pub fn debug_show_tiles_border_green(self: *Tile, buf: Framebuffer) void {
         const color: u32 = 0xFF007F00;
 
         const x0 = self.pos[0];
@@ -48,7 +48,7 @@ pub const Tile = struct {
         @memset(z_buf_slice, -std.math.floatMax(Float));
     }
 
-    pub fn write_to_fb(self: *Tile, buf: fb.Framebuffer) void {
+    pub fn write_to_fb(self: *Tile, buf: Framebuffer) void {
         const x0 = self.pos[0];
         const y0 = self.pos[1];
 
@@ -84,7 +84,7 @@ pub const TilePool = struct {
         };
     }
 
-    pub fn debug_show_tiles_border(self: *TilePool, buf: fb.Framebuffer) void {
+    pub fn debug_show_tiles_border(self: *TilePool, buf: Framebuffer) void {
         const color: u32 = 0xFF7F0000;
 
         for (self.tiles) |tile| {

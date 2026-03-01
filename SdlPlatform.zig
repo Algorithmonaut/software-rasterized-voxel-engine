@@ -1,3 +1,5 @@
+// NOTE: Refactored: YES
+
 const std = @import("std");
 const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");

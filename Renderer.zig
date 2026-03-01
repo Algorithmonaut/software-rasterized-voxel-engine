@@ -2,7 +2,7 @@ const std = @import("std");
 const cfg = @import("config.zig");
 const tri = @import("triangle.zig");
 const tile = @import("tile.zig");
-const fb = @import("framebuffer.zig");
+const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Int = cfg.Int;
 const Uint = cfg.Uint;
 
@@ -12,7 +12,7 @@ const TileRenderJob = struct {
     wg: *std.Thread.WaitGroup,
     renderer: *const Renderer,
     tiles_pool: *tile.TilePool,
-    buf: fb.Framebuffer,
+    buf: Framebuffer,
     tile_offsets: *const [tile.tiles_count + 1]usize,
     tile_refs: []const cfg.Uint,
     tile_i: usize,
@@ -88,7 +88,7 @@ pub const Renderer = struct {
         self: *Renderer,
         pool: *std.Thread.Pool,
         tiles_pool: *tile.TilePool,
-        buf: fb.Framebuffer,
+        buf: Framebuffer,
         allocator: std.mem.Allocator,
     ) !void {
         // P: First pass (count the triangles for each tile)

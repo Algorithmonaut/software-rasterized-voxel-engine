@@ -10,5 +10,3 @@ pub var projection_matrix: mat.Mat4f = undefined;
 
 // P: Texture atlas
 pub var atlas: tex.Atlas = undefined;
-
-pub var world_to_camera = Mat4f;

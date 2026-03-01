@@ -1,3 +1,5 @@
+// NOTE: Refactored: YES
+
 const std = @import("std");
 const mat = @import("matrix.zig");
 const cfg = @import("config.zig");

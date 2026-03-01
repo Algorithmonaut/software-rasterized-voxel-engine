@@ -1,18 +1,20 @@
+// NOTE: Refactored: YES
+
 const std = @import("std");
 const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");
     @cInclude("SDL2/SDL.h");
 });
-const Framebuffer = @import("framebuffer.zig").Framebuffer;
+const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const cfg = @import("config.zig");
 const Float = cfg.Float;
 
-pub const SdlGfx = struct {
+pub const SdlGraphics = struct {
     window: *c.SDL_Window,
     renderer: *c.SDL_Renderer,
     texture: *c.SDL_Texture,
 
-    pub fn init() !SdlGfx {
+    pub fn init() !SdlGraphics {
         if (c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS) != 0) {
             std.debug.print("SDL_Init failed: {s}\n", .{c.SDL_GetError()});
             return error.SDLInitFailed;
@@ -55,7 +57,11 @@ pub const SdlGfx = struct {
         };
     }
 
-    pub fn begin_frame(self: *SdlGfx) !Framebuffer {
+    pub fn deinit(self: *SdlGraphics) void {
+        _ = self;
+    }
+
+    pub fn begin_frame(self: *SdlGraphics) !Framebuffer {
         var pixels: ?*anyopaque = null;
         var pitch_c: c_int = 0;
 
@@ -72,11 +78,11 @@ pub const SdlGfx = struct {
         }; // Returns a framebuffer object
     }
 
-    pub fn end_frame(self: *SdlGfx) void {
+    pub fn end_frame(self: *SdlGraphics) void {
         c.SDL_UnlockTexture(self.texture);
     }
 
-    pub fn present(self: *SdlGfx) void {
+    pub fn present(self: *SdlGraphics) void {
         var dst: c.SDL_Rect = .{
             .x = 0,
             .y = 0,

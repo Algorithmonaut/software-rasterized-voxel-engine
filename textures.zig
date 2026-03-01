@@ -1,6 +1,6 @@
 const std = @import("std");
-const fb = @import("framebuffer.zig");
 const cfg = @import("config.zig");
+const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 
 pub const BlockTypes = enum(usize) {
     dirt = 0,
@@ -46,7 +46,7 @@ pub const Atlas = struct {
         };
     }
 
-    pub fn debug_show_atlas(self: *const Atlas, buf: *fb.Framebuffer) void {
+    pub fn debug_show_atlas(self: *const Atlas, buf: *Framebuffer) void {
         var y: usize = 0;
         while (y < cfg.atlas_h) : (y += 1) {
             const base_addr_src = y * cfg.atlas_w;

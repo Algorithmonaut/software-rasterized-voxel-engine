@@ -1,4 +1,3 @@
-const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const Tile = @import("tile.zig");
 const std = @import("std");
 const cfg = @import("config.zig");
@@ -148,7 +147,11 @@ pub const RasterTriangle = struct {
                     const inv_z = den_scaled * inv_area;
 
                     const z_idx = z_row_base + x;
-                    if (inv_z <= tile.z_buf[z_idx]) continue;
+                    if (inv_z <= tile.z_buf[z_idx]) {
+                        w += right_inc;
+                        continue;
+                    }
+
                     tile.z_buf[z_idx] = inv_z;
 
                     const uv_num = uv0q * @as(Uvf, @splat(wf[0])) +
