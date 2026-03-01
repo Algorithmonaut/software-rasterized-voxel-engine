@@ -180,116 +180,6 @@ pub const RasterTriangle = struct {
             w_row += down_inc;
         }
     }
-
-    pub inline fn render(self: *const RasterTriangle, fb: *Framebuffer) void {
-        const a = self.v0;
-        const b = self.v1;
-        const c = self.v2;
-
-        // P: Compute the edges
-        const e0 = make_edge(c, b);
-        const e1 = make_edge(a, c);
-        const e2 = make_edge(b, a);
-
-        const area = e0.eval(a[0], a[1]);
-
-        if (area < 0) return; // backface culling
-
-        const inv_area = 1 / @as(Float, @floatFromInt(area));
-
-        // P: Compute the bbox and clip it to the viewport
-        var x_min_i: i32 = @min(a[0], b[0], c[0]);
-        var x_max_i: i32 = @max(a[0], b[0], c[0]);
-        var y_min_i: i32 = @min(a[1], b[1], c[1]);
-        var y_max_i: i32 = @max(a[1], b[1], c[1]);
-
-        const width: i32 = @intCast(cfg.width);
-        const height: i32 = @intCast(cfg.height);
-
-        x_min_i = std.math.clamp(x_min_i, 0, width - 1);
-        x_max_i = std.math.clamp(x_max_i, 0, width - 1);
-        y_min_i = std.math.clamp(y_min_i, 0, height - 1);
-        y_max_i = std.math.clamp(y_max_i, 0, height - 1);
-
-        // P: Evaluate edges at top-left of bbox
-        const w0_row = e0.eval(x_min_i, y_min_i);
-        const w1_row = e1.eval(x_min_i, y_min_i);
-        const w2_row = e2.eval(x_min_i, y_min_i);
-        var w_row = Vec3i{ w0_row, w1_row, w2_row };
-
-        // P: Convert bbox to usize for incremental stepping
-        const x_min: usize = @intCast(x_min_i);
-        const x_max: usize = @intCast(x_max_i);
-        const y_min: usize = @intCast(y_min_i);
-        const y_max: usize = @intCast(y_max_i);
-
-        // P: Reciprocal depth at the vertices
-        const q0: Float = self.v0_rec_z;
-        const q1: Float = self.v1_rec_z;
-        const q2: Float = self.v2_rec_z;
-
-        const Uvf = @Vector(2, Float);
-
-        const uv0f: Uvf = @floatFromInt(self.v0_uv);
-        const uv1f: Uvf = @floatFromInt(self.v1_uv);
-        const uv2f: Uvf = @floatFromInt(self.v2_uv);
-
-        const uv0q: Uvf = uv0f * @as(Uvf, @splat(q0));
-        const uv1q: Uvf = uv1f * @as(Uvf, @splat(q1));
-        const uv2q: Uvf = uv2f * @as(Uvf, @splat(q2));
-
-        // P: Step vectors
-        const right_inc = Vec3i{ e0.A, e1.A, e2.A };
-        const down_inc = Vec3i{ e0.B, e1.B, e2.B };
-
-        // P: Main loop
-        var y: usize = y_min;
-        while (y <= y_max) : (y += 1) {
-            const line = fb.get_scanline(y);
-            const z_row_base: usize = y * cfg.width;
-
-            var w = w_row;
-
-            var x: usize = x_min;
-            while (x <= x_max) : (x += 1) {
-                if (w[0] + e0.bias >= 0 and w[1] + e1.bias >= 0 and w[2] + e2.bias >= 0) {
-                    const wf: Vec3f = @floatFromInt(w);
-                    const den_scaled = (wf[0] * q0 + wf[1] * q1 + wf[2] * q2);
-                    const inv_z = den_scaled * inv_area;
-
-                    const z_idx = z_row_base + x;
-                    if (inv_z <= fb.z_buffer[z_idx]) continue;
-                    fb.z_buffer[z_idx] = inv_z;
-
-                    const uv_num = uv0q * @as(Uvf, @splat(wf[0])) +
-                        uv1q * @as(Uvf, @splat(wf[1])) +
-                        uv2q * @as(Uvf, @splat(wf[2]));
-
-                    const rcp_den: Float = 1.0 / den_scaled;
-                    const uv = uv_num * @as(Uvf, @splat(rcp_den));
-
-                    const max_u_f: Float = @floatFromInt(cfg.atlas_w - 1);
-                    const max_v_f: Float = @floatFromInt(cfg.atlas_h - 1);
-
-                    const u_f = std.math.clamp(uv[0], 0.0, max_u_f);
-                    const v_f = std.math.clamp(uv[1], 0.0, max_v_f);
-
-                    const u: usize = @intFromFloat(u_f);
-                    const v: usize = @intFromFloat(v_f);
-
-                    const base: usize = (u + v * cfg.atlas_w);
-                    const argb = ctx.atlas.atlas[base];
-                    line[x] = argb;
-                }
-
-                // Step right
-                w += right_inc;
-            }
-
-            // Step down
-            w_row += down_inc;
-        }
-    }
 };
 
 pub const Triangle = struct {
@@ -331,8 +221,8 @@ pub const Triangle = struct {
         if ((v0[1] > 1 and v1[1] > 1 and v2[1] > 1) or
             v0[1] < -1 and v1[1] < -1 and v2[1] < -1) return null;
 
-        // if ((v0[2] > 1 or v1[2] > 1 or v2[2] > 1) or
-        //     v0[2] < 0 or v1[2] < 0 or v2[2] < 0) return null;
+        if ((v0[2] > 1 and v1[2] > 1 and v2[2] > 1) or
+            v0[2] < 0 or v1[2] < 0 or v2[2] < 0) return null;
 
         // P: Clip -> raster
         const fw: Float = cfg.width;

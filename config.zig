@@ -25,7 +25,6 @@ pub const show_tex_atlas = true;
 pub const show_tiles = false;
 
 // P: Input
-
 pub const mouse_sensivity: f32 = 0.0025;
 
 // P: Texture atlas

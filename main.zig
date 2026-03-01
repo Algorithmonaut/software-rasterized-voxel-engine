@@ -6,7 +6,6 @@ const c = @cImport({
 const cfg = @import("config.zig");
 const sdl_gfx = @import("sdl-graphics.zig");
 const cube = @import("cube.zig");
-const sdl_platform = @import("sdl-platform.zig");
 const ctx = @import("context.zig");
 const tri = @import("triangle.zig");
 const mat = @import("matrix.zig");
@@ -45,7 +44,6 @@ pub fn main() !void {
 
     var scene = Scene.Scene.init();
     var gfx = try sdl_gfx.SdlGfx.init();
-    var platform = sdl_platform.SdlPlatform.init();
 
     var tiles = try tile.TilePool.init(allocator);
 
@@ -55,9 +53,8 @@ pub fn main() !void {
 
     var t: usize = 0;
 
-    while (platform.running) : (t += 1) {
-        try engine.renderer.begin_frame(allocator);
-        const dt = platform.begin_frame();
+    while (engine.platform.running) : (t += 1) {
+        const frame = try engine.begin_frame();
         var framebuffer = try gfx.begin_frame();
         defer gfx.end_frame();
 
@@ -105,9 +102,8 @@ pub fn main() !void {
 
         gfx.present();
 
-        if (cfg.show_fps) platform.fps_counter_update();
+        if (cfg.show_fps) engine.platform.fps_counter_update();
 
-        sdl_platform.update_camera_look(&engine.camera);
-        platform.process_inputs(dt, &engine.camera);
+        engine.platform.process_inputs(frame.dt, &engine.camera);
     }
 }
