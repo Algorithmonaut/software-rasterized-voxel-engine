@@ -164,8 +164,8 @@ pub const RasterTriangle = struct {
                     const u_f = std.math.clamp(uv[0], 0.0, max_u_f);
                     const v_f = std.math.clamp(uv[1], 0.0, max_v_f);
 
-                    const u: usize = @intFromFloat(u_f);
-                    const v: usize = @intFromFloat(v_f);
+                    const u: usize = @intFromFloat(u_f + 0.5);
+                    const v: usize = @intFromFloat(v_f + 0.5);
 
                     const base: usize = (u + v * cfg.atlas_w);
                     const argb = ctx.atlas.atlas[base];
@@ -331,8 +331,8 @@ pub const Triangle = struct {
         if ((v0[1] > 1 and v1[1] > 1 and v2[1] > 1) or
             v0[1] < -1 and v1[1] < -1 and v2[1] < -1) return null;
 
-        if ((v0[2] > 1 or v1[2] > 1 or v2[2] > 1) or
-            v0[2] < 0 or v1[2] < 0 or v2[2] < 0) return null;
+        // if ((v0[2] > 1 or v1[2] > 1 or v2[2] > 1) or
+        //     v0[2] < 0 or v1[2] < 0 or v2[2] < 0) return null;
 
         // P: Clip -> raster
         const fw: Float = cfg.width;

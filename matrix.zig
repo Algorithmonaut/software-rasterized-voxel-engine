@@ -100,9 +100,7 @@ pub fn create_projection_matrix() Mat4f {
     } };
 }
 
-pub inline fn world_to_camera() Mat4f {
-    const from = ctx.from;
-    const to = ctx.to;
+pub inline fn create_view(from: Vec3f, to: Vec3f) Mat4f {
     const world_up = Vec3f{ 0, 1, 0 };
 
     const f = vec.normalize(to - from); // forward (world)

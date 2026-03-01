@@ -6,7 +6,7 @@ const fb = @import("framebuffer.zig");
 const Int = cfg.Int;
 const Uint = cfg.Uint;
 
-pub const cube_count = 3;
+pub const cube_count = 100;
 
 const TileRenderJob = struct {
     wg: *std.Thread.WaitGroup,
@@ -47,6 +47,10 @@ pub const Renderer = struct {
                 cube_count * 6 * 2,
             ),
         };
+    }
+
+    pub fn deinit(self: *Renderer) void {
+        _ = self;
     }
 
     pub fn begin_frame(self: *Renderer, allocator: std.mem.Allocator) !void {
@@ -101,10 +105,12 @@ pub const Renderer = struct {
             }
         }
 
-        var i: usize = 0;
-        while (i < tile_counts.len) : (i += 1) {
-            if (tile_counts[i] > 0) {
-                tiles_pool.tiles[i].debug_show_tiles_border_green(buf);
+        if (cfg.show_tiles) {
+            var i: usize = 0;
+            while (i < tile_counts.len) : (i += 1) {
+                if (tile_counts[i] > 0) {
+                    tiles_pool.tiles[i].debug_show_tiles_border_green(buf);
+                }
             }
         }
 
@@ -117,6 +123,7 @@ pub const Renderer = struct {
         tile_offsets[tile.tiles_count] = sum;
 
         var tile_refs = try allocator.alloc(Uint, sum);
+        defer allocator.free(tile_refs);
 
         // Per tile write cursor
         var write_pos: [tile.tiles_count]usize = undefined;

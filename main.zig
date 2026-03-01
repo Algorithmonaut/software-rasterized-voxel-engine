@@ -13,8 +13,9 @@ const mat = @import("matrix.zig");
 const tex = @import("textures.zig");
 const fb = @import("framebuffer.zig");
 const tile = @import("tile.zig");
-const Renderer = @import("renderer.zig");
 const Scene = @import("scene.zig");
+
+const Engine = @import("Engine.zig");
 
 const GenRasterTrianglesJob = struct {
     wg: *std.Thread.WaitGroup,
@@ -29,20 +30,24 @@ const GenRasterTrianglesJob = struct {
 };
 
 pub fn main() !void {
-    @setFloatMode(.optimized);
-
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
+
+    var engine = Engine.Engine.init(
+        allocator, // Allocator
+        .{ 0, 0, 0 }, //Camera from
+        .{ 0, 0, 0 }, // Camera to
+    );
+    @setFloatMode(.optimized);
 
     var pool: std.Thread.Pool = undefined;
     try pool.init(.{ .allocator = allocator });
 
-    var renderer = try Renderer.Renderer.init(allocator);
     var scene = Scene.Scene.init();
     var gfx = try sdl_gfx.SdlGfx.init();
     var platform = sdl_platform.SdlPlatform.init();
 
-    var tiles = tile.TilePool.init();
+    var tiles = try tile.TilePool.init(allocator);
 
     ctx.projection_matrix = mat.create_projection_matrix();
 
@@ -51,12 +56,14 @@ pub fn main() !void {
     var t: usize = 0;
 
     while (platform.running) : (t += 1) {
-        try renderer.begin_frame(allocator);
+        try engine.renderer.begin_frame(allocator);
         const dt = platform.begin_frame();
-
         var framebuffer = try gfx.begin_frame();
+        defer gfx.end_frame();
 
-        const view: mat.Mat4f = mat.world_to_camera();
+        framebuffer.clear_black();
+
+        const view: mat.Mat4f = mat.create_view(engine.camera.from, engine.camera.to);
 
         var wg = std.Thread.WaitGroup{}; // used to wait for threads to finish
 
@@ -67,7 +74,7 @@ pub fn main() !void {
         var jobs = try arena_allocator.alloc(GenRasterTrianglesJob, scene.cubes.len);
 
         // Per cube output buffers
-        var outs = try arena_allocator.alloc(std.ArrayList(tri.RasterTriangle), 3);
+        var outs = try arena_allocator.alloc(std.ArrayList(tri.RasterTriangle), 100);
         for (outs) |*lst| lst.* = try std.ArrayList(tri.RasterTriangle).initCapacity(allocator, 6 * 2);
 
         for (&scene.cubes, 0..) |*cu, i| {
@@ -87,23 +94,20 @@ pub fn main() !void {
 
         // Merge results
         for (outs) |*lst| {
-            renderer.triangles.appendSliceAssumeCapacity(lst.items);
+            engine.renderer.triangles.appendSliceAssumeCapacity(lst.items);
         }
 
         if (cfg.show_tex_atlas) ctx.atlas.debug_show_atlas(&framebuffer);
 
         if (cfg.show_tiles) tiles.debug_show_tiles_border(framebuffer);
 
-        try renderer.render(&pool, &tiles, framebuffer, allocator);
+        try engine.renderer.render(&pool, &tiles, framebuffer, allocator);
 
-        gfx.end_frame();
         gfx.present();
 
         if (cfg.show_fps) platform.fps_counter_update();
 
-        sdl_platform.update_camera_look();
-        platform.process_inputs(dt);
-
-        framebuffer.clear_black();
+        sdl_platform.update_camera_look(&engine.camera);
+        platform.process_inputs(dt, &engine.camera);
     }
 }

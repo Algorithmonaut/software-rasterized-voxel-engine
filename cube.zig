@@ -4,7 +4,6 @@ const matrix = @import("matrix.zig");
 const fb = @import("framebuffer.zig");
 const cfg = @import("config.zig");
 const tex = @import("textures.zig");
-const Renderer = @import("renderer.zig");
 const Float = cfg.Float;
 const Vec4f = cfg.Vec4f;
 const Vec3f = cfg.Vec3f;
@@ -49,7 +48,7 @@ pub const Cube = struct {
         view: matrix.Mat4f,
         out: *std.ArrayList(tri.RasterTriangle),
     ) void {
-        const angle: Float = 3.14 / 40000.0;
+        const angle: Float = 3.14 / 4000.0;
         const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
         const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
 

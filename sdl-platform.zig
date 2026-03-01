@@ -6,6 +6,7 @@ const c = @cImport({
 const cfg = @import("config.zig");
 const ctx = @import("context.zig");
 const vec = @import("vector.zig");
+const Camera = @import("Camera.zig");
 
 const Vec3f = cfg.Vec3f;
 
@@ -59,7 +60,7 @@ pub const SdlPlatform = struct {
         }
     }
 
-    pub fn process_inputs(self: *SdlPlatform, dt: f32) void {
+    pub fn process_inputs(self: *SdlPlatform, dt: f32, camera: *Camera.Camera) void {
         while (c.SDL_PollEvent(&self.ev) != 0) {
             switch (self.ev.type) {
                 c.SDL_QUIT => self.running = false,
@@ -103,13 +104,13 @@ pub const SdlPlatform = struct {
 
         if (vec.length_squared(wish) > 0) {
             wish = vec.normalize(wish);
-            ctx.from += wish * @as(Vec3f, @splat(step));
-            ctx.from[1] = 0; // optional: hard clamp to plane y=0
+            camera.from += wish * @as(Vec3f, @splat(step));
+            camera.from[1] = 0; // optional: hard clamp to plane y=0
         }
     }
 };
 
-pub fn update_camera_look() void {
+pub fn update_camera_look(camera: *Camera.Camera) void {
     var dx: c_int = 0;
     var dy: c_int = 0;
     _ = c.SDL_GetRelativeMouseState(&dx, &dy);
@@ -131,5 +132,5 @@ pub fn update_camera_look() void {
     forward = vec.normalize(forward);
 
     // set target point
-    ctx.to = ctx.from + forward;
+    camera.to = camera.from + forward;
 }

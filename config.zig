@@ -2,7 +2,7 @@ const tex = @import("textures.zig");
 
 // P: Framebuffer dimensions/scale
 
-pub const tile_dimensions: usize = 16;
+pub const tile_dimensions: usize = 64;
 pub const width: usize = 960;
 pub const height: usize = 540;
 pub const scale: usize = 2;
@@ -22,7 +22,7 @@ pub const Vec4i = @Vector(4, Int);
 // P: Debug
 pub const show_fps = true;
 pub const show_tex_atlas = true;
-pub const show_tiles = true;
+pub const show_tiles = false;
 
 // P: Input
 

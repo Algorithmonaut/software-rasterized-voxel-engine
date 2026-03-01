@@ -69,10 +69,10 @@ pub const tiles_h = std.math.divCeil(usize, cfg.height, size) catch unreachable;
 pub const tiles_count = tiles_w * tiles_h;
 
 pub const TilePool = struct {
-    tiles: [tiles_count]Tile,
+    tiles: []Tile,
 
-    pub fn init() TilePool {
-        var tiles: [tiles_count]Tile = undefined;
+    pub fn init(allocator: std.mem.Allocator) !TilePool {
+        var tiles = try allocator.alloc(Tile, tiles_count);
         for (0..tiles_count) |i| {
             const x_pos = (i % tiles_w) * size;
             const y_pos = (i / tiles_w) * size;
@@ -87,7 +87,7 @@ pub const TilePool = struct {
     pub fn debug_show_tiles_border(self: *TilePool, buf: fb.Framebuffer) void {
         const color: u32 = 0xFF7F0000;
 
-        for (&self.tiles) |*tile| {
+        for (self.tiles) |tile| {
             const x0 = tile.pos[0];
             const y0 = tile.pos[1];
 
