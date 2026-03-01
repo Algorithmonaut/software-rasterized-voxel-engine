@@ -47,7 +47,7 @@ pub const Cube = struct {
         view: matrix.Mat4f,
         out: *std.ArrayList(tri.RasterTriangle),
     ) void {
-        const angle: Float = 3.14 / 4000.0;
+        const angle: Float = 3.14 / 40000.0 * self.pos[1];
         const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
         const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
 
