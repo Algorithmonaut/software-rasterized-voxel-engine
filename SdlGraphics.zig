@@ -1,5 +1,7 @@
 // NOTE: Refactored: YES
 
+const FramebufferConfig = @import("./engine/EngineConfig.zig").EngineConfig.FramebufferConfig;
+
 const std = @import("std");
 const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");
@@ -14,7 +16,15 @@ pub const SdlGraphics = struct {
     renderer: *c.SDL_Renderer,
     texture: *c.SDL_Texture,
 
-    pub fn init() !SdlGraphics {
+    width: c_int,
+    height: c_int,
+    scale: c_int,
+
+    pub fn init(conf: FramebufferConfig) !SdlGraphics {
+        const width: c_int = @intCast(conf.width);
+        const height: c_int = @intCast(conf.height);
+        const scale: c_int = @intCast(conf.scale);
+
         if (c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS) != 0) {
             std.debug.print("SDL_Init failed: {s}\n", .{c.SDL_GetError()});
             return error.SDLInitFailed;
@@ -24,8 +34,8 @@ pub const SdlGraphics = struct {
             "Software Rasterizer",
             c.SDL_WINDOWPOS_CENTERED,
             c.SDL_WINDOWPOS_CENTERED,
-            cfg.width * cfg.scale,
-            cfg.height * cfg.scale,
+            width * scale,
+            height * scale,
             0,
         ) orelse {
             std.debug.print("SDL_CreateWindow failed: {s}\n", .{c.SDL_GetError()});
@@ -43,8 +53,8 @@ pub const SdlGraphics = struct {
             renderer,
             c.SDL_PIXELFORMAT_ARGB8888,
             c.SDL_TEXTUREACCESS_STREAMING, // the texture's pixels will be frequently updated
-            cfg.width,
-            cfg.height,
+            width,
+            height,
         ) orelse {
             std.debug.print("SDL_CreateTexture failed: {s}\n", .{c.SDL_GetError()});
             return error.SDLTextureFailed;
@@ -54,6 +64,9 @@ pub const SdlGraphics = struct {
             .window = win,
             .renderer = renderer,
             .texture = tex,
+            .width = width,
+            .height = height,
+            .scale = scale,
         };
     }
 
@@ -86,8 +99,8 @@ pub const SdlGraphics = struct {
         var dst: c.SDL_Rect = .{
             .x = 0,
             .y = 0,
-            .w = @intCast(@as(c_int, @intCast(cfg.width)) * cfg.scale),
-            .h = @intCast(@as(c_int, @intCast(cfg.height)) * cfg.scale),
+            .w = @intCast(@as(c_int, @intCast(self.width)) * self.scale),
+            .h = @intCast(@as(c_int, @intCast(self.height)) * self.scale),
         };
 
         _ = c.SDL_RenderCopy(self.renderer, self.texture, null, &dst);

@@ -1,8 +1,9 @@
 const cfg = @import("config.zig");
-const size = cfg.tile_dimensions;
+const size = cfg.tile_dimensions; // WARN: To refactor, should be held in FramebufferConfig
 const Float = cfg.Float;
 const std = @import("std");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
+const FramebufferConfig = @import("engine/EngineConfig.zig").EngineConfig.FramebufferConfig;
 
 pub const Tile = struct {
     z_buf: [size * size]Float,
@@ -15,30 +16,6 @@ pub const Tile = struct {
             .buf = undefined,
             .pos = .{ x, y },
         };
-    }
-
-    pub fn debug_show_tiles_border_green(self: *Tile, buf: Framebuffer) void {
-        const color: u32 = 0xFF007F00;
-
-        const x0 = self.pos[0];
-        const y0 = self.pos[1];
-
-        const x1 = @min(x0 + size - 1, cfg.width - 1);
-        const y1 = @min(y0 + size - 1, cfg.height - 1);
-
-        // Top/bottom edges
-        var x: usize = x0;
-        while (x <= x1) : (x += 1) {
-            buf.set_pixel(x, y0, color);
-            buf.set_pixel(x, y1, color);
-        }
-
-        // Left/right edges
-        var y: usize = y0;
-        while (y <= y1) : (y += 1) {
-            buf.set_pixel(x0, y, color);
-            buf.set_pixel(x1, y, color);
-        }
     }
 
     pub fn clear(self: *Tile) void {
@@ -64,23 +41,30 @@ pub const Tile = struct {
     }
 };
 
-pub const tiles_w = std.math.divCeil(usize, cfg.width, size) catch unreachable;
-pub const tiles_h = std.math.divCeil(usize, cfg.height, size) catch unreachable;
-pub const tiles_count = tiles_w * tiles_h;
-
 pub const TilePool = struct {
     tiles: []Tile,
+    tiles_count_w: usize,
+    tiles_count_h: usize,
+    tiles_count: usize,
 
-    pub fn init(allocator: std.mem.Allocator) !TilePool {
+    pub fn init(allocator: std.mem.Allocator, conf: FramebufferConfig) !TilePool {
+        const tiles_count_w = try std.math.divCeil(usize, conf.width, conf.tile_dimensions);
+        const tiles_count_h = try std.math.divCeil(usize, conf.height, conf.tile_dimensions);
+        const tiles_count = tiles_count_w * tiles_count_h;
+        const tile_dimensions = conf.tile_dimensions;
+
         var tiles = try allocator.alloc(Tile, tiles_count);
         for (0..tiles_count) |i| {
-            const x_pos = (i % tiles_w) * size;
-            const y_pos = (i / tiles_w) * size;
+            const x_pos = (i % tiles_count_w) * tile_dimensions;
+            const y_pos = (i / tiles_count_w) * tile_dimensions;
             tiles[i] = Tile.init(x_pos, y_pos);
         }
 
         return .{
             .tiles = tiles,
+            .tiles_count_w = tiles_count_w,
+            .tiles_count_h = tiles_count_h,
+            .tiles_count = tiles_count,
         };
     }
 

@@ -5,6 +5,7 @@ const std = @import("std");
 const cfg = @import("config.zig");
 const ctx = @import("context.zig");
 const vec = @import("vector.zig");
+const Camera = @import("Camera.zig").Camera;
 
 const Float = cfg.Float;
 const Vec4f = cfg.Vec4f;
@@ -81,15 +82,15 @@ pub const Mat4f = struct {
     }
 };
 
-pub fn create_projection_matrix() Mat4f {
-    const far = cfg.view_distance;
+pub fn create_projection_matrix(cam: *Camera) Mat4f {
+    const far = cam.view_distance;
     const near = 1;
 
     const w: Float = @floatFromInt(cfg.width);
     const h: Float = @floatFromInt(cfg.height);
     const aspect: Float = w / h;
 
-    const y_scale: Float = 1.0 / @tan(cfg.fov * std.math.pi / 360.0);
+    const y_scale: Float = 1.0 / @tan(cam.fov * std.math.pi / 360.0);
     const x_scale: Float = y_scale / aspect;
 
     return .{ .r = .{

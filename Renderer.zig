@@ -1,11 +1,17 @@
 const std = @import("std");
+const ctx = @import("context.zig"); // WARN: To refactor
 const cfg = @import("config.zig");
-const tri = @import("triangle.zig");
+const Triangle = @import("triangle.zig").Triangle;
+const RasterTriangle = @import("triangle.zig").RasterTriangle;
 const tile = @import("tile.zig");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
-const Int = cfg.Int;
+const Int = cfg.Int; // WARN: To refactor
 const Uint = cfg.Uint;
+const Vec4f = cfg.Vec4f;
+const Vec3f = cfg.Vec3f;
+const Float = cfg.Float;
 
+const FramebufferConfig = @import("engine/EngineConfig.zig").EngineConfig.FramebufferConfig;
 pub const cube_count = 100;
 
 const TileRenderJob = struct {
@@ -38,14 +44,21 @@ const TileRenderJob = struct {
 };
 
 pub const Renderer = struct {
-    triangles: std.ArrayList(tri.RasterTriangle),
+    triangles: std.ArrayList(RasterTriangle),
+    width: usize,
+    height: usize,
+    tile_dimensions: usize,
 
-    pub fn init(allocator: std.mem.Allocator) !Renderer {
+    pub fn init(allocator: std.mem.Allocator, conf: FramebufferConfig) !Renderer {
         return .{
-            .triangles = try std.ArrayList(tri.RasterTriangle).initCapacity(
+            .triangles = try std.ArrayList(RasterTriangle).initCapacity(
                 allocator,
                 cube_count * 6 * 2,
             ),
+
+            .width = conf.width,
+            .height = conf.height,
+            .tile_dimensions = conf.tile_dimensions,
         };
     }
 
@@ -58,7 +71,7 @@ pub const Renderer = struct {
         try self.triangles.ensureTotalCapacity(allocator, cube_count * 6 * 2);
     }
 
-    inline fn tile_range_for_tri(triangle: tri.RasterTriangle) struct {
+    inline fn tile_range_for_tri(triangle: RasterTriangle) struct {
         min_tx: usize,
         max_tx: usize,
         min_ty: usize,
@@ -92,7 +105,7 @@ pub const Renderer = struct {
         allocator: std.mem.Allocator,
     ) !void {
         // P: First pass (count the triangles for each tile)
-        var tile_counts: [tile.tiles_count]Uint = [_]Uint{0} ** tile.tiles_count;
+        var tile_counts: [tiles_pool.tiles_count]Uint = [_]Uint{0} ** tiles_pool.tiles_count;
         for (self.triangles.items) |triangle| {
             const range = tile_range_for_tri(triangle);
 
@@ -100,34 +113,25 @@ pub const Renderer = struct {
             while (x < range.max_tx) : (x += 1) {
                 var y = range.min_ty;
                 while (y < range.max_ty) : (y += 1) {
-                    tile_counts[x + tile.tiles_w * y] += 1;
+                    tile_counts[x + tiles_pool.tiles_w * y] += 1;
                 }
             }
         }
 
-        if (cfg.show_tiles) {
-            var i: usize = 0;
-            while (i < tile_counts.len) : (i += 1) {
-                if (tile_counts[i] > 0) {
-                    tiles_pool.tiles[i].debug_show_tiles_border_green(buf);
-                }
-            }
-        }
-
-        var tile_offsets: [tile.tiles_count + 1]usize = undefined;
+        var tile_offsets: [tiles_pool.tiles_count + 1]usize = undefined;
         var sum: usize = 0;
-        for (0..tile.tiles_count) |t| {
+        for (0..tiles_pool.tiles_count) |t| {
             tile_offsets[t] = sum;
             sum += @as(usize, tile_counts[t]);
         }
-        tile_offsets[tile.tiles_count] = sum;
+        tile_offsets[tiles_pool.tiles_count] = sum;
 
         var tile_refs = try allocator.alloc(Uint, sum);
         defer allocator.free(tile_refs);
 
         // Per tile write cursor
-        var write_pos: [tile.tiles_count]usize = undefined;
-        for (0..tile.tiles_count) |t| write_pos[t] = tile_offsets[t];
+        var write_pos: [tiles_pool.tiles_count]usize = undefined;
+        for (0..tiles_pool.tiles_count) |t| write_pos[t] = tile_offsets[t];
 
         // P: Second pass (scatter triangle indices into tile_refs)
         for (self.triangles.items, 0..) |triangle, tri_i| {
@@ -137,7 +141,7 @@ pub const Renderer = struct {
             while (tx < range.max_tx) : (tx += 1) {
                 var ty = range.min_ty;
                 while (ty < range.max_ty) : (ty += 1) {
-                    const tile_i = tx + tile.tiles_w * ty;
+                    const tile_i = tx + tiles_pool.tiles_count_w * ty;
 
                     const dst = write_pos[tile_i];
                     tile_refs[dst] = @intCast(tri_i);
@@ -153,7 +157,7 @@ pub const Renderer = struct {
         var jobs = try allocator.alloc(TileRenderJob, tile.tiles_count);
         defer allocator.free(jobs);
 
-        for (0..tile.tiles_count) |tile_i| {
+        for (0..tiles_pool.tiles_count) |tile_i| {
             const start = tile_offsets[tile_i];
             const end = tile_offsets[tile_i + 1];
             if (start == end) continue; // skip empty tiles
@@ -173,5 +177,71 @@ pub const Renderer = struct {
         }
 
         wg.wait();
+    }
+
+    pub inline fn gen_raster_triangle(self: *const Renderer, tri: *Triangle) ?RasterTriangle {
+        const verts = .{ &tri.v0, &tri.v1, &tri.v2 };
+        var verts_h: [3]Vec4f = undefined; // verts in homogeneous coordinates
+        var rec_ws: Vec3f = undefined; // reciprocal of w = reciprocal of z in camera space
+
+        // P: World -> clip
+        inline for (verts, 0..) |vert, i| {
+            @prefetch(vert, .{});
+
+            var vert_h = Vec4f{ vert.*[0], vert.*[1], vert.*[2], 1.0 };
+            vert_h = ctx.projection_matrix.mul_vec(vert_h);
+
+            const clip_w = vert_h[3];
+            const inv_w = 1.0 / clip_w;
+            rec_ws[i] = inv_w;
+            vert_h = vert_h * @as(Vec4f, @splat(inv_w));
+
+            verts_h[i] = vert_h;
+        }
+
+        const v0 = verts_h[0];
+        const v1 = verts_h[1];
+        const v2 = verts_h[2];
+
+        // P: Basic clipping
+        if ((v0[0] > 1 and v1[0] > 1 and v2[0] > 1) or
+            v0[0] < -1 and v1[0] < -1 and v2[0] < -1) return null;
+
+        if ((v0[1] > 1 and v1[1] > 1 and v2[1] > 1) or
+            v0[1] < -1 and v1[1] < -1 and v2[1] < -1) return null;
+
+        if ((v0[2] > 1 and v1[2] > 1 and v2[2] > 1) or
+            v0[2] < 0 or v1[2] < 0 or v2[2] < 0) return null;
+
+        // P: Clip -> raster
+        const fw: Float = @floatFromInt(self.width);
+        const fh: Float = @floatFromInt(self.height);
+
+        const a = @Vector(2, Int){
+            @intFromFloat((v0[0] + 1.0) * 0.5 * fw + 0.5),
+            @intFromFloat((1 - (v0[1] + 1.0) * 0.5) * fh + 0.5),
+        };
+
+        const b = @Vector(2, Int){
+            @intFromFloat((v1[0] + 1.0) * 0.5 * fw + 0.5),
+            @intFromFloat((1 - (v1[1] + 1.0) * 0.5) * fh + 0.5),
+        };
+
+        const c = @Vector(2, Int){
+            @intFromFloat((v2[0] + 1.0) * 0.5 * fw + 0.5),
+            @intFromFloat((1 - (v2[1] + 1.0) * 0.5) * fh + 0.5),
+        };
+
+        return .{
+            .v0 = a,
+            .v1 = b,
+            .v2 = c,
+            .v0_rec_z = rec_ws[0],
+            .v1_rec_z = rec_ws[1],
+            .v2_rec_z = rec_ws[2],
+            .v0_uv = tri.v0_uv,
+            .v1_uv = tri.v1_uv,
+            .v2_uv = tri.v2_uv,
+        };
     }
 };

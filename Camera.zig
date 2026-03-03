@@ -1,5 +1,6 @@
 // NOTE: Refactored: YES
 
+const CameraConfig = @import("engine/EngineConfig.zig").EngineConfig.CameraConfig;
 const std = @import("std");
 const mat = @import("matrix.zig");
 const cfg = @import("config.zig");
@@ -13,6 +14,8 @@ pub const Camera = struct {
     yaw: f32,
     pitch: f32,
     speed: f32,
+    fov: f32,
+    view_distance: f32,
 
     pub const MoveKeys = packed struct {
         forward: bool = false,
@@ -21,14 +24,17 @@ pub const Camera = struct {
         left: bool = false,
     };
 
-    pub fn init(from: Vec3f, to: Vec3f, speed: f32) Camera {
+    pub fn init(conf: CameraConfig) Camera {
         return .{
-            .view_mat = undefined,
-            .from = from,
-            .to = to,
+            .from = conf.from,
+            .to = conf.to,
+            .speed = conf.speed,
+            .fov = conf.fov,
+            .view_distance = conf.view_distance,
+
             .yaw = 0.0,
             .pitch = 0.0,
-            .speed = speed,
+            .view_mat = undefined,
         };
     }
 

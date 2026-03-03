@@ -7,6 +7,7 @@ const tex = @import("textures.zig");
 const Float = cfg.Float;
 const Vec4f = cfg.Vec4f;
 const Vec3f = cfg.Vec3f;
+const Renderer = @import("Renderer.zig").Renderer;
 
 const vertices: [8]Vec4f = .{
     .{ -1, -1, -1, 1 },
@@ -50,6 +51,7 @@ pub const Cube = struct {
 
     pub inline fn genRasterTriangles(
         self: *Cube,
+        renderer: Renderer,
         view: matrix.Mat4f,
         out: *PerCubeOut,
     ) void {
@@ -183,12 +185,12 @@ pub const Cube = struct {
                 .v2_uv = uv5,
             };
 
-            if (triangle.gen_raster_triangle()) |rt| {
+            if (renderer.gen_raster_triangle(&triangle)) |rt| {
                 out.tris[n] = rt;
                 n += 1;
             }
 
-            if (triangle2.gen_raster_triangle()) |rt| {
+            if (renderer.gen_raster_triangle(&triangle2)) |rt| {
                 out.tris[n] = rt;
                 n += 1;
             }

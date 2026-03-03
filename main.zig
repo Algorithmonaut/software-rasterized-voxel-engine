@@ -9,12 +9,31 @@ const ctx = @import("context.zig");
 const tri = @import("triangle.zig");
 const mat = @import("matrix.zig");
 const tex = @import("textures.zig");
-const tile = @import("tile.zig");
 const Scene = @import("scene.zig");
 
 const Engine = @import("Engine.zig");
 
+const EngineConfig = @import("./engine/EngineConfig.zig").EngineConfig;
+
+const engine_config = EngineConfig{
+    .camera_config = .{
+        .fov = 90.0,
+        .view_distance = 200.0,
+        .from = .{ 0, 0, 0 },
+        .to = .{ 0, 0, 0 },
+        .speed = 40.0,
+    },
+    .framebuffer_config = .{
+        .width = 960,
+        .height = 540,
+        .scale = 2,
+        .tile_dimensions = 32,
+    },
+};
+
 const PerCubeOut = cube.PerCubeOut;
+
+var engine: Engine.Engine = undefined;
 
 const GenRasterTrianglesJob = struct {
     wg: *std.Thread.WaitGroup,
@@ -24,7 +43,7 @@ const GenRasterTrianglesJob = struct {
 
     pub fn run(job: *GenRasterTrianglesJob) void {
         defer job.wg.finish();
-        job.cube.genRasterTriangles(job.view, job.out);
+        job.cube.genRasterTriangles(engine.renderer, job.view, job.out);
     }
 };
 
@@ -32,10 +51,9 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var engine = try Engine.Engine.init(
+    engine = try Engine.Engine.init(
         allocator, // Allocator
-        .{ 0, 0, 0 }, //Camera from
-        .{ 0, 0, 0 }, // Camera to
+        engine_config,
     );
     @setFloatMode(.optimized);
 
@@ -44,9 +62,7 @@ pub fn main() !void {
 
     var scene = Scene.Scene.init();
 
-    var tiles = try tile.TilePool.init(allocator);
-
-    ctx.projection_matrix = mat.create_projection_matrix();
+    ctx.projection_matrix = mat.create_projection_matrix(&engine.camera);
 
     ctx.atlas = try tex.Atlas.init();
 
@@ -91,11 +107,10 @@ pub fn main() !void {
             engine.renderer.triangles.appendSliceAssumeCapacity(src);
         }
 
-        if (cfg.show_tiles) tiles.debug_show_tiles_border(&frame.framebuffer);
-
-        try engine.renderer.render(&pool, &tiles, frame.framebuffer, allocator);
+        try engine.renderer.render(&pool, &engine.tile_pool, frame.framebuffer, allocator);
 
         if (cfg.show_tex_atlas) ctx.atlas.debug_show_atlas(&frame.framebuffer);
+        if (cfg.show_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);
 
         if (cfg.show_fps) engine.platform.fps_counter_update();
 

@@ -7,6 +7,9 @@ const Renderer = @import("Renderer.zig").Renderer;
 const FrameContext = @import("FrameContext.zig").FrameContext;
 const SdlPlatform = @import("SdlPlatform.zig").SdlPlatform;
 const SdlGraphics = @import("SdlGraphics.zig").SdlGraphics;
+const EngineConfig = @import("./engine/EngineConfig.zig").EngineConfig;
+
+const TilePool = @import("tile.zig").TilePool;
 
 const cfg = @import("config.zig");
 const Vec3f = cfg.Vec3f;
@@ -18,18 +21,22 @@ pub const Engine = struct {
     renderer: Renderer,
     platform: SdlPlatform,
     graphics: SdlGraphics,
+    tile_pool: TilePool,
 
-    pub fn init(allocator: std.mem.Allocator, camera_from: Vec3f, camera_to: Vec3f) !Engine {
-        const camera = Camera.init(camera_from, camera_to, 40);
-        const renderer = Renderer.init(allocator) catch unreachable;
+    pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
+        const camera = Camera.init(conf.camera_config);
+        const renderer = Renderer.init(allocator, conf.framebuffer_config) catch unreachable;
         const platform = SdlPlatform.init();
-        const graphics = try SdlGraphics.init();
+        const graphics = try SdlGraphics.init(conf.framebuffer_config);
+        const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
+
         return .{
             .allocator = allocator,
             .camera = camera,
             .renderer = renderer,
             .platform = platform,
             .graphics = graphics,
+            .tile_pool = tile_pool,
         };
     }
 
