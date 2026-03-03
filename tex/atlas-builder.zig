@@ -1,117 +1,102 @@
 const std = @import("std");
 
-const bytes_count: usize = 16 * 16 * 3;
-const blocks_count: usize = 3;
-const out_size: usize = bytes_count * 6 * blocks_count;
+// Assuming 16x16 textures
+const rgb_tex_bytes = (16 * 16) * 3;
+const xrgb_tex_bytes = (16 * 16) * 4;
 
-const tile_w: usize = 16;
-const tile_h: usize = 16;
-const channels: usize = 3;
+const blocks_count = 3;
+const atlas_bytes = blocks_count * 6 * xrgb_tex_bytes;
 
-const faces_per_block: usize = 6;
-const atlas_w: usize = tile_w * faces_per_block; // 96
-const atlas_h: usize = tile_h * blocks_count; // 48
-const atlas_size: usize = atlas_w * atlas_h * channels;
-
-// P: Read from file, write to file
-
-fn read_file(filename: []const u8) ![bytes_count]u8 {
-    const cwd = std.fs.cwd();
-
-    var file = try cwd.openFile(filename, .{ .mode = .read_only });
+fn get_xrgb_from_file(filename: []const u8) ![xrgb_tex_bytes]u8 {
+    var file = try std.fs.cwd().openFile(filename, .{ .mode = .read_only });
     defer file.close();
 
-    var read_buf: [bytes_count]u8 = undefined;
-    var file_reader = file.reader(&read_buf);
-    const reader = &file_reader.interface;
+    // OK if buffer is smaller than the full length of what needs to be read
+    var io_buf: [1024]u8 = undefined;
+    var file_reader = file.reader(&io_buf);
+    const reader: *std.Io.Reader = &file_reader.interface;
 
-    var rgb: [bytes_count]u8 = undefined;
-    try reader.readSliceAll(&rgb);
+    var buf: [rgb_tex_bytes]u8 = undefined;
+    try reader.readSliceAll(buf[0..]);
 
-    // Ensure there is no trailing data (file is exactly 768 bytes)
-    var extra: [1]u8 = undefined;
-    const m = try reader.readSliceShort(&extra);
-    if (m != 0) return error.UnexpectedTrailingData;
+    var tex: [xrgb_tex_bytes]u8 = undefined;
 
-    return rgb;
+    var i: usize = 0; // index into buf (input) (RGB)
+    var o: usize = 0; // index into tex (output) (XRGB)
+    while (i < buf.len) : (i += 3) {
+        tex[o + 3] = 0xFF;
+        tex[o + 2] = buf[i + 0];
+        tex[o + 1] = buf[i + 1];
+        tex[o + 0] = buf[i + 2];
+        o += 4;
+    }
+
+    return tex;
 }
 
-fn write_to_file(a: [out_size]u8, filename: []const u8) !void {
+fn write_atlas_to_file(atlas: [atlas_bytes]u8, filename: []const u8) !void {
     const cwd = std.fs.cwd();
 
-    // Create/overwrite output file
-    var file = try cwd.createFile(filename, .{
-        .truncate = true,
-        // .read = false, // usually default for write-only create, depends on current flags shape
-    });
+    var file = try cwd.createFile(filename, .{ .truncate = true });
     defer file.close();
 
-    // Buffered writer (caller-provided buffer)
-    var write_buf: [a.len]u8 = undefined;
+    var write_buf: [atlas.len]u8 = undefined;
     var file_writer = file.writer(&write_buf);
     const writer = &file_writer.interface;
 
-    // Write exactly all bytes
-    try writer.writeAll(&a);
-
-    // Flush buffered data to file
+    try writer.writeAll(atlas[0..]);
     try writer.flush();
-
-    const preview_command =
-        \\ PREVIEW ATLAS:
-        \\magick -size {}x{} -depth 8 rgb:atlas.rgb \
-        \\-filter point -resize 512x512 png:- | feh -
-    ;
-
-    std.debug.print(preview_command, .{ atlas_w, atlas_h });
 }
-
-// P: Main
 
 fn blit_tile(
     atlas: []u8,
-    tile: *const [bytes_count]u8,
+    texture: *const [xrgb_tex_bytes]u8,
     col: usize,
     row: usize,
 ) void {
-    const tile_stride = tile_w * channels; // 48 bytes per tile row
-    const atlas_stride = atlas_w * channels; // 288 bytes per atlas row
+    const texture_dimensions = 16;
+    const texture_stride = texture_dimensions * 4;
+    const atlas_stride = 6 * texture_stride;
 
-    for (0..tile_h) |y| {
-        const src_start = y * tile_stride;
-        const src_end = src_start + tile_stride;
-        const src = tile[src_start..src_end];
+    for (0..texture_dimensions) |y| {
+        const src_start = y * texture_stride;
+        const src_end = src_start + texture_stride;
 
-        const dst_x = col * tile_stride;
-        const dst_y = (row * tile_h + y) * atlas_stride;
+        // FIX: using .* and not using it does not yields the same type,
+        // check for this in the rest of the code
+        const src = texture.*[src_start..src_end];
+
+        const dst_x = col * texture_stride;
+        const dst_y = (row * texture_dimensions + y) * atlas_stride;
         const dst_start = dst_y + dst_x;
-        const dst_end = dst_start + tile_stride;
+        const dst_end = dst_start + texture_stride;
+        const dst = atlas[dst_start..dst_end];
 
-        @memcpy(atlas[dst_start..dst_end], src);
+        @memcpy(dst, src);
     }
 }
 
 pub fn main() !void {
-    const dirt = try read_file("dirt.rgb");
-    const stone = try read_file("stone.rgb");
-    const grass_side = try read_file("grass-side.rgb");
-    const grass_top = try read_file("grass-top.rgb");
+    const dirt = try get_xrgb_from_file("dirt.rgb");
+    const stone = try get_xrgb_from_file("stone.rgb");
+    const grass_side = try get_xrgb_from_file("grass-side.rgb");
+    const grass_top = try get_xrgb_from_file("grass-top.rgb");
 
     // back front left right bottom top
-    const BlockFaces = [6]*const [bytes_count]u8;
+    const BlockFaces = [6]*const [xrgb_tex_bytes]u8;
     const dirt_block: BlockFaces = .{ &dirt, &dirt, &dirt, &dirt, &dirt, &dirt };
     const stone_block: BlockFaces = .{ &stone, &stone, &stone, &stone, &stone, &stone };
     const grass_block: BlockFaces = .{ &grass_side, &grass_side, &grass_side, &grass_side, &dirt, &grass_top };
 
     const blocks: [blocks_count]*const BlockFaces = .{ &dirt_block, &stone_block, &grass_block };
 
-    var out_buf: [atlas_size]u8 = undefined;
+    var atlas: [atlas_bytes]u8 = undefined;
 
     for (blocks, 0..) |block, block_row| {
         for (block.*, 0..) |face, face_col| {
-            blit_tile(out_buf[0..], face, face_col, block_row);
+            blit_tile(atlas[0..], face, face_col, block_row);
         }
     }
 
-    try write_to_file(out_buf, "atlas.rgb");
+    try write_atlas_to_file(atlas, "atlas.argb");
 }

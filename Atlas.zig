@@ -20,12 +20,12 @@ pub const Atlas = struct {
 
     pub fn init(allocator: std.mem.Allocator, conf: AtlasConfig) !Atlas {
         const atlas_size = conf.width * conf.height;
-        const atlas_size_rgb = conf.width * conf.height * conf.channels_rgb;
+        const atlas_size_rgb = conf.width * conf.height * 4;
 
         const cwd = std.fs.cwd();
         var dir = try cwd.openDir("tex/", .{});
         defer dir.close();
-        var file = try dir.openFile("atlas.rgb", .{ .mode = .read_only });
+        var file = try dir.openFile("atlas.argb", .{ .mode = .read_only });
         defer file.close();
 
         const read_buf = try allocator.alloc(u8, atlas_size_rgb);
@@ -34,30 +34,21 @@ pub const Atlas = struct {
         var file_reader = file.reader(read_buf);
         const reader = &file_reader.interface;
 
-        const rgb = try allocator.alloc(u8, atlas_size_rgb);
-        defer allocator.free(rgb);
+        const atlas = try allocator.alloc(u32, atlas_size);
+        // defer allocator.free(atlas);
 
-        try reader.readSliceAll(rgb);
+        try reader.readSliceAll(std.mem.sliceAsBytes(atlas));
+
+        // const atlas_u32: []u32 =
+        //     @as([*]u32, @ptrCast(@alignCast(atlas.ptr)))[0 .. atlas.len / 4];
 
         // Ensure there is not trailing data
         var extra: [1]u8 = undefined;
         const m = try reader.readSliceShort(&extra);
         if (m != 0) return error.UnexpectedTrailingData;
 
-        var argb = try allocator.alloc(conf.pixel_type, atlas_size);
-
-        var i: usize = 0;
-        var p: usize = 0;
-        while (i < rgb.len) : (i += 3) {
-            argb[p] = @as(u32, rgb[i]) << 16 |
-                @as(u32, rgb[i + 1]) << 8 |
-                @as(u32, rgb[i + 2]);
-
-            p += 1;
-        }
-
         return .{
-            .atlas = argb,
+            .atlas = atlas,
             .width = conf.width,
             .height = conf.height,
             .tex_w = conf.tex_w,
