@@ -16,6 +16,16 @@ pub const EngineConfig = struct {
         tile_dimensions: usize,
     };
 
+    pub const AtlasConfig = struct {
+        width: usize,
+        height: usize,
+        tex_w: usize,
+        tex_h: usize,
+        pixel_type: type,
+        channels_rgb: usize,
+    };
+
     camera_config: CameraConfig,
     framebuffer_config: FramebufferConfig,
+    atlas_config: AtlasConfig,
 };

@@ -8,10 +8,11 @@ const cube = @import("cube.zig");
 const ctx = @import("context.zig");
 const tri = @import("triangle.zig");
 const mat = @import("matrix.zig");
-const tex = @import("textures.zig");
 const Scene = @import("scene.zig");
 
 const Engine = @import("Engine.zig");
+const Atlas = @import("Atlas.zig").Atlas;
+const Camera = @import("Camera.zig").Camera;
 
 const EngineConfig = @import("./engine/EngineConfig.zig").EngineConfig;
 
@@ -23,11 +24,21 @@ const engine_config = EngineConfig{
         .to = .{ 0, 0, 0 },
         .speed = 40.0,
     },
+
     .framebuffer_config = .{
         .width = 960,
         .height = 540,
         .scale = 2,
         .tile_dimensions = 32,
+    },
+
+    .atlas_config = .{
+        .width = 96,
+        .height = 48,
+        .tex_w = 16,
+        .tex_h = 16,
+        .pixel_type = u32,
+        .channels_rgb = 3,
     },
 };
 
@@ -40,10 +51,12 @@ const GenRasterTrianglesJob = struct {
     cube: *cube.Cube,
     view: mat.Mat4f,
     out: *PerCubeOut,
+    camera: *Camera,
+    atlas: *Atlas,
 
     pub fn run(job: *GenRasterTrianglesJob) void {
         defer job.wg.finish();
-        job.cube.genRasterTriangles(engine.renderer, job.view, job.out);
+        job.cube.genRasterTriangles(engine.renderer, job.view, job.out, job.camera, job.atlas);
     }
 };
 
@@ -62,9 +75,7 @@ pub fn main() !void {
 
     var scene = Scene.Scene.init();
 
-    ctx.projection_matrix = mat.create_projection_matrix(&engine.camera);
-
-    ctx.atlas = try tex.Atlas.init();
+    engine.camera.proj_mat = mat.create_projection_matrix(&engine.camera);
 
     var t: usize = 0;
 
@@ -94,6 +105,8 @@ pub fn main() !void {
                 .cube = cu,
                 .view = view,
                 .out = &outs[i],
+                .camera = &engine.camera,
+                .atlas = &engine.atlas,
             };
 
             try pool.spawn(GenRasterTrianglesJob.run, .{&jobs[i]});
@@ -107,9 +120,9 @@ pub fn main() !void {
             engine.renderer.triangles.appendSliceAssumeCapacity(src);
         }
 
-        try engine.renderer.render(&pool, &engine.tile_pool, frame.framebuffer, allocator);
+        try engine.renderer.render(&pool, &engine.tile_pool, frame.framebuffer, allocator, &engine.atlas);
 
-        if (cfg.show_tex_atlas) ctx.atlas.debug_show_atlas(&frame.framebuffer);
+        if (cfg.show_tex_atlas) engine.atlas.debug_show_atlas(&frame.framebuffer);
         if (cfg.show_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);
 
         if (cfg.show_fps) engine.platform.fps_counter_update();

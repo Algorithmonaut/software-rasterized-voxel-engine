@@ -3,11 +3,13 @@ const main = @import("main.zig");
 const tri = @import("triangle.zig");
 const matrix = @import("matrix.zig");
 const cfg = @import("config.zig");
-const tex = @import("textures.zig");
+const BlockTypes = @import("Atlas.zig").BlockTypes;
 const Float = cfg.Float;
 const Vec4f = cfg.Vec4f;
 const Vec3f = cfg.Vec3f;
 const Renderer = @import("Renderer.zig").Renderer;
+const Camera = @import("Camera.zig").Camera;
+const Atlas = @import("Atlas.zig").Atlas;
 
 const vertices: [8]Vec4f = .{
     .{ -1, -1, -1, 1 },
@@ -38,9 +40,9 @@ pub const Cube = struct {
     vertices: [8]Vec4f,
     idx: [36]u16,
     pos: Vec4f,
-    kind: tex.BlockTypes,
+    kind: BlockTypes,
 
-    pub fn init(pos: Vec4f, kind: tex.BlockTypes) Cube {
+    pub fn init(pos: Vec4f, kind: BlockTypes) Cube {
         return .{
             .vertices = vertices,
             .idx = idx,
@@ -54,6 +56,8 @@ pub const Cube = struct {
         renderer: Renderer,
         view: matrix.Mat4f,
         out: *PerCubeOut,
+        camera: *Camera,
+        atlas: *Atlas,
     ) void {
         var n: u8 = 0;
 
@@ -75,13 +79,13 @@ pub const Cube = struct {
         }
 
         const cube_start_x = 0;
-        const cube_start_y = @intFromEnum(self.kind) * cfg.tex_h;
+        const cube_start_y = @intFromEnum(self.kind) * atlas.tex_h;
 
         var i: usize = 0;
         while (i < idx.len) : (i += 6) {
             const face: usize = i / 6;
 
-            const tex_start_x = cube_start_x + face * cfg.tex_w;
+            const tex_start_x = cube_start_x + face * atlas.tex_w;
             const tex_start_y = cube_start_y;
 
             const v0 = verts_cpy[idx[i]];
@@ -92,9 +96,9 @@ pub const Cube = struct {
             const v5 = verts_cpy[idx[i + 5]];
 
             const u_0 = tex_start_x;
-            const u_1 = tex_start_x + (cfg.tex_w - 1);
+            const u_1 = tex_start_x + (atlas.tex_w - 1); // FIX: Why -1 ????
             const v_0 = tex_start_y;
-            const v_1 = tex_start_y + (cfg.tex_h - 1);
+            const v_1 = tex_start_y + (atlas.tex_h - 1);
 
             // Canonical corners
             const uv_tl = @Vector(2, usize){ u_0, v_0 }; // top left
@@ -185,12 +189,12 @@ pub const Cube = struct {
                 .v2_uv = uv5,
             };
 
-            if (renderer.gen_raster_triangle(&triangle)) |rt| {
+            if (renderer.gen_raster_triangle(&triangle, camera)) |rt| {
                 out.tris[n] = rt;
                 n += 1;
             }
 
-            if (renderer.gen_raster_triangle(&triangle2)) |rt| {
+            if (renderer.gen_raster_triangle(&triangle2, camera)) |rt| {
                 out.tris[n] = rt;
                 n += 1;
             }

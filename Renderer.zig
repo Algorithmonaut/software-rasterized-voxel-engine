@@ -3,6 +3,8 @@ const ctx = @import("context.zig"); // WARN: To refactor
 const cfg = @import("config.zig");
 const Triangle = @import("triangle.zig").Triangle;
 const RasterTriangle = @import("triangle.zig").RasterTriangle;
+const Atlas = @import("Atlas.zig").Atlas;
+const Camera = @import("Camera.zig").Camera;
 const tile = @import("tile.zig");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Int = cfg.Int; // WARN: To refactor
@@ -19,9 +21,12 @@ const TileRenderJob = struct {
     renderer: *const Renderer,
     tiles_pool: *tile.TilePool,
     buf: Framebuffer,
-    tile_offsets: *const [tile.tiles_count + 1]usize,
+    // tile_offsets: *const [tiles_pool.tiles_count + 1]usize,
+    tile_offsets: []usize,
     tile_refs: []const cfg.Uint,
     tile_i: usize,
+
+    atlas: *Atlas,
 
     pub fn run(job: *TileRenderJob) void {
         defer job.wg.finish();
@@ -36,7 +41,7 @@ const TileRenderJob = struct {
 
         for (job.tile_refs[start..end]) |tri_i_u| {
             const tri_i: usize = @intCast(tri_i_u);
-            job.renderer.triangles.items[tri_i].render_triangle_in_tile(t);
+            job.renderer.triangles.items[tri_i].render_triangle_in_tile(t, job.atlas);
         }
 
         t.write_to_fb(job.buf);
@@ -103,9 +108,15 @@ pub const Renderer = struct {
         tiles_pool: *tile.TilePool,
         buf: Framebuffer,
         allocator: std.mem.Allocator,
+        atlas: *Atlas,
     ) !void {
         // P: First pass (count the triangles for each tile)
-        var tile_counts: [tiles_pool.tiles_count]Uint = [_]Uint{0} ** tiles_pool.tiles_count;
+
+        // var tile_counts: [tiles_pool.tiles_count]Uint = [_]Uint{0} ** tiles_pool.tiles_count;
+        var tile_counts = try allocator.alloc(Uint, tiles_pool.tiles_count);
+        @memset(tile_counts[0..], 0);
+        defer allocator.free(tile_counts);
+
         for (self.triangles.items) |triangle| {
             const range = tile_range_for_tri(triangle);
 
@@ -113,24 +124,31 @@ pub const Renderer = struct {
             while (x < range.max_tx) : (x += 1) {
                 var y = range.min_ty;
                 while (y < range.max_ty) : (y += 1) {
-                    tile_counts[x + tiles_pool.tiles_w * y] += 1;
+                    tile_counts[x + tiles_pool.tiles_count_w * y] += 1;
                 }
             }
         }
 
-        var tile_offsets: [tiles_pool.tiles_count + 1]usize = undefined;
+        // var tile_offsets: [tiles_pool.tiles_count + 1]usize = undefined;
+        var tile_offsets = try allocator.alloc(usize, tiles_pool.tiles_count + 1);
+        defer allocator.free(tile_offsets);
+
         var sum: usize = 0;
         for (0..tiles_pool.tiles_count) |t| {
             tile_offsets[t] = sum;
             sum += @as(usize, tile_counts[t]);
         }
+        // tile_offsets[tiles_pool.tiles_count] = sum;
         tile_offsets[tiles_pool.tiles_count] = sum;
 
         var tile_refs = try allocator.alloc(Uint, sum);
         defer allocator.free(tile_refs);
 
         // Per tile write cursor
-        var write_pos: [tiles_pool.tiles_count]usize = undefined;
+        // var write_pos: [tiles_pool.tiles_count]usize = undefined;
+        var write_pos = try allocator.alloc(usize, tiles_pool.tiles_count);
+        defer allocator.free(write_pos);
+
         for (0..tiles_pool.tiles_count) |t| write_pos[t] = tile_offsets[t];
 
         // P: Second pass (scatter triangle indices into tile_refs)
@@ -154,7 +172,7 @@ pub const Renderer = struct {
         var wg = std.Thread.WaitGroup{};
 
         // jobs must remain valid until wg.wait() returns
-        var jobs = try allocator.alloc(TileRenderJob, tile.tiles_count);
+        var jobs = try allocator.alloc(TileRenderJob, tiles_pool.tiles_count);
         defer allocator.free(jobs);
 
         for (0..tiles_pool.tiles_count) |tile_i| {
@@ -168,9 +186,10 @@ pub const Renderer = struct {
                 .renderer = self,
                 .tiles_pool = tiles_pool,
                 .buf = buf,
-                .tile_offsets = &tile_offsets,
+                .tile_offsets = tile_offsets,
                 .tile_refs = tile_refs,
                 .tile_i = tile_i,
+                .atlas = atlas,
             };
 
             try pool.spawn(TileRenderJob.run, .{&jobs[tile_i]});
@@ -179,7 +198,11 @@ pub const Renderer = struct {
         wg.wait();
     }
 
-    pub inline fn gen_raster_triangle(self: *const Renderer, tri: *Triangle) ?RasterTriangle {
+    pub inline fn gen_raster_triangle(
+        self: *const Renderer,
+        tri: *Triangle,
+        camera: *Camera,
+    ) ?RasterTriangle {
         const verts = .{ &tri.v0, &tri.v1, &tri.v2 };
         var verts_h: [3]Vec4f = undefined; // verts in homogeneous coordinates
         var rec_ws: Vec3f = undefined; // reciprocal of w = reciprocal of z in camera space
@@ -189,7 +212,7 @@ pub const Renderer = struct {
             @prefetch(vert, .{});
 
             var vert_h = Vec4f{ vert.*[0], vert.*[1], vert.*[2], 1.0 };
-            vert_h = ctx.projection_matrix.mul_vec(vert_h);
+            vert_h = camera.proj_mat.mul_vec(vert_h);
 
             const clip_w = vert_h[3];
             const inv_w = 1.0 / clip_w;

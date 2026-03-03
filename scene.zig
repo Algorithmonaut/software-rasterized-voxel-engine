@@ -1,5 +1,5 @@
 const Cube = @import("cube.zig");
-const tex = @import("textures.zig");
+const BlockTypes = @import("Atlas.zig").BlockTypes;
 
 pub const Scene = struct {
     cubes: [100]Cube.Cube,
@@ -9,11 +9,11 @@ pub const Scene = struct {
 
         var i: usize = 0;
         while (i < 10) : (i += 1) {
-            const block_type: tex.BlockTypes = blk: {
-                var t = tex.BlockTypes.dirt;
-                if (i % 3 == 0) t = tex.BlockTypes.grass;
-                if (i % 3 == 1) t = tex.BlockTypes.stone;
-                if (i % 3 == 2) t = tex.BlockTypes.dirt;
+            const block_type: BlockTypes = blk: {
+                var t = BlockTypes.dirt;
+                if (i % 3 == 0) t = BlockTypes.grass;
+                if (i % 3 == 1) t = BlockTypes.stone;
+                if (i % 3 == 2) t = BlockTypes.dirt;
 
                 break :blk t;
             };

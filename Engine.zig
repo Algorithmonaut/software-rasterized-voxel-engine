@@ -8,7 +8,7 @@ const FrameContext = @import("FrameContext.zig").FrameContext;
 const SdlPlatform = @import("SdlPlatform.zig").SdlPlatform;
 const SdlGraphics = @import("SdlGraphics.zig").SdlGraphics;
 const EngineConfig = @import("./engine/EngineConfig.zig").EngineConfig;
-
+const Atlas = @import("Atlas.zig").Atlas;
 const TilePool = @import("tile.zig").TilePool;
 
 const cfg = @import("config.zig");
@@ -22,6 +22,7 @@ pub const Engine = struct {
     platform: SdlPlatform,
     graphics: SdlGraphics,
     tile_pool: TilePool,
+    atlas: Atlas,
 
     pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
         const camera = Camera.init(conf.camera_config);
@@ -29,6 +30,7 @@ pub const Engine = struct {
         const platform = SdlPlatform.init();
         const graphics = try SdlGraphics.init(conf.framebuffer_config);
         const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
+        const atlas = try Atlas.init(allocator, conf.atlas_config);
 
         return .{
             .allocator = allocator,
@@ -37,6 +39,7 @@ pub const Engine = struct {
             .platform = platform,
             .graphics = graphics,
             .tile_pool = tile_pool,
+            .atlas = atlas,
         };
     }
 
@@ -45,6 +48,7 @@ pub const Engine = struct {
         self.renderer.deinit();
         self.platform.deinit();
         self.graphics.deinit();
+        self.atlas.deinit(self.allocator);
     }
 
     pub fn begin_frame(self: *Engine) !FrameContext {

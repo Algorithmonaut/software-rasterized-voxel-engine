@@ -8,14 +8,16 @@ const vec = @import("vector.zig");
 const Vec3f = cfg.Vec3f;
 
 pub const Camera = struct {
-    view_mat: mat.Mat4f,
     from: Vec3f,
     to: Vec3f,
-    yaw: f32,
-    pitch: f32,
     speed: f32,
     fov: f32,
     view_distance: f32,
+
+    view_mat: mat.Mat4f,
+    proj_mat: mat.Mat4f,
+    yaw: f32,
+    pitch: f32,
 
     pub const MoveKeys = packed struct {
         forward: bool = false,
@@ -35,6 +37,7 @@ pub const Camera = struct {
             .yaw = 0.0,
             .pitch = 0.0,
             .view_mat = undefined,
+            .proj_mat = undefined,
         };
     }
 

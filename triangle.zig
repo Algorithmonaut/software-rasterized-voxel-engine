@@ -1,4 +1,5 @@
 const Tile = @import("tile.zig");
+const Atlas = @import("Atlas.zig").Atlas;
 const std = @import("std");
 const cfg = @import("config.zig");
 const Float = cfg.Float;
@@ -9,7 +10,6 @@ const Vec3i = cfg.Vec3i;
 const Vec4i = cfg.Vec4i;
 const mat = @import("matrix.zig");
 const ctx = @import("context.zig");
-const tex = @import("textures.zig");
 
 pub const RasterTriangle = struct {
     v0: @Vector(2, Int),
@@ -89,7 +89,7 @@ pub const RasterTriangle = struct {
         };
     }
 
-    pub inline fn render_triangle_in_tile(self: *const RasterTriangle, tile: *Tile.Tile) void {
+    pub inline fn render_triangle_in_tile(self: *const RasterTriangle, tile: *Tile.Tile, atlas: *Atlas) void {
         const a = self.v0;
         const b = self.v1;
         const c = self.v2;
@@ -159,8 +159,8 @@ pub const RasterTriangle = struct {
                     const rcp_den: Float = 1.0 / den_scaled;
                     const uv = uv_num * @as(Uvf, @splat(rcp_den));
 
-                    const max_u_f: Float = @floatFromInt(cfg.atlas_w - 1);
-                    const max_v_f: Float = @floatFromInt(cfg.atlas_h - 1);
+                    const max_u_f: Float = @floatFromInt(atlas.width - 1); // FIX: Why -1
+                    const max_v_f: Float = @floatFromInt(atlas.height - 1);
 
                     const u_f = std.math.clamp(uv[0], 0.0, max_u_f);
                     const v_f = std.math.clamp(uv[1], 0.0, max_v_f);
@@ -168,8 +168,8 @@ pub const RasterTriangle = struct {
                     const u: usize = @intFromFloat(u_f + 0.5);
                     const v: usize = @intFromFloat(v_f + 0.5);
 
-                    const base: usize = (u + v * cfg.atlas_w);
-                    const argb = ctx.atlas.atlas[base];
+                    const base: usize = (u + v * atlas.width);
+                    const argb = atlas.atlas[base];
                     tile.buf[buf_row_base + x] = argb;
                 }
             }
