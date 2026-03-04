@@ -23,6 +23,8 @@ fn get_xrgb_from_file(filename: []const u8) ![xrgb_tex_bytes]u8 {
 
     var i: usize = 0; // index into buf (input) (RGB)
     var o: usize = 0; // index into tex (output) (XRGB)
+
+    // Little-endian CPU is assumed, otherwise invert the order
     while (i < buf.len) : (i += 3) {
         tex[o + 3] = 0xFF;
         tex[o + 2] = buf[i + 0];

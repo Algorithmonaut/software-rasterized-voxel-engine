@@ -124,7 +124,9 @@ pub const Renderer = struct {
             while (x < range.max_tx) : (x += 1) {
                 var y = range.min_ty;
                 while (y < range.max_ty) : (y += 1) {
-                    tile_counts[x + tiles_pool.tiles_count_w * y] += 1;
+                    const idx = x + tiles_pool.tiles_count_w * y;
+                    tile_counts[idx] += 1;
+                    tiles_pool.tiles[idx].was_occupied = true;
                 }
             }
         }

@@ -24,6 +24,8 @@ pub const Camera = struct {
         back: bool = false,
         right: bool = false,
         left: bool = false,
+        up: bool = false,
+        down: bool = false,
     };
 
     pub fn init(conf: CameraConfig) Camera {
@@ -90,6 +92,8 @@ pub const Camera = struct {
         if (mov_keys.back) wish -= fwd_move;
         if (mov_keys.right) wish += right;
         if (mov_keys.left) wish -= right;
+        if (mov_keys.up) wish += world_up;
+        if (mov_keys.down) wish -= world_up;
 
         // Normalize wish so diagonals aren't faster
         const wish_len2 = vec.dot_product(wish, wish);

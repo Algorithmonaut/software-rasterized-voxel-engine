@@ -9,6 +9,7 @@ const cfg = @import("config.zig");
 const ctx = @import("context.zig");
 const vec = @import("vector.zig");
 const Camera = @import("Camera.zig").Camera;
+const SdlGraphics = @import("SdlGraphics.zig").SdlGraphics;
 
 const Vec3f = cfg.Vec3f;
 
@@ -19,7 +20,9 @@ pub const SdlPlatform = struct {
     now: u64,
     frames: u64, // frame counter
     running: bool,
+    drop_next_mouse_delta: bool,
 
+    mouse_capture: bool,
     ev: c.SDL_Event,
 
     pub fn init() SdlPlatform {
@@ -34,6 +37,8 @@ pub const SdlPlatform = struct {
             .frames = 0,
             .running = true,
             .ev = undefined,
+            .mouse_capture = true,
+            .drop_next_mouse_delta = false,
         };
     }
 
@@ -67,10 +72,30 @@ pub const SdlPlatform = struct {
         }
     }
 
-    pub fn process_inputs(self: *SdlPlatform, dt: f32, camera: *Camera) void {
+    pub fn process_inputs(self: *SdlPlatform, dt: f32, camera: *Camera, sdl_gfx: *SdlGraphics) void {
         while (c.SDL_PollEvent(&self.ev) != 0) {
             switch (self.ev.type) {
                 c.SDL_QUIT => self.running = false,
+                c.SDL_KEYDOWN => {
+                    const key = self.ev.key.keysym.sym;
+
+                    if (self.ev.key.repeat == 0 and key == c.SDLK_TAB) {
+                        self.mouse_capture = !self.mouse_capture;
+                        self.drop_next_mouse_delta = !self.drop_next_mouse_delta;
+
+                        _ = c.SDL_SetRelativeMouseMode(if (self.mouse_capture) c.SDL_TRUE else c.SDL_FALSE);
+
+                        if (self.mouse_capture) self.drop_next_mouse_delta = true;
+
+                        _ = sdl_gfx;
+                        // if (!self.mouse_capture) {
+                        //     const w: c_int = sdl_gfx.width * sdl_gfx.scale;
+                        //     const h: c_int = sdl_gfx.height * sdl_gfx.scale;
+                        //     c.SDL_WarpMouseInWindow(@as(?*c.SDL_Window, sdl_gfx.window), w / 2, h / 2);
+                        // }
+                    }
+                },
+
                 else => {},
             }
         }
@@ -78,7 +103,16 @@ pub const SdlPlatform = struct {
         {
             var dx: i32 = 0;
             var dy: i32 = 0;
-            _ = c.SDL_GetRelativeMouseState(&dx, &dy);
+
+            if (self.mouse_capture) {
+                _ = c.SDL_GetRelativeMouseState(&dx, &dy);
+
+                if (self.drop_next_mouse_delta) {
+                    dx = 0;
+                    dy = 0;
+                    self.drop_next_mouse_delta = false;
+                }
+            }
 
             const keys = c.SDL_GetKeyboardState(null);
             const mov_keys = Camera.MoveKeys{
@@ -86,6 +120,8 @@ pub const SdlPlatform = struct {
                 .back = keys[c.SDL_SCANCODE_S] != 0,
                 .right = keys[c.SDL_SCANCODE_D] != 0,
                 .left = keys[c.SDL_SCANCODE_A] != 0,
+                .up = keys[c.SDL_SCANCODE_SPACE] != 0,
+                .down = keys[c.SDL_SCANCODE_E] != 0,
             };
 
             camera.update(dx, dy, mov_keys, dt);

@@ -9,12 +9,14 @@ pub const Tile = struct {
     z_buf: [size * size]Float,
     buf: [size * size]u32,
     pos: [2]usize,
+    was_occupied: bool,
 
     pub fn init(x: usize, y: usize) Tile {
         return .{
             .z_buf = undefined,
             .buf = undefined,
             .pos = .{ x, y },
+            .was_occupied = false,
         };
     }
 
@@ -69,25 +71,52 @@ pub const TilePool = struct {
     }
 
     pub fn debug_show_tiles_border(self: *TilePool, buf: Framebuffer) void {
-        const color: u32 = 0xFF7F0000;
+        var color: u32 = 0xFF7F0000;
+        // for (self.tiles) |tile| {
+        //     const x0 = tile.pos[0];
+        //     const y0 = tile.pos[1];
+        //
+        //     const x1 = @min(x0 + size - 1, cfg.width - 1);
+        //     const y1 = @min(y0 + size - 1, cfg.height - 1);
+        //
+        //     // Top edge
+        //     var x: usize = x0;
+        //     while (x <= x1) : (x += 1) {
+        //         buf.set_pixel(x, y0, color);
+        //     }
+        //
+        //     // Left edge
+        //     var y: usize = y0;
+        //     while (y <= y1) : (y += 1) {
+        //         buf.set_pixel(x0, y, color);
+        //     }
+        // }
 
-        for (self.tiles) |tile| {
-            const x0 = tile.pos[0];
-            const y0 = tile.pos[1];
+        // color = 0x30FF0000;
+        color = 0x50FF0000;
+        for (self.tiles) |*tile| {
+            if (tile.was_occupied) {
+                const x0 = tile.pos[0];
+                const y0 = tile.pos[1];
 
-            const x1 = @min(x0 + size - 1, cfg.width - 1);
-            const y1 = @min(y0 + size - 1, cfg.height - 1);
+                const x1 = @min(x0 + size - 1, cfg.width - 1);
+                const y1 = @min(y0 + size - 1, cfg.height - 1);
 
-            // Top edge
-            var x: usize = x0;
-            while (x <= x1) : (x += 1) {
-                buf.set_pixel(x, y0, color);
-            }
+                // Top/bottom edge
+                var x: usize = x0;
+                while (x <= x1) : (x += 1) {
+                    buf.set_pixel_blend(x, y0, color);
+                    buf.set_pixel_blend(x, y1, color);
+                }
 
-            // Left edge
-            var y: usize = y0;
-            while (y <= y1) : (y += 1) {
-                buf.set_pixel(x0, y, color);
+                // Left/bottom edge (skip y0 & y1 to avoid double-blending top corners)
+                var y: usize = y0 + 1;
+                while (y < y1) : (y += 1) {
+                    buf.set_pixel_blend(x0, y, color);
+                    buf.set_pixel_blend(x1, y, color);
+                }
+
+                tile.was_occupied = false; // FIX: prob not clean to put this here
             }
         }
     }

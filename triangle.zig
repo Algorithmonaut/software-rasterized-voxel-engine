@@ -31,7 +31,7 @@ pub const RasterTriangle = struct {
         bias: i32, // This is used for the top left rule
 
         /// Evaluate the point (x, y) against the edge
-        inline fn eval(self: Edge, x: i32, y: i32) i32 {
+        inline fn eval(self: Edge, x: i32, y: i32) i64 {
             return self.A * x + self.B * y + self.C; // WARN: Cast to i64 if overflow
         }
     };
@@ -110,7 +110,7 @@ pub const RasterTriangle = struct {
         const w0_row = e0.eval(tx0, ty0);
         const w1_row = e1.eval(tx0, ty0);
         const w2_row = e2.eval(tx0, ty0);
-        var w_row = Vec3i{ w0_row, w1_row, w2_row };
+        var w_row = @Vector(3, i64){ w0_row, w1_row, w2_row }; // FIX: maybe create a type for this
 
         // P: Reciprocal depth at the vertices
         const q0: Float = self.v0_rec_z;

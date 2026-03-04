@@ -29,7 +29,7 @@ const engine_config = EngineConfig{
         .width = 960,
         .height = 540,
         .scale = 2,
-        .tile_dimensions = 32,
+        .tile_dimensions = 16,
     },
 
     .atlas_config = .{
@@ -127,6 +127,6 @@ pub fn main() !void {
 
         if (cfg.show_fps) engine.platform.fps_counter_update();
 
-        engine.platform.process_inputs(frame.dt, &engine.camera);
+        engine.platform.process_inputs(frame.dt, &engine.camera, &engine.graphics);
     }
 }

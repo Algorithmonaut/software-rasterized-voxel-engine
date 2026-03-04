@@ -1,6 +1,6 @@
 // P: Framebuffer dimensions/scale
 
-pub const tile_dimensions: usize = 32;
+pub const tile_dimensions: usize = 16;
 pub const width: usize = 960;
 pub const height: usize = 540;
 pub const scale: usize = 2;
