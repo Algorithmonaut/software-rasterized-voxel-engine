@@ -1,12 +1,13 @@
 const std = @import("std");
-const t = @import("math/types.zig");
-const Cube = @import("Cube.zig").Cube;
+const Float = @import("math/types.zig").Float;
 const BlockType = @import("Atlas.zig").BlockTypes;
+
+const ChunkCoord = @import("math/types.zig").ChunkCoord;
 
 const chunck_size = 16;
 
-pub const Chunck = struct {
-    coord: @Vector(3, t.Int),
+pub const Chunk = struct {
+    coord: ChunkCoord,
 
     dimensions: usize,
 
@@ -19,12 +20,12 @@ pub const Chunck = struct {
     face_count: usize = 0,
 
     // aabb for culling
-    world_min: @Vector(3, t.Int),
-    world_max: @Vector(3, t.Int),
+    world_min: ChunkCoord,
+    world_max: ChunkCoord,
 
-    pub fn generate(allocator: std.mem.Allocator, coord: @Vector(3, t.Int)) !Chunck {
-        const world_min = coord * @as(@Vector(3, t.Int), @splat(chunck_size));
-        const world_max = world_min + @as(@Vector(3, t.Int), @splat(chunck_size));
+    pub fn generate(allocator: std.mem.Allocator, coord: ChunkCoord) !Chunk {
+        const world_min = coord * @as(ChunkCoord, @splat(chunck_size));
+        const world_max = world_min + @as(ChunkCoord, @splat(chunck_size));
 
         const voxels = try allocator.alloc(BlockType, chunck_size * chunck_size * chunck_size);
 
@@ -38,5 +39,9 @@ pub const Chunck = struct {
             .world_max = world_max,
             .dimensions = chunck_size,
         };
+    }
+
+    pub fn deinit(self: *Chunk, allocator: std.mem.Allocator) void {
+        allocator.free(self.voxels);
     }
 };
