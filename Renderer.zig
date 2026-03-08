@@ -41,7 +41,7 @@ fn tile_worker(
 
         for (tile_refs[start..end]) |tri_i_u| {
             const tri_i: usize = @intCast(tri_i_u);
-            renderer.triangles.items[tri_i].render_triangle_in_tile(t, atlas);
+            renderer.triangles[tri_i].render_triangle_in_tile(t, atlas);
         }
 
         t.write_to_fb(buf);
@@ -80,8 +80,16 @@ const TileRenderJob = struct {
     }
 };
 
+pub const TriSpan = struct {
+    start: u32,
+    len: u32,
+};
+
 pub const Renderer = struct {
-    triangles: std.ArrayList(RasterTriangle),
+    triangles: []RasterTriangle,
+    // tri_spans: std.ArrayList(TriSpan),
+    tri_spans: std.ArrayList(TriSpan),
+
     width: usize,
     height: usize,
     tile_dimensions: usize,
@@ -93,10 +101,8 @@ pub const Renderer = struct {
 
     pub fn init(allocator: std.mem.Allocator, conf: FramebufferConfig, tile_counts: usize) !Renderer {
         return .{
-            .triangles = try std.ArrayList(RasterTriangle).initCapacity(
-                allocator,
-                cube_count * 6 * 2,
-            ),
+            .triangles = try allocator.alloc(RasterTriangle, cube_count * 12 + 10000), // FIX: Improve safety guard
+            .tri_spans = try std.ArrayList(TriSpan).initCapacity(allocator, 1024),
 
             .width = conf.width,
             .height = conf.height,
@@ -116,8 +122,11 @@ pub const Renderer = struct {
     }
 
     pub fn begin_frame(self: *Renderer, allocator: std.mem.Allocator) !void {
-        self.triangles.clearRetainingCapacity();
-        try self.triangles.ensureTotalCapacity(allocator, cube_count * 6 * 2);
+        // self.triangles.clearRetainingCapacity();
+        // try self.triangles.ensureTotalCapacity(allocator, cube_count * 6 * 2);
+        _ = allocator;
+
+        self.tri_spans.clearRetainingCapacity();
     }
 
     inline fn tile_range_for_tri(triangle: RasterTriangle) struct {
@@ -163,16 +172,24 @@ pub const Renderer = struct {
         // P: First pass (count the triangles for each tile)
         @memset(self.tile_counts[0..], 0);
 
-        for (self.triangles.items) |triangle| {
-            const range = tile_range_for_tri(triangle);
+        for (self.tri_spans.items) |span| {
+            const start: usize = span.start;
+            const end: usize = start + span.len;
 
-            var x = range.min_tx;
-            while (x < range.max_tx) : (x += 1) {
-                var y = range.min_ty;
-                while (y < range.max_ty) : (y += 1) {
-                    const idx = x + tiles_pool.tiles_count_w * y;
-                    self.tile_counts[idx] += 1;
-                    tiles_pool.tiles[idx].was_occupied = true;
+            var tri_i = start;
+            while (tri_i < end) : (tri_i += 1) {
+                const triangle = self.triangles[tri_i];
+
+                const range = tile_range_for_tri(triangle);
+
+                var x = range.min_tx;
+                while (x < range.max_tx) : (x += 1) {
+                    var y = range.min_ty;
+                    while (y < range.max_ty) : (y += 1) {
+                        const idx = x + tiles_pool.tiles_count_w * y;
+                        self.tile_counts[idx] += 1;
+                        tiles_pool.tiles[idx].was_occupied = true;
+                    }
                 }
             }
         }
@@ -190,18 +207,26 @@ pub const Renderer = struct {
         for (0..tiles_pool.tiles_count) |t| self.write_pos[t] = self.tile_offsets[t];
 
         // P: Second pass (scatter triangle indices into tile_refs)
-        for (self.triangles.items, 0..) |triangle, tri_i| {
-            const range = tile_range_for_tri(triangle);
+        for (self.tri_spans.items) |span| {
+            const start: usize = span.start;
+            const end: usize = start + span.len;
 
-            var tx = range.min_tx;
-            while (tx < range.max_tx) : (tx += 1) {
-                var ty = range.min_ty;
-                while (ty < range.max_ty) : (ty += 1) {
-                    const tile_i = tx + tiles_pool.tiles_count_w * ty;
+            var tri_i = start;
+            while (tri_i < end) : (tri_i += 1) {
+                const triangle = self.triangles[tri_i];
 
-                    const dst = self.write_pos[tile_i];
-                    self.tile_refs[dst] = @intCast(tri_i);
-                    self.write_pos[tile_i] = dst + 1;
+                const range = tile_range_for_tri(triangle);
+
+                var tx = range.min_tx;
+                while (tx < range.max_tx) : (tx += 1) {
+                    var ty = range.min_ty;
+                    while (ty < range.max_ty) : (ty += 1) {
+                        const tile_i = tx + tiles_pool.tiles_count_w * ty;
+
+                        const dst = self.write_pos[tile_i];
+                        self.tile_refs[dst] = @intCast(tri_i);
+                        self.write_pos[tile_i] = dst + 1;
+                    }
                 }
             }
         }

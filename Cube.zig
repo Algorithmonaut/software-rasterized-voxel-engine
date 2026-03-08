@@ -32,10 +32,10 @@ const idx: [36]u16 = .{
     3, 2, 6, 3, 6, 7, //top
 };
 
-pub const PerCubeOut = struct {
-    tris: [12]tri.RasterTriangle = undefined,
-    len: u8 = 0,
-};
+// pub const PerCubeOut = struct {
+//     tris: [12]tri.RasterTriangle = undefined,
+//     len: u8 = 0,
+// };
 
 pub const Cube = struct {
     vertices: [8]Vec4f,

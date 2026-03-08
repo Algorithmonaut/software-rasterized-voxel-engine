@@ -16,6 +16,7 @@ const Camera = @import("Camera.zig").Camera;
 const EngineConfig = @import("./engine/EngineConfig.zig").EngineConfig;
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Renderer = @import("Renderer.zig").Renderer;
+const cube_worker = @import("cube-worker.zig");
 
 const engine_config = EngineConfig{
     .camera_config = .{
@@ -44,28 +45,6 @@ const engine_config = EngineConfig{
     },
 };
 
-const PerCubeOut = cube.PerCubeOut;
-
-const AtomicUsize = std.atomic.Value(usize);
-
-fn cube_worker(
-    next: *AtomicUsize,
-    cubes: []cube.Cube,
-    outs: []PerCubeOut,
-) void {
-    while (true) {
-        const i = next.fetchAdd(1, .monotonic);
-        if (i >= cubes.len) break;
-
-        outs[i].len = cubes[i].genRasterTriangles(
-            engine.renderer,
-            &engine.camera,
-            &engine.atlas,
-            &outs[i].tris,
-        );
-    }
-}
-
 var engine: Engine = undefined;
 
 pub fn main() !void {
@@ -87,35 +66,13 @@ pub fn main() !void {
 
     var t: usize = 0;
 
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
-    const outs = try arena_allocator.alloc(PerCubeOut, scene.cubes.len);
-
     while (engine.platform.running) : (t += 1) {
         var frame = try engine.begin_frame();
         defer engine.end_frame(&frame);
 
         engine.camera.view_mat = mat.create_view(engine.camera.from, engine.camera.to);
 
-        // generate raster triangles from cubes
-        var next = AtomicUsize.init(0);
-        var wg = std.Thread.WaitGroup{};
-        const worker_count = try std.Thread.getCpuCount();
-
-        @memset(outs, .{});
-
-        for (0..worker_count) |_| {
-            pool.spawnWg(&wg, cube_worker, .{ &next, scene.cubes[0..], outs });
-        }
-        wg.wait();
-
-        // Merge results
-        for (outs) |*lst| {
-            const src = lst.tris[0..lst.len];
-            engine.renderer.triangles.appendSliceAssumeCapacity(src);
-        }
+        try cube_worker.render_all(allocator, &engine, &scene, &pool);
 
         try engine.renderer.render(&pool, &engine.tile_pool, frame.framebuffer, allocator, &engine.atlas);
 
