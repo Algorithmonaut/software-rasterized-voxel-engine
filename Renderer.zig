@@ -14,8 +14,12 @@ const Vec3f = cfg.Vec3f;
 const Float = cfg.Float;
 const Chunk = @import("Chunk.zig").Chunk;
 const Cube = @import("Cube.zig").Cube;
+const World = @import("World.zig").World;
 
 const cube_worker = @import("cube-worker.zig");
+
+const WorldCoord = @import("math/types.zig").WorldCoord;
+const ChunkCoord = @import("math/types.zig").ChunkCoord;
 
 const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
 pub const cube_count = 10000; // FIX: Change this shit
@@ -311,5 +315,86 @@ pub const Renderer = struct {
             // For now we render everything as grass blocks
             self.cubes_triangles_count[i] = cube_grass.genRasterTriangles(self, camera, atlas, self.triangles[i * 12 .. i * 12 + 12], .{ x, y, z, 0 });
         }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+
+    fn worldToChunkCoord(coord: WorldCoord, chunk_size: i32) ChunkCoord {
+        const x_i = @as(i32, @intFromFloat(@floor(coord[0])));
+        const y_i = @as(i32, @intFromFloat(@floor(coord[1])));
+        const z_i = @as(i32, @intFromFloat(@floor(coord[2])));
+
+        return .{
+            @divFloor(x_i, chunk_size),
+            @divFloor(y_i, chunk_size),
+            @divFloor(z_i, chunk_size),
+        };
+    }
+
+    /// Returns the avg of the two AABB points
+    fn chunkCenter(chunk: *const Chunk) @Vector(3, f32) {
+        const half_vec = @as(@Vector(3, f32), @splat(0.5));
+        return (chunk.world_min + chunk.world_max) * half_vec;
+    }
+
+    fn dist2ToPlayer(player: WorldCoord, chunk: *const Chunk) f32 {
+        const c = chunkCenter(chunk);
+        const d = c - player;
+        return d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    }
+
+    const ChunkRenderEntry = struct {
+        chunk: *Chunk,
+        dist2: f32,
+    };
+
+    pub fn renderWorld(
+        self: *Renderer,
+        allocator: std.mem.Allocator,
+        player_pos: WorldCoord,
+        view_distance: Float, // should not be a float
+        world: *World,
+    ) !void {
+        _ = self;
+        const player_chunk = worldToChunkCoord(player_pos, 16); // FIX: Change magic number
+
+        const side: usize = @intCast(view_distance * 2 + 1); // understand this
+        const estimated: usize = side * side * side;
+        var entries = try std.ArrayList(ChunkRenderEntry).initCapacity(
+            allocator,
+            estimated,
+        );
+        defer entries.deinit(allocator);
+
+        // For a render radius R = view_distance, gather chunk coords around the player
+        var cz = player_chunk[2] - view_distance;
+        while (cz <= player_chunk[2] + view_distance) : (cz += 1) {
+            var cy = player_chunk[1] - view_distance;
+            while (cy <= player_chunk[1] + view_distance) : (cy += 1) {
+                var cx = player_chunk[0] - view_distance;
+                while (cx <= player_chunk[0] + view_distance) : (cx += 1) {
+                    const coord = ChunkCoord{ cx, cy, cz };
+
+                    if (world.getChunk(coord)) |chunk| {
+                        // TODO: Frustum cull here first
+
+                        try entries.append(.{
+                            .chunk = chunk,
+                            .dist2 = dist2ToPlayer(player_pos, chunk),
+                        });
+                    }
+                }
+            }
+        }
+
+        std.sort.block(ChunkRenderEntry, entries.items, {}, struct {
+            fn lessThan(_: void, a: ChunkRenderEntry, b: ChunkRenderEntry) bool {
+                return a.dist2 < b.dist2;
+            }
+        }.lessThan);
+
+        // for (entries.items) |entry| {
+        //     renderChunk(self: *Renderer, allocator: Allocator, chunk: *Chunk, camera: *Camera, atlas: *Atlas, pool: Pool)
+        // }
     }
 };
