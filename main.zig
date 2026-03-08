@@ -29,9 +29,9 @@ const engine_config = EngineConfig{
     },
 
     .framebuffer_config = .{
-        .width = 1920,
-        .height = 1080,
-        .scale = 1,
+        .width = 960,
+        .height = 540,
+        .scale = 2,
         .tile_dimensions = 8,
     },
 

@@ -18,6 +18,8 @@ pub const cube_count = 10000; // FIX: Change this shit
 
 const AtomicUsize = std.atomic.Value(usize);
 
+const batch_size: usize = 16;
+
 fn tile_worker(
     next: *AtomicUsize,
     renderer: *const Renderer,
@@ -28,57 +30,30 @@ fn tile_worker(
     atlas: *Atlas,
 ) void {
     while (true) {
-        const tile_i = next.fetchAdd(1, .monotonic);
-        if (tile_i >= tiles_pool.tiles_count) break;
+        const tile_base = next.fetchAdd(batch_size, .monotonic);
+        if (tile_base >= tiles_pool.tiles_count) break;
 
-        const start = tile_offsets[tile_i];
-        const end = tile_offsets[tile_i + 1];
+        for (0..batch_size) |incr| {
+            const tile_i = tile_base + incr;
+            if (tile_i >= tiles_pool.tiles_count) break;
 
-        if (start == end) continue;
+            const start = tile_offsets[tile_i];
+            const end = tile_offsets[tile_i + 1];
 
-        var t = &tiles_pool.tiles[tile_i];
-        t.clear();
+            if (start == end) continue;
 
-        for (tile_refs[start..end]) |tri_i_u| {
-            const tri_i: usize = @intCast(tri_i_u);
-            renderer.triangles[tri_i].render_triangle_in_tile(t, atlas);
+            var t = &tiles_pool.tiles[tile_i];
+            t.clear();
+
+            for (tile_refs[start..end]) |tri_i_u| {
+                const tri_i: usize = @intCast(tri_i_u);
+                renderer.triangles[tri_i].render_triangle_in_tile(t, atlas);
+            }
+
+            t.write_to_fb(buf);
         }
-
-        t.write_to_fb(buf);
     }
 }
-
-const TileRenderJob = struct {
-    wg: *std.Thread.WaitGroup,
-    renderer: *const Renderer,
-    tiles_pool: *tile.TilePool,
-    buf: Framebuffer,
-    // tile_offsets: *const [tiles_pool.tiles_count + 1]usize,
-    tile_offsets: []usize,
-    tile_refs: []const cfg.Uint,
-    tile_i: usize,
-
-    atlas: *Atlas,
-
-    pub fn run(job: *TileRenderJob) void {
-        defer job.wg.finish();
-
-        const tile_i = job.tile_i;
-        const start = job.tile_offsets[tile_i];
-        const end = job.tile_offsets[tile_i + 1];
-        if (start == end) return;
-
-        var t = &job.tiles_pool.tiles[tile_i];
-        t.clear();
-
-        for (job.tile_refs[start..end]) |tri_i_u| {
-            const tri_i: usize = @intCast(tri_i_u);
-            job.renderer.triangles.items[tri_i].render_triangle_in_tile(t, job.atlas);
-        }
-
-        t.write_to_fb(job.buf);
-    }
-};
 
 pub const Renderer = struct {
     triangles: []RasterTriangle,
@@ -123,7 +98,7 @@ pub const Renderer = struct {
         _ = allocator;
     }
 
-    inline fn tile_range_for_tri(triangle: RasterTriangle) struct {
+    inline fn tile_range_for_tri(self: *Renderer, triangle: RasterTriangle) struct {
         min_tx: usize,
         max_tx: usize,
         min_ty: usize,
@@ -132,10 +107,10 @@ pub const Renderer = struct {
         const bb = triangle.bounding_box();
 
         // WARN: Change to divCeil if it does not work for max
-        const min_tx = @divFloor(bb.min_x, cfg.tile_dimensions);
-        const min_ty = @divFloor(bb.min_y, cfg.tile_dimensions);
-        const max_tx = std.math.divCeil(usize, bb.max_x, cfg.tile_dimensions) catch unreachable;
-        const max_ty = std.math.divCeil(usize, bb.max_y, cfg.tile_dimensions) catch unreachable;
+        const min_tx = @divFloor(bb.min_x, self.tile_dimensions);
+        const min_ty = @divFloor(bb.min_y, self.tile_dimensions);
+        const max_tx = std.math.divCeil(usize, bb.max_x, self.tile_dimensions) catch unreachable;
+        const max_ty = std.math.divCeil(usize, bb.max_y, self.tile_dimensions) catch unreachable;
 
         // WARN: Clamp to tile grid if necessary
 
@@ -173,7 +148,7 @@ pub const Renderer = struct {
             const base = cube_idx * 12;
 
             for (self.triangles[base .. base + count]) |triangle| {
-                const range = tile_range_for_tri(triangle);
+                const range = tile_range_for_tri(self, triangle);
 
                 var x = range.min_tx;
                 while (x < range.max_tx) : (x += 1) {
@@ -207,7 +182,7 @@ pub const Renderer = struct {
             const base = cube_idx * 12;
 
             for (self.triangles[base .. base + count], base..base + count) |triangle, tri_i| {
-                const range = tile_range_for_tri(triangle);
+                const range = tile_range_for_tri(self, triangle);
 
                 var tx = range.min_tx;
                 while (tx < range.max_tx) : (tx += 1) {

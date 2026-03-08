@@ -1,20 +1,19 @@
 const cfg = @import("config.zig");
-const size = cfg.tile_dimensions; // WARN: To refactor, should be held in FramebufferConfig
 const Float = cfg.Float;
 const std = @import("std");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const FramebufferConfig = @import("engine/EngineConfig.zig").EngineConfig.FramebufferConfig;
 
 pub const Tile = struct {
-    z_buf: [size * size]Float,
-    buf: [size * size]u32,
+    z_buf: []Float,
+    buf: []u32,
     pos: [2]usize,
     was_occupied: bool,
 
-    pub fn init(x: usize, y: usize) Tile {
+    pub fn init(allocator: std.mem.Allocator, x: usize, y: usize, size: usize) !Tile {
         return .{
-            .z_buf = undefined,
-            .buf = undefined,
+            .z_buf = try allocator.alloc(Float, size * size),
+            .buf = try allocator.alloc(u32, size * size),
             .pos = .{ x, y },
             .was_occupied = false,
         };
@@ -48,6 +47,7 @@ pub const TilePool = struct {
     tiles_count_w: usize,
     tiles_count_h: usize,
     tiles_count: usize,
+    tile_dimensions: usize,
 
     pub fn init(allocator: std.mem.Allocator, conf: FramebufferConfig) !TilePool {
         const tiles_count_w = try std.math.divCeil(usize, conf.width, conf.tile_dimensions);
@@ -59,7 +59,7 @@ pub const TilePool = struct {
         for (0..tiles_count) |i| {
             const x_pos = (i % tiles_count_w) * tile_dimensions;
             const y_pos = (i / tiles_count_w) * tile_dimensions;
-            tiles[i] = Tile.init(x_pos, y_pos);
+            tiles[i] = try Tile.init(allocator, x_pos, y_pos, conf.tile_dimensions);
         }
 
         return .{
@@ -67,40 +67,19 @@ pub const TilePool = struct {
             .tiles_count_w = tiles_count_w,
             .tiles_count_h = tiles_count_h,
             .tiles_count = tiles_count,
+            .tile_dimensions = conf.tile_dimensions,
         };
     }
 
     pub fn debug_show_tiles_border(self: *TilePool, buf: Framebuffer) void {
-        var color: u32 = 0xFF7F0000;
-        // for (self.tiles) |tile| {
-        //     const x0 = tile.pos[0];
-        //     const y0 = tile.pos[1];
-        //
-        //     const x1 = @min(x0 + size - 1, cfg.width - 1);
-        //     const y1 = @min(y0 + size - 1, cfg.height - 1);
-        //
-        //     // Top edge
-        //     var x: usize = x0;
-        //     while (x <= x1) : (x += 1) {
-        //         buf.set_pixel(x, y0, color);
-        //     }
-        //
-        //     // Left edge
-        //     var y: usize = y0;
-        //     while (y <= y1) : (y += 1) {
-        //         buf.set_pixel(x0, y, color);
-        //     }
-        // }
-
-        // color = 0x30FF0000;
-        color = 0x50FF0000;
+        const color: u32 = 0xF0FF0000;
         for (self.tiles) |*tile| {
             if (tile.was_occupied) {
                 const x0 = tile.pos[0] + 2;
                 const y0 = tile.pos[1] + 2;
 
-                const x1 = @min(x0 + size - 1, cfg.width - 1) - 2;
-                const y1 = @min(y0 + size - 1, cfg.height - 1) - 2;
+                const x1 = @min(x0 + self.tile_dimensions - 1, cfg.width - 1) - 2;
+                const y1 = @min(y0 + self.tile_dimensions - 1, cfg.height - 1) - 2;
 
                 // Top/bottom edge
                 var x: usize = x0;
