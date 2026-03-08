@@ -35,7 +35,7 @@ pub const Framebuffer = struct {
 
     pub inline fn clear_black(self: *const Framebuffer) void {
         const row_ptr: [*]u8 = self.base;
-        const bytes = self.pitch * cfg.height;
+        const bytes = self.pitch * self.height;
         @memset(row_ptr[0..bytes], 0);
     }
 

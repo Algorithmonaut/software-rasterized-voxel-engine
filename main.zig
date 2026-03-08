@@ -62,8 +62,6 @@ pub fn main() !void {
 
     var scene = try Scene.Scene.init(allocator);
 
-    engine.camera.proj_mat = mat.create_projection_matrix(&engine.camera);
-
     var t: usize = 0;
 
     while (engine.platform.running) : (t += 1) {

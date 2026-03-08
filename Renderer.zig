@@ -80,15 +80,9 @@ const TileRenderJob = struct {
     }
 };
 
-pub const TriSpan = struct {
-    start: u32,
-    len: u32,
-};
-
 pub const Renderer = struct {
     triangles: []RasterTriangle,
-    // tri_spans: std.ArrayList(TriSpan),
-    tri_spans: std.ArrayList(TriSpan),
+    cubes_triangles_count: []usize,
 
     width: usize,
     height: usize,
@@ -101,8 +95,8 @@ pub const Renderer = struct {
 
     pub fn init(allocator: std.mem.Allocator, conf: FramebufferConfig, tile_counts: usize) !Renderer {
         return .{
-            .triangles = try allocator.alloc(RasterTriangle, cube_count * 12 + 10000), // FIX: Improve safety guard
-            .tri_spans = try std.ArrayList(TriSpan).initCapacity(allocator, 1024),
+            .triangles = try allocator.alloc(RasterTriangle, cube_count * 12),
+            .cubes_triangles_count = try allocator.alloc(usize, cube_count),
 
             .width = conf.width,
             .height = conf.height,
@@ -119,14 +113,14 @@ pub const Renderer = struct {
         allocator.free(self.tile_offsets);
         allocator.free(self.write_pos);
         allocator.free(self.tile_refs);
+        allocator.free(self.cubes_triangles_count);
     }
 
     pub fn begin_frame(self: *Renderer, allocator: std.mem.Allocator) !void {
         // self.triangles.clearRetainingCapacity();
         // try self.triangles.ensureTotalCapacity(allocator, cube_count * 6 * 2);
+        _ = self;
         _ = allocator;
-
-        self.tri_spans.clearRetainingCapacity();
     }
 
     inline fn tile_range_for_tri(triangle: RasterTriangle) struct {
@@ -172,14 +166,13 @@ pub const Renderer = struct {
         // P: First pass (count the triangles for each tile)
         @memset(self.tile_counts[0..], 0);
 
-        for (self.tri_spans.items) |span| {
-            const start: usize = span.start;
-            const end: usize = start + span.len;
+        for (0..self.cubes_triangles_count.len) |cube_idx| {
+            const count = self.cubes_triangles_count[cube_idx];
+            if (count == 0) continue;
 
-            var tri_i = start;
-            while (tri_i < end) : (tri_i += 1) {
-                const triangle = self.triangles[tri_i];
+            const base = cube_idx * 12;
 
+            for (self.triangles[base .. base + count]) |triangle| {
                 const range = tile_range_for_tri(triangle);
 
                 var x = range.min_tx;
@@ -207,14 +200,13 @@ pub const Renderer = struct {
         for (0..tiles_pool.tiles_count) |t| self.write_pos[t] = self.tile_offsets[t];
 
         // P: Second pass (scatter triangle indices into tile_refs)
-        for (self.tri_spans.items) |span| {
-            const start: usize = span.start;
-            const end: usize = start + span.len;
+        for (0..self.cubes_triangles_count.len) |cube_idx| {
+            const count = self.cubes_triangles_count[cube_idx];
+            if (count == 0) continue;
 
-            var tri_i = start;
-            while (tri_i < end) : (tri_i += 1) {
-                const triangle = self.triangles[tri_i];
+            const base = cube_idx * 12;
 
+            for (self.triangles[base .. base + count], base..base + count) |triangle, tri_i| {
                 const range = tile_range_for_tri(triangle);
 
                 var tx = range.min_tx;

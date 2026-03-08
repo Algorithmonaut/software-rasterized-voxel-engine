@@ -54,7 +54,7 @@ pub const Cube = struct {
 
     pub inline fn genRasterTriangles(
         self: *Cube,
-        renderer: Renderer,
+        renderer: *Renderer,
         camera: *Camera,
         atlas: *Atlas,
         out: []tri.RasterTriangle,

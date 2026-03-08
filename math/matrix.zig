@@ -82,15 +82,14 @@ pub const Mat4f = struct {
     }
 };
 
-pub fn create_projection_matrix(cam: *Camera) Mat4f {
-    const far = cam.view_distance;
+pub fn create_projection_matrix(fov: f32, far: f32, fb_width: usize, fb_height: usize) Mat4f {
     const near = 1;
 
-    const w: Float = @floatFromInt(cfg.width);
-    const h: Float = @floatFromInt(cfg.height);
+    const w: Float = @floatFromInt(fb_width);
+    const h: Float = @floatFromInt(fb_height);
     const aspect: Float = w / h;
 
-    const y_scale: Float = 1.0 / @tan(cam.fov * std.math.pi / 360.0);
+    const y_scale: Float = 1.0 / @tan(fov * std.math.pi / 360.0);
     const x_scale: Float = y_scale / aspect;
 
     return .{ .r = .{

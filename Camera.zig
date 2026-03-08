@@ -29,7 +29,7 @@ pub const Camera = struct {
         down: bool = false,
     };
 
-    pub fn init(conf: CameraConfig) Camera {
+    pub fn init(conf: CameraConfig, fb_width: usize, fb_height: usize) Camera {
         return .{
             .from = conf.from,
             .to = conf.to,
@@ -37,11 +37,16 @@ pub const Camera = struct {
             .fov = conf.fov,
             .speed = conf.speed,
             .sensivity = conf.sensivity,
+            .proj_mat = mat.create_projection_matrix(
+                conf.fov,
+                conf.view_distance,
+                fb_width,
+                fb_height,
+            ),
 
             .yaw = 0.0,
             .pitch = 0.0,
             .view_mat = undefined,
-            .proj_mat = undefined,
         };
     }
 
