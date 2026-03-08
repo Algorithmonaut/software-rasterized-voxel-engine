@@ -4,22 +4,23 @@ const c = @cImport({
     @cInclude("SDL2/SDL.h");
 });
 const cfg = @import("config.zig");
-const cube = @import("cube.zig");
+const cube = @import("Cube.zig");
 const ctx = @import("context.zig");
 const tri = @import("triangle.zig");
-const mat = @import("matrix.zig");
+const mat = @import("math/matrix.zig");
 const Scene = @import("scene.zig");
 
-const Engine = @import("Engine.zig");
+const Engine = @import("Engine.zig").Engine;
 const Atlas = @import("Atlas.zig").Atlas;
 const Camera = @import("Camera.zig").Camera;
-
 const EngineConfig = @import("./engine/EngineConfig.zig").EngineConfig;
+const Framebuffer = @import("Framebuffer.zig").Framebuffer;
+const Renderer = @import("Renderer.zig").Renderer;
 
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 200.0,
+        .view_distance = 2000.0,
         .from = .{ 0, 0, 0 },
         .to = .{ 0, 0, 0 },
         .speed = 40.0,
@@ -44,27 +45,33 @@ const engine_config = EngineConfig{
 
 const PerCubeOut = cube.PerCubeOut;
 
-var engine: Engine.Engine = undefined;
+const AtomicUsize = std.atomic.Value(usize);
 
-const GenRasterTrianglesJob = struct {
-    wg: *std.Thread.WaitGroup,
-    cube: *cube.Cube,
-    view: mat.Mat4f,
-    out: *PerCubeOut,
-    camera: *Camera,
-    atlas: *Atlas,
+fn cube_worker(
+    next: *AtomicUsize,
+    cubes: []cube.Cube,
+    outs: []PerCubeOut,
+) void {
+    while (true) {
+        const i = next.fetchAdd(1, .monotonic);
+        if (i >= cubes.len) break;
 
-    pub fn run(job: *GenRasterTrianglesJob) void {
-        defer job.wg.finish();
-        job.cube.genRasterTriangles(engine.renderer, job.view, job.out, job.camera, job.atlas);
+        outs[i].len = cubes[i].genRasterTriangles(
+            engine.renderer,
+            &engine.camera,
+            &engine.atlas,
+            &outs[i].tris,
+        );
     }
-};
+}
+
+var engine: Engine = undefined;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    engine = try Engine.Engine.init(
+    engine = try Engine.init(
         allocator, // Allocator
         engine_config,
     );
@@ -73,7 +80,7 @@ pub fn main() !void {
     var pool: std.Thread.Pool = undefined;
     try pool.init(.{ .allocator = allocator });
 
-    var scene = Scene.Scene.init();
+    var scene = try Scene.Scene.init(allocator);
 
     engine.camera.proj_mat = mat.create_projection_matrix(&engine.camera);
 
@@ -83,36 +90,33 @@ pub fn main() !void {
         var frame = try engine.begin_frame();
         defer engine.end_frame(&frame);
 
-        const view: mat.Mat4f = mat.create_view(engine.camera.from, engine.camera.to);
-
-        var wg = std.Thread.WaitGroup{}; // used to wait for threads to finish
+        // const view: mat.Mat4f = mat.create_view(engine.camera.from, engine.camera.to);
+        engine.camera.view_mat = mat.create_view(engine.camera.from, engine.camera.to);
 
         var arena = std.heap.ArenaAllocator.init(allocator);
         defer arena.deinit();
         const arena_allocator = arena.allocator();
 
-        var jobs = try arena_allocator.alloc(GenRasterTrianglesJob, scene.cubes.len);
+        // generate raster triangles from cubes
+        var next = AtomicUsize.init(0);
+        var wg = std.Thread.WaitGroup{};
+        const worker_count = try std.Thread.getCpuCount();
 
-        // Per cube output buffers
-        var outs = try arena_allocator.alloc(PerCubeOut, scene.cubes.len);
+        const outs = try arena_allocator.alloc(PerCubeOut, scene.cubes.len);
         @memset(outs, .{});
 
-        for (&scene.cubes, 0..) |*cu, i| {
-            wg.start();
-
-            jobs[i] = .{
-                .wg = &wg,
-                .cube = cu,
-                .view = view,
-                .out = &outs[i],
-                .camera = &engine.camera,
-                .atlas = &engine.atlas,
-            };
-
-            try pool.spawn(GenRasterTrianglesJob.run, .{&jobs[i]});
+        for (0..worker_count) |_| {
+            pool.spawnWg(&wg, struct {
+                fn run(
+                    next_: *AtomicUsize,
+                    cubes_: []cube.Cube,
+                    outs_: []PerCubeOut,
+                ) void {
+                    cube_worker(next_, cubes_, outs_);
+                }
+            }.run, .{ &next, scene.cubes[0..], outs });
         }
-
-        wg.wait(); // ensure all jobs are finished
+        wg.wait();
 
         // Merge results
         for (outs) |*lst| {

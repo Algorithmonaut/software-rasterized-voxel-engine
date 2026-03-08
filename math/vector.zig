@@ -2,7 +2,7 @@
 //       Matrices are row-major
 
 const std = @import("std");
-const cfg = @import("config.zig");
+const cfg = @import("../config.zig");
 
 pub const Float = cfg.Float;
 pub const Vec3f = cfg.Vec3f;

@@ -1,7 +1,7 @@
 const std = @import("std");
 const main = @import("main.zig");
 const tri = @import("triangle.zig");
-const matrix = @import("matrix.zig");
+const mat = @import("math/matrix.zig");
 const cfg = @import("config.zig");
 const BlockTypes = @import("Atlas.zig").BlockTypes;
 const Float = cfg.Float;
@@ -10,6 +10,7 @@ const Vec3f = cfg.Vec3f;
 const Renderer = @import("Renderer.zig").Renderer;
 const Camera = @import("Camera.zig").Camera;
 const Atlas = @import("Atlas.zig").Atlas;
+const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 
 const vertices: [8]Vec4f = .{
     .{ -1, -1, -1, 1 },
@@ -54,28 +55,18 @@ pub const Cube = struct {
     pub inline fn genRasterTriangles(
         self: *Cube,
         renderer: Renderer,
-        view: matrix.Mat4f,
-        out: *PerCubeOut,
         camera: *Camera,
         atlas: *Atlas,
-    ) void {
+        out: []tri.RasterTriangle,
+    ) u8 {
         var n: u8 = 0;
 
-        const angle: Float = 3.14 / 40000.0 * self.pos[1];
-        const rotation_mat_y = matrix.Mat4f.rotate_y(angle * 1.5);
-        const rotation_mat_z = matrix.Mat4f.rotate_z(angle);
-
-        const rotation_mat = rotation_mat_y.mul(rotation_mat_z);
-        for (&self.vertices) |*vertex| {
-            vertex.* = rotation_mat.mul_vec(vertex.*);
-        }
-
-        const world_to_camera = view;
+        const view = camera.view_mat;
         var verts_cpy = self.vertices;
 
         for (&verts_cpy) |*vertex| {
             vertex.* += self.pos;
-            vertex.* = world_to_camera.mul_vec(vertex.*);
+            vertex.* = view.mul_vec(vertex.*);
         }
 
         const cube_start_x = 0;
@@ -190,16 +181,16 @@ pub const Cube = struct {
             };
 
             if (renderer.gen_raster_triangle(&triangle, camera)) |rt| {
-                out.tris[n] = rt;
+                out[n] = rt;
                 n += 1;
             }
 
             if (renderer.gen_raster_triangle(&triangle2, camera)) |rt| {
-                out.tris[n] = rt;
+                out[n] = rt;
                 n += 1;
             }
-
-            out.len = n;
         }
+
+        return n;
     }
 };

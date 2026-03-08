@@ -7,7 +7,7 @@ const c = @cImport({
 });
 const cfg = @import("config.zig");
 const ctx = @import("context.zig");
-const vec = @import("vector.zig");
+const vec = @import("math/vector.zig");
 const Camera = @import("Camera.zig").Camera;
 const SdlGraphics = @import("SdlGraphics.zig").SdlGraphics;
 
@@ -72,7 +72,12 @@ pub const SdlPlatform = struct {
         }
     }
 
-    pub fn process_inputs(self: *SdlPlatform, dt: f32, camera: *Camera, sdl_gfx: *SdlGraphics) void {
+    pub fn process_inputs(
+        self: *SdlPlatform,
+        dt: f32,
+        camera: *Camera,
+        sdl_gfx: *SdlGraphics,
+    ) void {
         while (c.SDL_PollEvent(&self.ev) != 0) {
             switch (self.ev.type) {
                 c.SDL_QUIT => self.running = false,

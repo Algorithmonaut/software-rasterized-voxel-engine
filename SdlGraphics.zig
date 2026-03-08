@@ -88,6 +88,8 @@ pub const SdlGraphics = struct {
         return .{
             .base = base,
             .pitch = pitch,
+            .width = @intCast(self.width),
+            .height = @intCast(self.height),
         }; // Returns a framebuffer object
     }
 

@@ -35,12 +35,8 @@ pub const Atlas = struct {
         const reader = &file_reader.interface;
 
         const atlas = try allocator.alloc(u32, atlas_size);
-        // defer allocator.free(atlas);
 
         try reader.readSliceAll(std.mem.sliceAsBytes(atlas));
-
-        // const atlas_u32: []u32 =
-        //     @as([*]u32, @ptrCast(@alignCast(atlas.ptr)))[0 .. atlas.len / 4];
 
         // Ensure there is not trailing data
         var extra: [1]u8 = undefined;

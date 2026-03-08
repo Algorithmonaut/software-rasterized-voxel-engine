@@ -8,7 +8,7 @@ const Vec3f = cfg.Vec3f;
 const Vec4f = cfg.Vec4f;
 const Vec3i = cfg.Vec3i;
 const Vec4i = cfg.Vec4i;
-const mat = @import("matrix.zig");
+const mat = @import("math/matrix.zig");
 const ctx = @import("context.zig");
 
 pub const RasterTriangle = struct {

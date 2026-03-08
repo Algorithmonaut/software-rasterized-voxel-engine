@@ -8,6 +8,8 @@ const c = @cImport({
 pub const Framebuffer = struct {
     base: [*]u8, // ptr to the first byte of pixels
     pitch: usize, // bytes per row (maybe aligned)
+    width: usize,
+    height: usize,
 
     /// NOTE: Please do not use this shit
     pub inline fn set_pixel(self: *const Framebuffer, x: usize, y: usize, color: u32) void {
@@ -22,6 +24,19 @@ pub const Framebuffer = struct {
         const row_u32: [*]u32 = @ptrCast(@alignCast(row_ptr));
 
         return row_u32[@as(usize, @intCast(x))];
+    }
+
+    pub inline fn get_scanline(self: *const Framebuffer, y: usize) [*]u32 {
+        const row_ptr: [*]u8 = self.base + @as(usize, @intCast(y)) * self.pitch;
+        const row_u32: [*]u32 = @ptrCast(@alignCast(row_ptr));
+
+        return row_u32;
+    }
+
+    pub inline fn clear_black(self: *const Framebuffer) void {
+        const row_ptr: [*]u8 = self.base;
+        const bytes = self.pitch * cfg.height;
+        @memset(row_ptr[0..bytes], 0);
     }
 
     pub inline fn set_pixel_blend(
@@ -61,18 +76,5 @@ pub const Framebuffer = struct {
         const argb: u32 = (0xFF << 24) | (r << 16) | (g << 8) | b;
 
         self.set_pixel(x, y, argb);
-    }
-
-    pub inline fn get_scanline(self: *const Framebuffer, y: usize) [*]u32 {
-        const row_ptr: [*]u8 = self.base + @as(usize, @intCast(y)) * self.pitch;
-        const row_u32: [*]u32 = @ptrCast(@alignCast(row_ptr));
-
-        return row_u32;
-    }
-
-    pub inline fn clear_black(self: *const Framebuffer) void {
-        const row_ptr: [*]u8 = self.base;
-        const bytes = self.pitch * cfg.height;
-        @memset(row_ptr[0..bytes], 0);
     }
 };

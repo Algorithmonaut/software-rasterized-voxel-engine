@@ -2,9 +2,9 @@
 
 const CameraConfig = @import("engine/EngineConfig.zig").EngineConfig.CameraConfig;
 const std = @import("std");
-const mat = @import("matrix.zig");
+const mat = @import("math/matrix.zig");
 const cfg = @import("config.zig");
-const vec = @import("vector.zig");
+const vec = @import("math/vector.zig");
 const Vec3f = cfg.Vec3f;
 
 pub const Camera = struct {

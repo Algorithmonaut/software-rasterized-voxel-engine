@@ -14,7 +14,39 @@ const Vec3f = cfg.Vec3f;
 const Float = cfg.Float;
 
 const FramebufferConfig = @import("engine/EngineConfig.zig").EngineConfig.FramebufferConfig;
-pub const cube_count = 100;
+pub const cube_count = 10000; // FIX: Change this shit
+
+const AtomicUsize = std.atomic.Value(usize);
+
+fn tile_worker(
+    next: *AtomicUsize,
+    renderer: *const Renderer,
+    tiles_pool: *tile.TilePool,
+    buf: Framebuffer,
+    tile_offsets: []const usize,
+    tile_refs: []const cfg.Uint,
+    atlas: *Atlas,
+) void {
+    while (true) {
+        const tile_i = next.fetchAdd(1, .monotonic);
+        if (tile_i >= tiles_pool.tiles_count) break;
+
+        const start = tile_offsets[tile_i];
+        const end = tile_offsets[tile_i + 1];
+
+        if (start == end) continue;
+
+        var t = &tiles_pool.tiles[tile_i];
+        t.clear();
+
+        for (tile_refs[start..end]) |tri_i_u| {
+            const tri_i: usize = @intCast(tri_i_u);
+            renderer.triangles.items[tri_i].render_triangle_in_tile(t, atlas);
+        }
+
+        t.write_to_fb(buf);
+    }
+}
 
 const TileRenderJob = struct {
     wg: *std.Thread.WaitGroup,
@@ -54,7 +86,12 @@ pub const Renderer = struct {
     height: usize,
     tile_dimensions: usize,
 
-    pub fn init(allocator: std.mem.Allocator, conf: FramebufferConfig) !Renderer {
+    tile_counts: []usize,
+    tile_offsets: []usize,
+    write_pos: []usize, // Per tile write cursor
+    tile_refs: []Uint, // FIX: CHANGE TO USIZE, IAM GETTING TIRED OF BEING DUMB
+
+    pub fn init(allocator: std.mem.Allocator, conf: FramebufferConfig, tile_counts: usize) !Renderer {
         return .{
             .triangles = try std.ArrayList(RasterTriangle).initCapacity(
                 allocator,
@@ -64,11 +101,18 @@ pub const Renderer = struct {
             .width = conf.width,
             .height = conf.height,
             .tile_dimensions = conf.tile_dimensions,
+            .tile_counts = try allocator.alloc(usize, tile_counts),
+            .tile_offsets = try allocator.alloc(usize, tile_counts + 1),
+            .write_pos = try allocator.alloc(usize, tile_counts),
+            .tile_refs = try allocator.alloc(Uint, 1000000), // Initial guess
         };
     }
 
-    pub fn deinit(self: *Renderer) void {
-        _ = self;
+    pub fn deinit(self: *Renderer, allocator: std.mem.Allocator) void {
+        allocator.free(self.tile_counts);
+        allocator.free(self.tile_offsets);
+        allocator.free(self.write_pos);
+        allocator.free(self.tile_refs);
     }
 
     pub fn begin_frame(self: *Renderer, allocator: std.mem.Allocator) !void {
@@ -92,14 +136,20 @@ pub const Renderer = struct {
 
         // WARN: Clamp to tile grid if necessary
 
-        // return .{
-        //         .min_tx = @min(min_tx, tile.tiles_w),
-        //         .max_tx_excl = @min(max_tx_excl, tile.tiles_w),
-        //         .min_ty = @min(min_ty, tile.tiles_h),
-        //         .max_ty_excl = @min(max_ty_excl, tile.tiles_h),
-        //     };
-
         return .{ .min_tx = min_tx, .max_tx = max_tx, .min_ty = min_ty, .max_ty = max_ty };
+    }
+
+    fn ensureTileRefsCapacity(
+        self: *Renderer,
+        allocator: std.mem.Allocator,
+        needed: usize,
+    ) !void {
+        if (self.tile_refs.len >= needed) return;
+
+        const new_cap = @max(self.tile_refs.len * 8, needed); // Maybe 8 is a bit too much
+        const new_buf = try allocator.alloc(Uint, new_cap);
+        allocator.free(self.tile_refs);
+        self.tile_refs = new_buf;
     }
 
     pub fn render(
@@ -111,11 +161,7 @@ pub const Renderer = struct {
         atlas: *Atlas,
     ) !void {
         // P: First pass (count the triangles for each tile)
-
-        // var tile_counts: [tiles_pool.tiles_count]Uint = [_]Uint{0} ** tiles_pool.tiles_count;
-        var tile_counts = try allocator.alloc(Uint, tiles_pool.tiles_count);
-        @memset(tile_counts[0..], 0);
-        defer allocator.free(tile_counts);
+        @memset(self.tile_counts[0..], 0);
 
         for (self.triangles.items) |triangle| {
             const range = tile_range_for_tri(triangle);
@@ -125,33 +171,23 @@ pub const Renderer = struct {
                 var y = range.min_ty;
                 while (y < range.max_ty) : (y += 1) {
                     const idx = x + tiles_pool.tiles_count_w * y;
-                    tile_counts[idx] += 1;
+                    self.tile_counts[idx] += 1;
                     tiles_pool.tiles[idx].was_occupied = true;
                 }
             }
         }
 
-        // var tile_offsets: [tiles_pool.tiles_count + 1]usize = undefined;
-        var tile_offsets = try allocator.alloc(usize, tiles_pool.tiles_count + 1);
-        defer allocator.free(tile_offsets);
-
         var sum: usize = 0;
         for (0..tiles_pool.tiles_count) |t| {
-            tile_offsets[t] = sum;
-            sum += @as(usize, tile_counts[t]);
+            self.tile_offsets[t] = sum;
+            sum += @as(usize, self.tile_counts[t]);
         }
-        // tile_offsets[tiles_pool.tiles_count] = sum;
-        tile_offsets[tiles_pool.tiles_count] = sum;
+        self.tile_offsets[tiles_pool.tiles_count] = sum;
 
-        var tile_refs = try allocator.alloc(Uint, sum);
-        defer allocator.free(tile_refs);
+        try self.ensureTileRefsCapacity(allocator, sum);
 
-        // Per tile write cursor
-        // var write_pos: [tiles_pool.tiles_count]usize = undefined;
-        var write_pos = try allocator.alloc(usize, tiles_pool.tiles_count);
-        defer allocator.free(write_pos);
-
-        for (0..tiles_pool.tiles_count) |t| write_pos[t] = tile_offsets[t];
+        // FIX: Change to a memcpy
+        for (0..tiles_pool.tiles_count) |t| self.write_pos[t] = self.tile_offsets[t];
 
         // P: Second pass (scatter triangle indices into tile_refs)
         for (self.triangles.items, 0..) |triangle, tri_i| {
@@ -163,41 +199,46 @@ pub const Renderer = struct {
                 while (ty < range.max_ty) : (ty += 1) {
                     const tile_i = tx + tiles_pool.tiles_count_w * ty;
 
-                    const dst = write_pos[tile_i];
-                    tile_refs[dst] = @intCast(tri_i);
-                    write_pos[tile_i] = dst + 1;
+                    const dst = self.write_pos[tile_i];
+                    self.tile_refs[dst] = @intCast(tri_i);
+                    self.write_pos[tile_i] = dst + 1;
                 }
             }
         }
 
-        // Third pass (render per tile and blit) - PARALLEL
+        // P: Third pass (render per tile and blit) - PARALLEL
+        var next = AtomicUsize.init(0);
         var wg = std.Thread.WaitGroup{};
+        const worker_count = try std.Thread.getCpuCount();
 
-        // jobs must remain valid until wg.wait() returns
-        var jobs = try allocator.alloc(TileRenderJob, tiles_pool.tiles_count);
-        defer allocator.free(jobs);
-
-        for (0..tiles_pool.tiles_count) |tile_i| {
-            const start = tile_offsets[tile_i];
-            const end = tile_offsets[tile_i + 1];
-            if (start == end) continue; // skip empty tiles
-
-            wg.start();
-            jobs[tile_i] = .{
-                .wg = &wg,
-                .renderer = self,
-                .tiles_pool = tiles_pool,
-                .buf = buf,
-                .tile_offsets = tile_offsets,
-                .tile_refs = tile_refs,
-                .tile_i = tile_i,
-                .atlas = atlas,
-            };
-
-            try pool.spawn(TileRenderJob.run, .{&jobs[tile_i]});
+        for (0..worker_count) |_| {
+            pool.spawnWg(&wg, struct {
+                fn run(
+                    next_: *AtomicUsize,
+                    renderer_: *const Renderer,
+                    tiles_pool_: *tile.TilePool,
+                    buf_: Framebuffer,
+                    tile_offsets_: []usize,
+                    tile_refs_: []const cfg.Uint,
+                    atlas_: *Atlas,
+                ) void {
+                    tile_worker(next_, renderer_, tiles_pool_, buf_, tile_offsets_, tile_refs_, atlas_);
+                }
+            }.run, .{ &next, self, tiles_pool, buf, self.tile_offsets, self.tile_refs, atlas });
         }
 
         wg.wait();
+    }
+
+    fn clip_outcode(v: Vec4f) u8 {
+        var code: u8 = 0; // bitfield
+        if (v[0] < -v[3]) code |= 1 << 0; // left
+        if (v[0] > v[3]) code |= 1 << 1; // right
+        if (v[1] < -v[3]) code |= 1 << 2; // bottom
+        if (v[1] > v[3]) code |= 1 << 3; // top
+        if (v[2] < 0) code |= 1 << 4; // near
+        if (v[2] > v[3]) code |= 1 << 5; // far
+        return code;
     }
 
     pub inline fn gen_raster_triangle(
@@ -205,38 +246,31 @@ pub const Renderer = struct {
         tri: *Triangle,
         camera: *Camera,
     ) ?RasterTriangle {
-        const verts = .{ &tri.v0, &tri.v1, &tri.v2 };
-        var verts_h: [3]Vec4f = undefined; // verts in homogeneous coordinates
+        var clip: [3]Vec4f = .{
+            camera.proj_mat.mul_vec(.{ tri.v0[0], tri.v0[1], tri.v0[2], 1.0 }),
+            camera.proj_mat.mul_vec(.{ tri.v1[0], tri.v1[1], tri.v1[2], 1.0 }),
+            camera.proj_mat.mul_vec(.{ tri.v2[0], tri.v2[1], tri.v2[2], 1.0 }),
+        };
+
+        const code_0 = clip_outcode(clip[0]);
+        const code_1 = clip_outcode(clip[1]);
+        const code_2 = clip_outcode(clip[2]);
+        if ((code_0 & code_1 & code_2) != 0) return null;
+
         var rec_ws: Vec3f = undefined; // reciprocal of w = reciprocal of z in camera space
 
-        // P: World -> clip
-        inline for (verts, 0..) |vert, i| {
-            @prefetch(vert, .{});
-
-            var vert_h = Vec4f{ vert.*[0], vert.*[1], vert.*[2], 1.0 };
-            vert_h = camera.proj_mat.mul_vec(vert_h);
-
+        inline for (&clip, 0..) |*vert_h, i| {
             const clip_w = vert_h[3];
             const inv_w = 1.0 / clip_w;
             rec_ws[i] = inv_w;
-            vert_h = vert_h * @as(Vec4f, @splat(inv_w));
+            vert_h.* = vert_h.* * @as(Vec4f, @splat(inv_w));
 
-            verts_h[i] = vert_h;
+            clip[i] = vert_h.*;
         }
 
-        const v0 = verts_h[0];
-        const v1 = verts_h[1];
-        const v2 = verts_h[2];
-
-        // P: Basic clipping
-        if ((v0[0] > 1 and v1[0] > 1 and v2[0] > 1) or
-            v0[0] < -1 and v1[0] < -1 and v2[0] < -1) return null;
-
-        if ((v0[1] > 1 and v1[1] > 1 and v2[1] > 1) or
-            v0[1] < -1 and v1[1] < -1 and v2[1] < -1) return null;
-
-        if ((v0[2] > 1 and v1[2] > 1 and v2[2] > 1) or
-            v0[2] < 0 or v1[2] < 0 or v2[2] < 0) return null;
+        const v0 = clip[0];
+        const v1 = clip[1];
+        const v2 = clip[2];
 
         // P: Clip -> raster
         const fw: Float = @floatFromInt(self.width);

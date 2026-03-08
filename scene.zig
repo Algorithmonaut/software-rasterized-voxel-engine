@@ -1,14 +1,15 @@
-const Cube = @import("cube.zig");
+const Cube = @import("Cube.zig");
+const std = @import("std");
 const BlockTypes = @import("Atlas.zig").BlockTypes;
 
 pub const Scene = struct {
-    cubes: [100]Cube.Cube,
+    cubes: []Cube.Cube,
 
-    pub fn init() Scene {
-        var cubes: [100]Cube.Cube = undefined;
+    pub fn init(allocator: std.mem.Allocator) !Scene {
+        const cubes = try allocator.alloc(Cube.Cube, 10000);
 
         var i: usize = 0;
-        while (i < 10) : (i += 1) {
+        while (i < 100) : (i += 1) {
             const block_type: BlockTypes = blk: {
                 var t = BlockTypes.dirt;
                 if (i % 3 == 0) t = BlockTypes.grass;
@@ -19,8 +20,8 @@ pub const Scene = struct {
             };
 
             var j: usize = 0;
-            while (j < 10) : (j += 1) {
-                const idx = i * 10 + j;
+            while (j < 100) : (j += 1) {
+                const idx = i * 100 + j;
                 cubes[idx] = Cube.Cube.init(.{
                     @as(f32, @floatFromInt(i)) * 4,
                     @as(f32, @floatFromInt(j)) * 4 - 10,

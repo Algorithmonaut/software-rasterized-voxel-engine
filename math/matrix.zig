@@ -2,10 +2,10 @@
 //       Matrices are row-major
 
 const std = @import("std");
-const cfg = @import("config.zig");
-const ctx = @import("context.zig");
+const cfg = @import("../config.zig");
+const ctx = @import("../context.zig");
 const vec = @import("vector.zig");
-const Camera = @import("Camera.zig").Camera;
+const Camera = @import("../Camera.zig").Camera;
 
 const Float = cfg.Float;
 const Vec4f = cfg.Vec4f;

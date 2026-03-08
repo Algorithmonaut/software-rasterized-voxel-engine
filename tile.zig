@@ -96,11 +96,11 @@ pub const TilePool = struct {
         color = 0x50FF0000;
         for (self.tiles) |*tile| {
             if (tile.was_occupied) {
-                const x0 = tile.pos[0];
-                const y0 = tile.pos[1];
+                const x0 = tile.pos[0] + 2;
+                const y0 = tile.pos[1] + 2;
 
-                const x1 = @min(x0 + size - 1, cfg.width - 1);
-                const y1 = @min(y0 + size - 1, cfg.height - 1);
+                const x1 = @min(x0 + size - 1, cfg.width - 1) - 2;
+                const y1 = @min(y0 + size - 1, cfg.height - 1) - 2;
 
                 // Top/bottom edge
                 var x: usize = x0;

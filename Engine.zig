@@ -26,10 +26,10 @@ pub const Engine = struct {
 
     pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
         const camera = Camera.init(conf.camera_config);
-        const renderer = Renderer.init(allocator, conf.framebuffer_config) catch unreachable;
+        const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
+        const renderer = Renderer.init(allocator, conf.framebuffer_config, tile_pool.tiles_count) catch unreachable;
         const platform = SdlPlatform.init();
         const graphics = try SdlGraphics.init(conf.framebuffer_config);
-        const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
         const atlas = try Atlas.init(allocator, conf.atlas_config);
 
         return .{
@@ -45,7 +45,7 @@ pub const Engine = struct {
 
     pub fn deinit(self: *Engine) void {
         self.camera.deinit();
-        self.renderer.deinit();
+        self.renderer.deinit(self.allocator);
         self.platform.deinit();
         self.graphics.deinit();
         self.atlas.deinit(self.allocator);
