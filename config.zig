@@ -17,4 +17,4 @@ pub const Vec4i = @Vector(4, Int);
 // P: Debug
 pub const show_fps = true;
 pub const show_tex_atlas = false;
-pub const show_tiles = true;
+pub const show_tiles = false;

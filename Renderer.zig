@@ -12,6 +12,10 @@ const Uint = cfg.Uint;
 const Vec4f = cfg.Vec4f;
 const Vec3f = cfg.Vec3f;
 const Float = cfg.Float;
+const Chunck = @import("Chunck.zig").Chunck;
+const Cube = @import("Cube.zig").Cube;
+
+const cube_worker = @import("cube-worker.zig");
 
 const FramebufferConfig = @import("engine/EngineConfig.zig").EngineConfig.FramebufferConfig;
 pub const cube_count = 10000; // FIX: Change this shit
@@ -287,5 +291,28 @@ pub const Renderer = struct {
             .v1_uv = tri.v1_uv,
             .v2_uv = tri.v2_uv,
         };
+    }
+
+    pub fn renderChunk(self: *Renderer, allocator: std.mem.Allocator, chunk: *Chunck, camera: *Camera, atlas: *Atlas, pool: std.Thread.Pool) !void {
+        var cube_grass = Cube.init(.grass);
+        // const cube_dirt = Cube.init(.dirt);
+        // const cube_stone = Cube.init(.stone);
+        _ = pool;
+
+        const total_blocks = chunk.dimensions * chunk.dimensions * chunk.dimensions;
+        const outs = try allocator.alloc(RasterTriangle, total_blocks * 12);
+        const outs_count = try allocator.alloc(usize, total_blocks);
+
+        for (0..chunk.voxels.len) |i| {
+            const x: Float = @floatFromInt(i / (chunk.dimensions * chunk.dimensions) * 2);
+            const y: Float = @floatFromInt(((i / chunk.dimensions) % chunk.dimensions) * 2);
+            const z: Float = @floatFromInt((i % chunk.dimensions) * 2);
+
+            // For now we render everything as grass blocks
+            outs_count[i] = cube_grass.genRasterTriangles(self, camera, atlas, outs[i * 12 .. i * 12 + 12], .{ x, y, z, 0 });
+        }
+
+        self.triangles = outs;
+        self.cubes_triangles_count = outs_count;
     }
 };

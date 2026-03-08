@@ -32,22 +32,15 @@ const idx: [36]u16 = .{
     3, 2, 6, 3, 6, 7, //top
 };
 
-// pub const PerCubeOut = struct {
-//     tris: [12]tri.RasterTriangle = undefined,
-//     len: u8 = 0,
-// };
-
 pub const Cube = struct {
     vertices: [8]Vec4f,
     idx: [36]u16,
-    pos: Vec4f,
     kind: BlockTypes,
 
-    pub fn init(pos: Vec4f, kind: BlockTypes) Cube {
+    pub fn init(kind: BlockTypes) Cube {
         return .{
             .vertices = vertices,
             .idx = idx,
-            .pos = pos,
             .kind = kind,
         };
     }
@@ -58,6 +51,7 @@ pub const Cube = struct {
         camera: *Camera,
         atlas: *Atlas,
         out: []tri.RasterTriangle,
+        pos: Vec4f,
     ) u8 {
         var n: u8 = 0;
 
@@ -65,7 +59,7 @@ pub const Cube = struct {
         var verts_cpy = self.vertices;
 
         for (&verts_cpy) |*vertex| {
-            vertex.* += self.pos;
+            vertex.* += pos;
             vertex.* = view.mul_vec(vertex.*);
         }
 

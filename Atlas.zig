@@ -3,7 +3,7 @@ const cfg = @import("config.zig");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const AtlasConfig = @import("engine/EngineConfig.zig").EngineConfig.AtlasConfig;
 
-pub const BlockTypes = enum(usize) {
+pub const BlockTypes = enum(u8) {
     dirt = 0,
     stone = 1,
     grass = 2,

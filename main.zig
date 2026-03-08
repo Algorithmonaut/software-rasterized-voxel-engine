@@ -8,7 +8,6 @@ const cube = @import("Cube.zig");
 const ctx = @import("context.zig");
 const tri = @import("triangle.zig");
 const mat = @import("math/matrix.zig");
-const Scene = @import("scene.zig");
 
 const Engine = @import("Engine.zig").Engine;
 const Atlas = @import("Atlas.zig").Atlas;
@@ -17,6 +16,8 @@ const EngineConfig = @import("./engine/EngineConfig.zig").EngineConfig;
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Renderer = @import("Renderer.zig").Renderer;
 const cube_worker = @import("cube-worker.zig");
+const Chunk = @import("Chunck.zig").Chunck;
+const ChunkCoord = @import("Chunck.zig").ChunckCoord;
 
 const engine_config = EngineConfig{
     .camera_config = .{
@@ -60,9 +61,12 @@ pub fn main() !void {
     var pool: std.Thread.Pool = undefined;
     try pool.init(.{ .allocator = allocator });
 
-    var scene = try Scene.Scene.init(allocator);
-
     var t: usize = 0;
+
+    var chunk = try Chunk.generate(
+        allocator,
+        .{ 0, 0, 0 },
+    );
 
     while (engine.platform.running) : (t += 1) {
         var frame = try engine.begin_frame();
@@ -70,7 +74,8 @@ pub fn main() !void {
 
         engine.camera.view_mat = mat.create_view(engine.camera.from, engine.camera.to);
 
-        try cube_worker.render_all(allocator, &engine, &scene, &pool);
+        // try cube_worker.render_all(allocator, &engine, &scene, &pool);
+        try engine.renderer.renderChunk(allocator, &chunk, &engine.camera, &engine.atlas, pool);
 
         try engine.renderer.render(&pool, &engine.tile_pool, frame.framebuffer, allocator, &engine.atlas);
 
