@@ -1,6 +1,6 @@
 // NOTE: Refactored: YES
 
-const CameraConfig = @import("engine/EngineConfig.zig").EngineConfig.CameraConfig;
+const CameraConfig = @import("EngineConfig.zig").EngineConfig.CameraConfig;
 const std = @import("std");
 const mat = @import("math/matrix.zig");
 const cfg = @import("config.zig");

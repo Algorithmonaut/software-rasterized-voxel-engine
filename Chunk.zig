@@ -4,8 +4,6 @@ const BlockType = @import("Atlas.zig").BlockTypes;
 
 const ChunkCoord = @import("math/types.zig").ChunkCoord;
 
-const chunck_size = 16;
-
 pub const Chunk = struct {
     coord: ChunkCoord,
 
@@ -23,11 +21,14 @@ pub const Chunk = struct {
     world_min: ChunkCoord,
     world_max: ChunkCoord,
 
-    pub fn generate(allocator: std.mem.Allocator, coord: ChunkCoord) !Chunk {
-        const world_min = coord * @as(ChunkCoord, @splat(chunck_size));
-        const world_max = world_min + @as(ChunkCoord, @splat(chunck_size));
+    pub fn generate(allocator: std.mem.Allocator, coord: ChunkCoord, size: usize) !Chunk {
+        const size_i = @as(i32, @intCast(size));
+        const size_vec = @as(ChunkCoord, @splat(size_i));
 
-        const voxels = try allocator.alloc(BlockType, chunck_size * chunck_size * chunck_size);
+        const world_min = coord * size_vec;
+        const world_max = world_min + size_vec;
+
+        const voxels = try allocator.alloc(BlockType, size * size * size);
 
         for (0..voxels.len) |i| voxels[i] = @enumFromInt(i % 3);
 
@@ -37,7 +38,7 @@ pub const Chunk = struct {
 
             .world_min = world_min,
             .world_max = world_max,
-            .dimensions = chunck_size,
+            .dimensions = size,
         };
     }
 

@@ -1,7 +1,7 @@
 const std = @import("std");
 const cfg = @import("config.zig");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
-const AtlasConfig = @import("engine/EngineConfig.zig").EngineConfig.AtlasConfig;
+const AtlasConfig = @import("EngineConfig.zig").EngineConfig.AtlasConfig;
 
 pub const BlockTypes = enum(u8) {
     dirt = 0,

@@ -1,6 +1,6 @@
 // NOTE: Refactored: YES
 
-const FramebufferConfig = @import("./engine/EngineConfig.zig").EngineConfig.FramebufferConfig;
+const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
 
 const std = @import("std");
 const c = @cImport({

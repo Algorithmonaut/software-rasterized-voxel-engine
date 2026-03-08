@@ -12,12 +12,12 @@ const mat = @import("math/matrix.zig");
 const Engine = @import("Engine.zig").Engine;
 const Atlas = @import("Atlas.zig").Atlas;
 const Camera = @import("Camera.zig").Camera;
-const EngineConfig = @import("./engine/EngineConfig.zig").EngineConfig;
+const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Renderer = @import("Renderer.zig").Renderer;
 const cube_worker = @import("cube-worker.zig");
-const Chunk = @import("Chunck.zig").Chunck;
-const ChunkCoord = @import("Chunck.zig").ChunckCoord;
+const Chunk = @import("Chunk.zig").Chunk;
+const ChunkCoord = @import("Chunk.zig").ChunkCoord;
 
 const engine_config = EngineConfig{
     .camera_config = .{
@@ -44,6 +44,10 @@ const engine_config = EngineConfig{
         .pixel_type = u32,
         .channels_rgb = 3,
     },
+
+    .world_config = .{
+        .chunk_size = 8,
+    },
 };
 
 var engine: Engine = undefined;
@@ -63,19 +67,17 @@ pub fn main() !void {
 
     var t: usize = 0;
 
-    var chunk = try Chunk.generate(
-        allocator,
-        .{ 0, 0, 0 },
-    );
+    const chunk1 = try engine.world.ensureChunk(.{ 0, 0, 0 });
+    const chunk2 = try engine.world.ensureChunk(.{ 1, 0, 0 });
 
     while (engine.platform.running) : (t += 1) {
-        var frame = try engine.begin_frame();
-        defer engine.end_frame(&frame);
+        var frame = try engine.beginFrame();
+        defer engine.endFrame(&frame);
 
         engine.camera.view_mat = mat.create_view(engine.camera.from, engine.camera.to);
 
-        // try cube_worker.render_all(allocator, &engine, &scene, &pool);
-        try engine.renderer.renderChunk(allocator, &chunk, &engine.camera, &engine.atlas, pool);
+        try engine.renderer.renderChunk(allocator, chunk1, &engine.camera, &engine.atlas, pool);
+        try engine.renderer.renderChunk(allocator, chunk2, &engine.camera, &engine.atlas, pool);
 
         try engine.renderer.render(&pool, &engine.tile_pool, frame.framebuffer, allocator, &engine.atlas);
 

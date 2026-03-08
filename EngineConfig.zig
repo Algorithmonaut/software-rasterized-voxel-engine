@@ -1,13 +1,13 @@
-const t = @import("../math/types.zig");
+const WorldCoord = @import("math/types.zig").WorldCoord;
 
 pub const EngineConfig = struct {
     pub const CameraConfig = struct {
-        fov: t.Float,
-        from: t.Vec3f,
-        to: t.Vec3f,
-        view_distance: t.Float,
-        speed: t.Float,
-        sensivity: t.Float,
+        fov: f32,
+        from: WorldCoord,
+        to: WorldCoord,
+        view_distance: f32,
+        speed: f32,
+        sensivity: f32,
     };
 
     pub const FramebufferConfig = struct {
@@ -26,7 +26,12 @@ pub const EngineConfig = struct {
         channels_rgb: usize,
     };
 
+    pub const WorldConfig = struct {
+        chunk_size: usize,
+    };
+
     camera_config: CameraConfig,
     framebuffer_config: FramebufferConfig,
     atlas_config: AtlasConfig,
+    world_config: WorldConfig,
 };

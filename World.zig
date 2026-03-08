@@ -1,26 +1,29 @@
 const std = @import("std");
-const Chunk = @import("Chunck.zig").Chunk;
+const Chunk = @import("Chunk.zig").Chunk;
+const WorldConfig = @import("EngineConfig.zig").EngineConfig.WorldConfig;
 
 const ChunkCoord = @import("math/types.zig").ChunkCoord;
 
 pub const World = struct {
     allocator: std.mem.Allocator,
-    chuncks: std.AutoHashMap(u64, *Chunk),
+    chunks: std.AutoHashMap(u64, *Chunk),
+    chunk_size: usize,
 
-    pub fn init(allocator: std.mem.Allocator) World {
+    pub fn init(allocator: std.mem.Allocator, conf: WorldConfig) World {
         return .{
             .allocator = allocator,
-            .chuncks = std.AutoHashMap(u64, *Chunk),
+            .chunks = std.AutoHashMap(u64, *Chunk).init(allocator),
+            .chunk_size = conf.chunk_size,
         };
     }
 
     pub fn deinit(self: *World) void {
-        var it = self.chuncks.valueIterator();
+        var it = self.chunks.valueIterator();
         while (it.next()) |chunk_ptr| {
             chunk_ptr.deinit(self.allocator);
         }
 
-        self.chuncks.deinit();
+        self.chunks.deinit();
     }
 
     // We want a ordinary hashable scalar,
@@ -38,27 +41,29 @@ pub const World = struct {
     }
 
     pub fn getChunk(self: *World, coord: ChunkCoord) ?*Chunk {
-        return self.chuncks.get(chunkKey(coord));
+        return self.chunks.get(chunkKey(coord));
     }
 
     pub fn ensureChunk(self: *World, coord: ChunkCoord) !*Chunk {
         const key = chunkKey(coord);
 
-        if (self.chuncks.get(key)) |chunk| {
+        if (self.chunks.get(key)) |chunk| {
             return chunk;
         }
 
         const chunk_ptr = try self.allocator.create(Chunk);
         errdefer self.allocator.destroy(chunk_ptr);
 
-        chunk_ptr.* = try Chunk.generate(self.allocator, coord);
+        chunk_ptr.* = try Chunk.generate(self.allocator, coord, self.chunk_size);
         errdefer chunk_ptr.deinit(self.allocator);
+
+        return chunk_ptr;
     }
 
     pub fn removeChunk(self: *World, coord: ChunkCoord) bool {
         const key = chunkKey(coord);
 
-        if (self.chuncks.fetchRemove(key)) |entry| {
+        if (self.chunks.fetchRemove(key)) |entry| {
             entry.value.deinit(self.allocator);
             self.allocator.destroy(entry.value);
             return true;

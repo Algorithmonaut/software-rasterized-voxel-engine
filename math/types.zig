@@ -7,3 +7,4 @@ pub const Vec3i = @Vector(3, Int);
 pub const Vec4i = @Vector(4, Int);
 
 pub const ChunkCoord = @Vector(3, i32);
+pub const WorldCoord = @Vector(3, f32);

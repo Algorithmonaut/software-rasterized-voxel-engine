@@ -2,7 +2,7 @@ const cfg = @import("config.zig");
 const Float = cfg.Float;
 const std = @import("std");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
-const FramebufferConfig = @import("engine/EngineConfig.zig").EngineConfig.FramebufferConfig;
+const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
 
 pub const Tile = struct {
     z_buf: []Float,
