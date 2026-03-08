@@ -99,8 +99,6 @@ pub const RasterTriangle = struct {
         const e2 = make_edge(b, a);
         const area = e0.eval(a[0], a[1]);
 
-        if (area < 0) return; // backface culling
-
         const inv_area = 1 / @as(Float, @floatFromInt(area));
 
         const tx0: i32 = @intCast(tile.pos[0]);
@@ -165,8 +163,8 @@ pub const RasterTriangle = struct {
                     const u_f = std.math.clamp(uv[0], 0.0, max_u_f);
                     const v_f = std.math.clamp(uv[1], 0.0, max_v_f);
 
-                    const u: usize = @intFromFloat(u_f + 0.5);
-                    const v: usize = @intFromFloat(v_f + 0.5);
+                    const u: usize = @intFromFloat(u_f);
+                    const v: usize = @intFromFloat(v_f);
 
                     const base: usize = (u + v * atlas.width);
                     const argb = atlas.atlas[base];

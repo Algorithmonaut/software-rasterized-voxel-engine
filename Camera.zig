@@ -10,9 +10,10 @@ const Vec3f = cfg.Vec3f;
 pub const Camera = struct {
     from: Vec3f,
     to: Vec3f,
-    speed: f32,
-    fov: f32,
     view_distance: f32,
+    fov: f32,
+    speed: f32,
+    sensivity: f32,
 
     view_mat: mat.Mat4f,
     proj_mat: mat.Mat4f,
@@ -32,9 +33,10 @@ pub const Camera = struct {
         return .{
             .from = conf.from,
             .to = conf.to,
-            .speed = conf.speed,
-            .fov = conf.fov,
             .view_distance = conf.view_distance,
+            .fov = conf.fov,
+            .speed = conf.speed,
+            .sensivity = conf.sensivity,
 
             .yaw = 0.0,
             .pitch = 0.0,
@@ -56,7 +58,7 @@ pub const Camera = struct {
         dt: f32,
     ) void {
         // P: Update camera target
-        const sens = cfg.mouse_sensivity;
+        const sens = self.sensivity;
         var yaw = self.yaw;
         var pitch = self.pitch;
 

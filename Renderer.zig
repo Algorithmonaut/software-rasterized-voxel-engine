@@ -212,19 +212,7 @@ pub const Renderer = struct {
         const worker_count = try std.Thread.getCpuCount();
 
         for (0..worker_count) |_| {
-            pool.spawnWg(&wg, struct {
-                fn run(
-                    next_: *AtomicUsize,
-                    renderer_: *const Renderer,
-                    tiles_pool_: *tile.TilePool,
-                    buf_: Framebuffer,
-                    tile_offsets_: []usize,
-                    tile_refs_: []const cfg.Uint,
-                    atlas_: *Atlas,
-                ) void {
-                    tile_worker(next_, renderer_, tiles_pool_, buf_, tile_offsets_, tile_refs_, atlas_);
-                }
-            }.run, .{ &next, self, tiles_pool, buf, self.tile_offsets, self.tile_refs, atlas });
+            pool.spawnWg(&wg, tile_worker, .{ &next, self, tiles_pool, buf, self.tile_offsets, self.tile_refs, atlas });
         }
 
         wg.wait();
@@ -271,6 +259,11 @@ pub const Renderer = struct {
         const v0 = clip[0];
         const v1 = clip[1];
         const v2 = clip[2];
+
+        // Backface culling
+        const signed_area = (v1[0] - v0[0]) * (v2[1] - v0[1]) -
+            (v1[1] - v0[1]) * (v2[0] - v0[0]);
+        if (signed_area > 0) return null;
 
         // P: Clip -> raster
         const fw: Float = @floatFromInt(self.width);

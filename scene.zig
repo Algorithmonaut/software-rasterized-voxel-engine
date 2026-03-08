@@ -23,9 +23,9 @@ pub const Scene = struct {
             while (j < 100) : (j += 1) {
                 const idx = i * 100 + j;
                 cubes[idx] = Cube.Cube.init(.{
-                    @as(f32, @floatFromInt(i)) * 4,
-                    @as(f32, @floatFromInt(j)) * 4 - 10,
-                    20 + @as(f32, @floatFromInt(i % 3)),
+                    @as(f32, @floatFromInt(i)) * 2.0,
+                    0,
+                    @as(f32, @floatFromInt(j)) * 2.0,
                     0,
                 }, block_type);
             }

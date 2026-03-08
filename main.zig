@@ -23,14 +23,15 @@ const engine_config = EngineConfig{
         .view_distance = 2000.0,
         .from = .{ 0, 0, 0 },
         .to = .{ 0, 0, 0 },
-        .speed = 40.0,
+        .speed = 15.0,
+        .sensivity = 0.0025,
     },
 
     .framebuffer_config = .{
-        .width = 960,
-        .height = 540,
-        .scale = 2,
-        .tile_dimensions = 16,
+        .width = 1920,
+        .height = 1080,
+        .scale = 1,
+        .tile_dimensions = 8,
     },
 
     .atlas_config = .{
@@ -86,35 +87,27 @@ pub fn main() !void {
 
     var t: usize = 0;
 
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const outs = try arena_allocator.alloc(PerCubeOut, scene.cubes.len);
+
     while (engine.platform.running) : (t += 1) {
         var frame = try engine.begin_frame();
         defer engine.end_frame(&frame);
 
-        // const view: mat.Mat4f = mat.create_view(engine.camera.from, engine.camera.to);
         engine.camera.view_mat = mat.create_view(engine.camera.from, engine.camera.to);
-
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        defer arena.deinit();
-        const arena_allocator = arena.allocator();
 
         // generate raster triangles from cubes
         var next = AtomicUsize.init(0);
         var wg = std.Thread.WaitGroup{};
         const worker_count = try std.Thread.getCpuCount();
 
-        const outs = try arena_allocator.alloc(PerCubeOut, scene.cubes.len);
         @memset(outs, .{});
 
         for (0..worker_count) |_| {
-            pool.spawnWg(&wg, struct {
-                fn run(
-                    next_: *AtomicUsize,
-                    cubes_: []cube.Cube,
-                    outs_: []PerCubeOut,
-                ) void {
-                    cube_worker(next_, cubes_, outs_);
-                }
-            }.run, .{ &next, scene.cubes[0..], outs });
+            pool.spawnWg(&wg, cube_worker, .{ &next, scene.cubes[0..], outs });
         }
         wg.wait();
 

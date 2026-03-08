@@ -7,6 +7,7 @@ pub const EngineConfig = struct {
         to: t.Vec3f,
         view_distance: t.Float,
         speed: t.Float,
+        sensivity: t.Float,
     };
 
     pub const FramebufferConfig = struct {
