@@ -1,8 +1,9 @@
-const cfg = @import("config.zig");
-const Float = cfg.Float;
 const std = @import("std");
+
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
+
+const Float = @import("math/types.zig").Float;
 
 pub const Tile = struct {
     z_buf: []Float,
@@ -32,12 +33,12 @@ pub const Tile = struct {
         const x0 = self.pos[0];
         const y0 = self.pos[1];
 
-        const copy_w: usize = @min(cfg.tile_dimensions, cfg.width - x0);
-        const copy_h: usize = @min(cfg.tile_dimensions, cfg.height - y0);
+        const copy_w: usize = @min(self.dimensions, buf.width - x0);
+        const copy_h: usize = @min(self.dimensions, buf.height - y0);
 
         var y: usize = 0;
         while (y < copy_h) : (y += 1) {
-            const src = self.buf[y * cfg.tile_dimensions .. y * cfg.tile_dimensions + copy_w];
+            const src = self.buf[y * self.dimensions .. y * self.dimensions + copy_w];
             const dst = buf.get_scanline(y0 + y)[x0 .. x0 + copy_w];
             @memcpy(dst, src);
         }
@@ -80,8 +81,8 @@ pub const TilePool = struct {
                 const x0 = tile.pos[0] + 2;
                 const y0 = tile.pos[1] + 2;
 
-                const x1 = @min(x0 + self.tile_dimensions - 1, cfg.width - 1) - 2;
-                const y1 = @min(y0 + self.tile_dimensions - 1, cfg.height - 1) - 2;
+                const x1 = @min(x0 + self.tile_dimensions - 1, buf.width - 1) - 2;
+                const y1 = @min(y0 + self.tile_dimensions - 1, buf.height - 1) - 2;
 
                 // Top/bottom edge
                 var x: usize = x0;

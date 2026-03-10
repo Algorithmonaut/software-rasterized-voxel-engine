@@ -30,8 +30,15 @@ pub const EngineConfig = struct {
         chunk_size: usize,
     };
 
+    pub const DebugConfig = struct {
+        show_fps: bool,
+        show_tex_atlas: bool,
+        show_occupied_tiles: bool,
+    };
+
     camera_config: CameraConfig,
     framebuffer_config: FramebufferConfig,
     atlas_config: AtlasConfig,
     world_config: WorldConfig,
+    debug_config: DebugConfig,
 };

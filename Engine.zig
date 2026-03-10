@@ -13,8 +13,7 @@ const TilePool = @import("tile.zig").TilePool;
 const World = @import("World.zig").World;
 const TriangleRasterizer = @import("renderer/TrianglesRasterizer.zig").TrianglesRasterizer;
 
-const cfg = @import("config.zig");
-const Vec3f = cfg.Vec3f;
+const Vec3f = @import("math/types.zig").Vec3f;
 
 /// Owns global state
 pub const Engine = struct {

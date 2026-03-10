@@ -5,13 +5,12 @@ const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");
     @cInclude("SDL2/SDL.h");
 });
-const cfg = @import("config.zig");
 const ctx = @import("context.zig");
 const vec = @import("math/vector.zig");
 const Camera = @import("Camera.zig").Camera;
 const SdlGraphics = @import("SdlGraphics.zig").SdlGraphics;
 
-const Vec3f = cfg.Vec3f;
+const Vec3f = @import("math/types.zig").Vec3f;
 
 pub const SdlPlatform = struct {
     freq: u64, // tick counter

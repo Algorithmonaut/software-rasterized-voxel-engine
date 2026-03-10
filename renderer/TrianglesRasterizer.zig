@@ -226,13 +226,15 @@ pub const TrianglesRasterizer = struct {
     inline fn tileRangeForTriangle(
         triangle: RasterTriangle,
         tile_dimensions: usize,
+        fb_width: usize,
+        fb_height: usize,
     ) struct {
         min_tx: usize,
         max_tx: usize,
         min_ty: usize,
         max_ty: usize,
     } {
-        const bb = triangle.boundingBox();
+        const bb = triangle.boundingBox(fb_width, fb_height);
 
         // WARN: Change to divCeil if it does not work for max
         const min_tx = @divFloor(bb.min_x, tile_dimensions);
@@ -279,12 +281,13 @@ pub const TrianglesRasterizer = struct {
             const base = cube_i * 12;
 
             for (triangles[base .. base + count]) |tri| {
-                const range = tileRangeForTriangle(tri, tile_pool.tile_dimensions);
+                const range = tileRangeForTriangle(tri, tile_pool.tile_dimensions, fb.width, fb.height);
 
-                var x = range.min_tx;
-                while (x < range.max_tx) : (x += 1) {
-                    var y = range.min_ty;
-                    while (y < range.max_ty) : (y += 1) {
+                // NOTE: Try to consider the cache, array is row major, notice the loop order
+                var y = range.min_ty;
+                while (y < range.max_ty) : (y += 1) {
+                    var x = range.min_tx;
+                    while (x < range.max_tx) : (x += 1) {
                         const idx = x + tile_pool.count_w * y;
                         self.tile_counts[idx] += 1;
                         tile_pool.tiles[idx].was_occupied = true;
@@ -312,12 +315,12 @@ pub const TrianglesRasterizer = struct {
             const base = cube_i * 12;
 
             for (triangles[base .. base + count], 0..) |tri, tri_i| {
-                const range = tileRangeForTriangle(tri, tile_pool.tile_dimensions);
+                const range = tileRangeForTriangle(tri, tile_pool.tile_dimensions, fb.width, fb.height);
 
-                var tx = range.min_tx;
-                while (tx < range.max_tx) : (tx += 1) {
-                    var ty = range.min_ty;
-                    while (ty < range.max_ty) : (ty += 1) {
+                var ty = range.min_ty;
+                while (ty < range.max_ty) : (ty += 1) {
+                    var tx = range.min_tx;
+                    while (tx < range.max_tx) : (tx += 1) {
                         const tile_i = tx + tile_pool.count_w * ty;
 
                         const dst = self.write_pos[tile_i];

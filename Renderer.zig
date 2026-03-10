@@ -1,17 +1,18 @@
 const std = @import("std");
 const ctx = @import("context.zig"); // WARN: To refactor
-const cfg = @import("config.zig");
 const Triangle = @import("triangle.zig").Triangle;
 const RasterTriangle = @import("triangle.zig").RasterTriangle;
 const Atlas = @import("Atlas.zig").Atlas;
 const Camera = @import("Camera.zig").Camera;
 const tile = @import("tile.zig");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
-const Int = cfg.Int; // WARN: To refactor
-const Uint = cfg.Uint;
-const Vec4f = cfg.Vec4f;
-const Vec3f = cfg.Vec3f;
-const Float = cfg.Float;
+
+const t = @import("math/types.zig");
+const Int = t.Int; // WARN: To refactor
+const Uint = t.Uint;
+const Vec4f = t.Vec4f;
+const Vec3f = t.Vec3f;
+const Float = t.Float;
 const Chunk = @import("Chunk.zig").Chunk;
 const Cube = @import("Cube.zig").Cube;
 const World = @import("World.zig").World;

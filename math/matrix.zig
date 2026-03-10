@@ -2,14 +2,13 @@
 //       Matrices are row-major
 
 const std = @import("std");
-const cfg = @import("../config.zig");
 const ctx = @import("../context.zig");
 const vec = @import("vector.zig");
 const Camera = @import("../Camera.zig").Camera;
 
-const Float = cfg.Float;
-const Vec4f = cfg.Vec4f;
-const Vec3f = cfg.Vec3f;
+const Float = @import("types.zig").Float;
+const Vec4f = @import("types.zig").Vec4f;
+const Vec3f = @import("types.zig").Vec3f;
 
 pub const Mat4f = struct {
     r: [4]Vec4f,

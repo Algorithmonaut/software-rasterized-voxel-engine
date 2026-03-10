@@ -8,8 +8,7 @@ const c = @cImport({
     @cInclude("SDL2/SDL.h");
 });
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
-const cfg = @import("config.zig");
-const Float = cfg.Float;
+const Float = @import("math/types.zig").Float;
 
 pub const SdlGraphics = struct {
     window: *c.SDL_Window,

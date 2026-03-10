@@ -2,15 +2,16 @@ const std = @import("std");
 const main = @import("main.zig");
 const tri = @import("triangle.zig");
 const mat = @import("math/matrix.zig");
-const cfg = @import("config.zig");
 const BlockTypes = @import("Atlas.zig").BlockTypes;
-const Float = cfg.Float;
-const Vec4f = cfg.Vec4f;
-const Vec3f = cfg.Vec3f;
 const Renderer = @import("Renderer.zig").Renderer;
 const Camera = @import("Camera.zig").Camera;
 const Atlas = @import("Atlas.zig").Atlas;
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
+
+const t = @import("math/types.zig");
+const Float = t.Float;
+const Vec4f = t.Vec4f;
+const Vec3f = t.Vec3f;
 
 const vertices: [8]Vec4f = .{
     .{ -1, -1, -1, 1 },

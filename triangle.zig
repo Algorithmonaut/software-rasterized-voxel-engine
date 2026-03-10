@@ -1,13 +1,13 @@
 const Tile = @import("tile.zig");
 const Atlas = @import("Atlas.zig").Atlas;
 const std = @import("std");
-const cfg = @import("config.zig");
-const Float = cfg.Float;
-const Int = cfg.Int;
-const Vec3f = cfg.Vec3f;
-const Vec4f = cfg.Vec4f;
-const Vec3i = cfg.Vec3i;
-const Vec4i = cfg.Vec4i;
+const t = @import("math/types.zig");
+const Float = t.Float;
+const Int = t.Int;
+const Vec3f = t.Vec3f;
+const Vec4f = t.Vec4f;
+const Vec3i = t.Vec3i;
+const Vec4i = t.Vec4i;
 const mat = @import("math/matrix.zig");
 const ctx = @import("context.zig");
 
@@ -23,7 +23,7 @@ pub const RasterTriangle = struct {
     v2_rec_z: f32,
 
     /// Max is exclusive
-    pub inline fn boundingBox(self: RasterTriangle) struct {
+    pub inline fn boundingBox(self: RasterTriangle, fb_width: usize, fb_height: usize) struct {
         min_x: usize,
         max_x: usize,
         min_y: usize,
@@ -40,12 +40,12 @@ pub const RasterTriangle = struct {
         const max_y_incl = @max(a[1], b[1], c[1]);
 
         // Clamp min to [0, width/height] (min is inclusive)
-        const min_x_c = std.math.clamp(min_x, 0, cfg.width);
-        const min_y_c = std.math.clamp(min_y, 0, cfg.height);
+        const min_x_c = std.math.clamp(min_x, 0, fb_width);
+        const min_y_c = std.math.clamp(min_y, 0, fb_height);
 
         // Convert inclusive max -> exclusive max, then clamp to [0, width/height]
-        const max_x_excl = std.math.clamp(max_x_incl + 1, 0, cfg.width);
-        const max_y_excl = std.math.clamp(max_y_incl + 1, 0, cfg.height);
+        const max_x_excl = std.math.clamp(max_x_incl + 1, 0, fb_width);
+        const max_y_excl = std.math.clamp(max_y_incl + 1, 0, fb_height);
 
         return .{
             .min_x = min_x_c,

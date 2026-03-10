@@ -2,10 +2,9 @@
 //       Matrices are row-major
 
 const std = @import("std");
-const cfg = @import("../config.zig");
 
-pub const Float = cfg.Float;
-pub const Vec3f = cfg.Vec3f;
+pub const Float = @import("types.zig").Float; // TODO: Replace with usingnamespace
+pub const Vec3f = @import("types.zig").Vec3f; // TODO: Replace with usingnamespace
 
 pub inline fn length_squared(v: Vec3f) Float {
     const p = v * v;

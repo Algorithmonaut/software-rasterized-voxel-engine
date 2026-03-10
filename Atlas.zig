@@ -1,5 +1,4 @@
 const std = @import("std");
-const cfg = @import("config.zig");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const AtlasConfig = @import("EngineConfig.zig").EngineConfig.AtlasConfig;
 

@@ -1,11 +1,8 @@
-// NOTE: Refactored: YES
-
 const CameraConfig = @import("EngineConfig.zig").EngineConfig.CameraConfig;
 const std = @import("std");
 const mat = @import("math/matrix.zig");
-const cfg = @import("config.zig");
 const vec = @import("math/vector.zig");
-const Vec3f = cfg.Vec3f;
+const Vec3f = @import("math/types.zig").Vec3f;
 
 pub const Camera = struct {
     from: Vec3f,

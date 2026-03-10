@@ -1,5 +1,4 @@
 const std = @import("std");
-const cfg = @import("config.zig");
 const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");
     @cInclude("SDL2/SDL.h");
