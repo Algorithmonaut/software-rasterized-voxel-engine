@@ -22,7 +22,7 @@ const ChunkCoord = @import("Chunk.zig").ChunkCoord;
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 2000.0,
+        .view_distance = 40.0,
         .from = .{ 0, 0, 0 },
         .to = .{ 0, 0, 0 },
         .speed = 15.0,
@@ -46,7 +46,7 @@ const engine_config = EngineConfig{
     },
 
     .world_config = .{
-        .chunk_size = 8,
+        .chunk_size = 16,
     },
 };
 
@@ -67,8 +67,8 @@ pub fn main() !void {
 
     var t: usize = 0;
 
-    const chunk1 = try engine.world.ensureChunk(.{ 0, 0, 0 });
-    const chunk2 = try engine.world.ensureChunk(.{ 1, 0, 0 });
+    _ = try engine.world.ensureChunk(.{ 0, 0, 0 });
+    _ = try engine.world.ensureChunk(.{ 1, 0, 0 });
 
     while (engine.platform.running) : (t += 1) {
         var frame = try engine.beginFrame();
@@ -76,8 +76,14 @@ pub fn main() !void {
 
         engine.camera.view_mat = mat.create_view(engine.camera.from, engine.camera.to);
 
-        try engine.renderer.renderChunk(allocator, chunk1, &engine.camera, &engine.atlas, pool);
-        try engine.renderer.renderChunk(allocator, chunk2, &engine.camera, &engine.atlas, pool);
+        try engine.renderer.renderWorld(
+            engine.camera.from,
+            @intFromFloat(engine.camera.view_distance),
+            engine.world.chunk_size,
+            &engine.world,
+            &engine.camera,
+            &engine.atlas,
+        );
 
         try engine.renderer.render(&pool, &engine.tile_pool, frame.framebuffer, allocator, &engine.atlas);
 

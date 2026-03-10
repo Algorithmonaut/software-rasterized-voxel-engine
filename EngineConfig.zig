@@ -14,7 +14,7 @@ pub const EngineConfig = struct {
         width: usize,
         height: usize,
         scale: usize,
-        tile_dimensions: usize,
+        tile_dimensions: usize, // should be 2^n
     };
 
     pub const AtlasConfig = struct {

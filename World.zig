@@ -37,7 +37,7 @@ pub const World = struct {
         const y: u64 = @intCast(@as(i64, coord[1]) + bias);
         const z: u64 = @intCast(@as(i64, coord[2]) + bias);
 
-        return (x << 42) | (y << 42) | z;
+        return (x << 42) | (y << 21) | z;
     }
 
     pub fn getChunk(self: *World, coord: ChunkCoord) ?*Chunk {
@@ -57,6 +57,7 @@ pub const World = struct {
         chunk_ptr.* = try Chunk.generate(self.allocator, coord, self.chunk_size);
         errdefer chunk_ptr.deinit(self.allocator);
 
+        try self.chunks.put(key, chunk_ptr);
         return chunk_ptr;
     }
 

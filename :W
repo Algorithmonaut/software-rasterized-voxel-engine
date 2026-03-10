@@ -91,7 +91,6 @@ pub const Renderer = struct {
         return .{
             // FIX: For now I consider pseudo AABB of the view sphere,
             // but later please implement alloc for the view sphere
-            // Remove magic numbers here before I have a big issueMQLSJDLKJSDF KJSF
             .triangles = try allocator.alloc(RasterTriangle, estimated * 16 * 16 * 16 * 12),
             .cubes_triangles_count = try allocator.alloc(usize, estimated * 16 * 16 * 16),
 
@@ -313,6 +312,23 @@ pub const Renderer = struct {
         };
     }
 
+    pub fn renderChunk(self: *Renderer, allocator: std.mem.Allocator, chunk: *Chunk, camera: *Camera, atlas: *Atlas, pool: std.Thread.Pool) !void {
+        var cube_grass = Cube.init(.grass);
+        // const cube_dirt = Cube.init(.dirt);
+        // const cube_stone = Cube.init(.stone);
+        _ = pool;
+        _ = allocator;
+
+        for (0..chunk.voxels.len) |i| {
+            const x: Float = @floatFromInt(i / (chunk.dimensions * chunk.dimensions) * 2);
+            const y: Float = @floatFromInt(((i / chunk.dimensions) % chunk.dimensions) * 2);
+            const z: Float = @floatFromInt((i % chunk.dimensions) * 2);
+
+            // For now we render everything as grass blocks
+            self.cubes_triangles_count[i] = cube_grass.genRasterTriangles(self, camera, atlas, self.triangles[i * 12 .. i * 12 + 12], .{ x, y, z, 0 });
+        }
+    }
+
     ////////////////////////////////////////////////////////////////////////////
 
     fn worldToChunkCoord(coord: WorldCoord, chunk_size: i32) ChunkCoord {
@@ -351,10 +367,7 @@ pub const Renderer = struct {
         self: *Renderer,
         player_pos: WorldCoord,
         view_distance: i32,
-        chunk_size: usize,
         world: *World,
-        camera: *Camera,
-        atlas: *Atlas,
     ) !void {
         const player_chunk = worldToChunkCoord(player_pos, 16); // FIX: Change magic number
 
@@ -389,25 +402,5 @@ pub const Renderer = struct {
                 return a.dist2 < b.dist2;
             }
         }.lessThan);
-
-        for (self.chunk_entries.items, 0..) |chunk, chunk_i| {
-            const cubes_per_chunk = chunk_size * chunk_size * chunk_size;
-            const chunk_offset = chunk_i * cubes_per_chunk;
-
-            // Then we render the chunk
-            for (0..chunk.chunk.voxels.len) |i| {
-                var cube_grass = Cube.init(.grass); // for now we render everything as a grass block
-
-                // This is working for sure
-                const x: Float = @floatFromInt(i / (chunk_size * chunk_size) * 2);
-                const y: Float = @floatFromInt(((i / chunk_size) % chunk_size) * 2);
-                const z: Float = @floatFromInt((i % chunk_size) * 2);
-
-                const cube_start = chunk_offset * 12 + i * 12;
-                const cube_end = cube_start + 12;
-                self.cubes_triangles_count[chunk_offset + i] =
-                    cube_grass.genRasterTriangles(self, camera, atlas, self.triangles[cube_start..cube_end], .{ x, y, z, 0 });
-            }
-        }
     }
 };

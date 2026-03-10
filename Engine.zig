@@ -41,6 +41,7 @@ pub const Engine = struct {
             allocator,
             conf.framebuffer_config,
             tile_pool.tiles_count,
+            conf.camera_config.view_distance,
         ) catch unreachable;
 
         return .{
