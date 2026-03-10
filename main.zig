@@ -68,7 +68,7 @@ pub fn main() !void {
     var t: usize = 0;
 
     _ = try engine.world.ensureChunk(.{ 0, 0, 0 });
-    _ = try engine.world.ensureChunk(.{ 1, 0, 0 });
+    _ = try engine.world.ensureChunk(.{ 3, 0, 0 });
 
     while (engine.platform.running) : (t += 1) {
         var frame = try engine.beginFrame();
@@ -85,7 +85,15 @@ pub fn main() !void {
             &engine.atlas,
         );
 
-        try engine.renderer.render(&pool, &engine.tile_pool, frame.framebuffer, allocator, &engine.atlas);
+        try engine.triangle_rasterizer.render(
+            allocator,
+            &pool,
+            engine.renderer.triangles,
+            engine.renderer.triangles_per_cube,
+            &engine.tile_pool,
+            frame.framebuffer,
+            &engine.atlas,
+        );
 
         if (cfg.show_tex_atlas) engine.atlas.debug_show_atlas(&frame.framebuffer);
         if (cfg.show_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);

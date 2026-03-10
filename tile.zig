@@ -9,6 +9,7 @@ pub const Tile = struct {
     buf: []u32,
     pos: [2]usize,
     was_occupied: bool,
+    dimensions: usize,
 
     pub fn init(allocator: std.mem.Allocator, x: usize, y: usize, size: usize) !Tile {
         return .{
@@ -16,6 +17,7 @@ pub const Tile = struct {
             .buf = try allocator.alloc(u32, size * size),
             .pos = .{ x, y },
             .was_occupied = false,
+            .dimensions = size,
         };
     }
 
@@ -44,9 +46,9 @@ pub const Tile = struct {
 
 pub const TilePool = struct {
     tiles: []Tile,
-    tiles_count_w: usize,
-    tiles_count_h: usize,
-    tiles_count: usize,
+    count_w: usize,
+    count_h: usize,
+    count: usize,
     tile_dimensions: usize,
 
     pub fn init(allocator: std.mem.Allocator, conf: FramebufferConfig) !TilePool {
@@ -64,9 +66,9 @@ pub const TilePool = struct {
 
         return .{
             .tiles = tiles,
-            .tiles_count_w = tiles_count_w,
-            .tiles_count_h = tiles_count_h,
-            .tiles_count = tiles_count,
+            .count_w = tiles_count_w,
+            .count_h = tiles_count_h,
+            .count = tiles_count,
             .tile_dimensions = conf.tile_dimensions,
         };
     }

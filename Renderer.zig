@@ -24,48 +24,9 @@ const ChunkCoord = @import("math/types.zig").ChunkCoord;
 const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
 const CameraConfig = @import("EngineConfig.zig").EngineConfig.CameraConfig;
 
-const AtomicUsize = std.atomic.Value(usize);
-
-const batch_size: usize = 16;
-
-fn tile_worker(
-    next: *AtomicUsize,
-    renderer: *const Renderer,
-    tiles_pool: *tile.TilePool,
-    buf: Framebuffer,
-    tile_offsets: []const usize,
-    tile_refs: []const cfg.Uint,
-    atlas: *Atlas,
-) void {
-    while (true) {
-        const tile_base = next.fetchAdd(batch_size, .monotonic);
-        if (tile_base >= tiles_pool.tiles_count) break;
-
-        for (0..batch_size) |incr| {
-            const tile_i = tile_base + incr;
-            if (tile_i >= tiles_pool.tiles_count) break;
-
-            const start = tile_offsets[tile_i];
-            const end = tile_offsets[tile_i + 1];
-
-            if (start == end) continue;
-
-            var t = &tiles_pool.tiles[tile_i];
-            t.clear();
-
-            for (tile_refs[start..end]) |tri_i_u| {
-                const tri_i: usize = @intCast(tri_i_u);
-                renderer.triangles[tri_i].render_triangle_in_tile(t, atlas);
-            }
-
-            t.write_to_fb(buf);
-        }
-    }
-}
-
 pub const Renderer = struct {
     triangles: []RasterTriangle,
-    cubes_triangles_count: []usize,
+    triangles_per_cube: []usize,
 
     width: usize,
     height: usize,
@@ -83,8 +44,7 @@ pub const Renderer = struct {
         tile_counts: usize,
         view_distance: f32,
     ) !Renderer {
-        const side: usize = @intFromFloat(view_distance * 2 + 1);
-        std.debug.print("side: {any}", .{side});
+        const side: usize = @intFromFloat(view_distance / 5);
 
         const estimated: usize = side * side * side; // AABB of the view sphere
 
@@ -93,7 +53,7 @@ pub const Renderer = struct {
             // but later please implement alloc for the view sphere
             // Remove magic numbers here before I have a big issueMQLSJDLKJSDF KJSF
             .triangles = try allocator.alloc(RasterTriangle, estimated * 16 * 16 * 16 * 12),
-            .cubes_triangles_count = try allocator.alloc(usize, estimated * 16 * 16 * 16),
+            .triangles_per_cube = try allocator.alloc(usize, estimated * 16 * 16 * 16),
 
             .width = conf.width,
             .height = conf.height,
@@ -111,7 +71,7 @@ pub const Renderer = struct {
         allocator.free(self.tile_offsets);
         allocator.free(self.write_pos);
         allocator.free(self.tile_refs);
-        allocator.free(self.cubes_triangles_count);
+        allocator.free(self.triangles_per_cube);
         self.chunk_entries.deinit(allocator);
     }
 
@@ -139,99 +99,6 @@ pub const Renderer = struct {
         // WARN: Clamp to tile grid if necessary
 
         return .{ .min_tx = min_tx, .max_tx = max_tx, .min_ty = min_ty, .max_ty = max_ty };
-    }
-
-    fn ensureTileRefsCapacity(
-        self: *Renderer,
-        allocator: std.mem.Allocator,
-        needed: usize,
-    ) !void {
-        if (self.tile_refs.len >= needed) return;
-
-        const new_cap = @max(self.tile_refs.len * 8, needed); // Maybe 8 is a bit too much
-        const new_buf = try allocator.alloc(Uint, new_cap);
-        allocator.free(self.tile_refs);
-        self.tile_refs = new_buf;
-    }
-
-    pub fn render(
-        self: *Renderer,
-        pool: *std.Thread.Pool,
-        tiles_pool: *tile.TilePool,
-        buf: Framebuffer,
-        allocator: std.mem.Allocator,
-        atlas: *Atlas,
-    ) !void {
-        // P: First pass (count the triangles for each tile)
-        @memset(self.tile_counts[0..], 0);
-
-        for (0..self.cubes_triangles_count.len) |cube_idx| {
-            const count = self.cubes_triangles_count[cube_idx];
-            if (count == 0) continue;
-
-            const base = cube_idx * 12;
-
-            for (self.triangles[base .. base + count]) |triangle| {
-                const range = tile_range_for_tri(self, triangle);
-
-                var x = range.min_tx;
-                while (x < range.max_tx) : (x += 1) {
-                    var y = range.min_ty;
-                    while (y < range.max_ty) : (y += 1) {
-                        const idx = x + tiles_pool.tiles_count_w * y;
-                        self.tile_counts[idx] += 1;
-                        tiles_pool.tiles[idx].was_occupied = true;
-                    }
-                }
-            }
-        }
-
-        var sum: usize = 0;
-        for (0..tiles_pool.tiles_count) |t| {
-            self.tile_offsets[t] = sum;
-            sum += @as(usize, self.tile_counts[t]);
-        }
-        self.tile_offsets[tiles_pool.tiles_count] = sum;
-
-        try self.ensureTileRefsCapacity(allocator, sum);
-
-        // FIX: Change to a memcpy
-        for (0..tiles_pool.tiles_count) |t| self.write_pos[t] = self.tile_offsets[t];
-
-        // P: Second pass (scatter triangle indices into tile_refs)
-        for (0..self.cubes_triangles_count.len) |cube_idx| {
-            const count = self.cubes_triangles_count[cube_idx];
-            if (count == 0) continue;
-
-            const base = cube_idx * 12;
-
-            for (self.triangles[base .. base + count], base..base + count) |triangle, tri_i| {
-                const range = tile_range_for_tri(self, triangle);
-
-                var tx = range.min_tx;
-                while (tx < range.max_tx) : (tx += 1) {
-                    var ty = range.min_ty;
-                    while (ty < range.max_ty) : (ty += 1) {
-                        const tile_i = tx + tiles_pool.tiles_count_w * ty;
-
-                        const dst = self.write_pos[tile_i];
-                        self.tile_refs[dst] = @intCast(tri_i);
-                        self.write_pos[tile_i] = dst + 1;
-                    }
-                }
-            }
-        }
-
-        // P: Third pass (render per tile and blit) - PARALLEL
-        var next = AtomicUsize.init(0);
-        var wg = std.Thread.WaitGroup{};
-        const worker_count = try std.Thread.getCpuCount();
-
-        for (0..worker_count) |_| {
-            pool.spawnWg(&wg, tile_worker, .{ &next, self, tiles_pool, buf, self.tile_offsets, self.tile_refs, atlas });
-        }
-
-        wg.wait();
     }
 
     fn clip_outcode(v: Vec4f) u8 {
@@ -356,7 +223,8 @@ pub const Renderer = struct {
         camera: *Camera,
         atlas: *Atlas,
     ) !void {
-        const player_chunk = worldToChunkCoord(player_pos, 16); // FIX: Change magic number
+        const chunk_size_i: i32 = @intCast(chunk_size);
+        const player_chunk = worldToChunkCoord(player_pos, chunk_size_i);
 
         self.chunk_entries.clearRetainingCapacity();
 
@@ -398,14 +266,19 @@ pub const Renderer = struct {
             for (0..chunk.chunk.voxels.len) |i| {
                 var cube_grass = Cube.init(.grass); // for now we render everything as a grass block
 
-                // This is working for sure
-                const x: Float = @floatFromInt(i / (chunk_size * chunk_size) * 2);
-                const y: Float = @floatFromInt(((i / chunk_size) % chunk_size) * 2);
-                const z: Float = @floatFromInt((i % chunk_size) * 2);
+                // Coordinates of the block in the chunk
+                const x_chunk: Float = @floatFromInt(i / (chunk_size * chunk_size) * 2);
+                const y_chunk: Float = @floatFromInt(((i / chunk_size) % chunk_size) * 2);
+                const z_chunk: Float = @floatFromInt((i % chunk_size) * 2);
+
+                // Coordinates of the block in world space
+                const x: Float = x_chunk + @as(Float, @floatFromInt(chunk.chunk.coord[0] * chunk_size_i));
+                const y: Float = y_chunk + @as(Float, @floatFromInt(chunk.chunk.coord[1] * chunk_size_i));
+                const z: Float = z_chunk + @as(Float, @floatFromInt(chunk.chunk.coord[2] * chunk_size_i));
 
                 const cube_start = chunk_offset * 12 + i * 12;
                 const cube_end = cube_start + 12;
-                self.cubes_triangles_count[chunk_offset + i] =
+                self.triangles_per_cube[chunk_offset + i] =
                     cube_grass.genRasterTriangles(self, camera, atlas, self.triangles[cube_start..cube_end], .{ x, y, z, 0 });
             }
         }

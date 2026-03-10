@@ -11,6 +11,7 @@ const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const Atlas = @import("Atlas.zig").Atlas;
 const TilePool = @import("tile.zig").TilePool;
 const World = @import("World.zig").World;
+const TriangleRasterizer = @import("renderer/TrianglesRasterizer.zig").TrianglesRasterizer;
 
 const cfg = @import("config.zig");
 const Vec3f = cfg.Vec3f;
@@ -25,6 +26,7 @@ pub const Engine = struct {
     tile_pool: TilePool,
     atlas: Atlas,
     world: World,
+    triangle_rasterizer: TriangleRasterizer,
 
     pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
         const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
@@ -32,6 +34,7 @@ pub const Engine = struct {
         const graphics = try SdlGraphics.init(conf.framebuffer_config);
         const atlas = try Atlas.init(allocator, conf.atlas_config);
         const world = World.init(allocator, conf.world_config);
+        const triangle_rasterizer = try TriangleRasterizer.init(allocator, tile_pool.count);
         const camera = Camera.init(
             conf.camera_config,
             conf.framebuffer_config.width,
@@ -40,7 +43,7 @@ pub const Engine = struct {
         const renderer = Renderer.init(
             allocator,
             conf.framebuffer_config,
-            tile_pool.tiles_count,
+            tile_pool.count,
             conf.camera_config.view_distance,
         ) catch unreachable;
 
@@ -53,6 +56,7 @@ pub const Engine = struct {
             .tile_pool = tile_pool,
             .atlas = atlas,
             .world = world,
+            .triangle_rasterizer = triangle_rasterizer,
         };
     }
 
@@ -62,6 +66,7 @@ pub const Engine = struct {
         self.platform.deinit();
         self.graphics.deinit();
         self.atlas.deinit(self.allocator);
+        self.triangle_rasterizer.deinit(self.allocator);
     }
 
     pub fn beginFrame(self: *Engine) !FrameContext {
