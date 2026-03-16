@@ -52,9 +52,9 @@ pub const Renderer = struct {
         return .{
             // FIX: For now I consider pseudo AABB of the view sphere,
             // but later please implement alloc for the view sphere
-            // Remove magic numbers here before I have a big issueMQLSJDLKJSDF KJSF
-            .triangles = try allocator.alloc(RasterTriangle, estimated * 16 * 16 * 16 * 12),
-            .triangles_per_cube = try allocator.alloc(usize, estimated * 16 * 16 * 16),
+            // Remove magic numbers here before I have a big issue MQLSJDLKJSDF KJSF
+            .triangles = try allocator.alloc(RasterTriangle, estimated * 8 * 8 * 8 * 12),
+            .triangles_per_cube = try allocator.alloc(usize, estimated * 8 * 8 * 8),
 
             .width = conf.width,
             .height = conf.height,
@@ -224,6 +224,11 @@ pub const Renderer = struct {
         camera: *Camera,
         atlas: *Atlas,
     ) !void {
+        // Move these out of here
+        var cube_grass = Cube.init(.grass);
+        // var cube_dirt = Cube.init(.dirt);
+        // var cube_stone = Cube.init(.stone);
+
         const chunk_size_i: i32 = @intCast(chunk_size);
         const player_chunk = worldToChunkCoord(player_pos, chunk_size_i);
 
@@ -265,8 +270,6 @@ pub const Renderer = struct {
 
             // Then we render the chunk
             for (0..chunk.chunk.voxels.len) |i| {
-                var cube_grass = Cube.init(.grass); // for now we render everything as a grass block
-
                 // Coordinates of the block in the chunk
                 const x_chunk: Float = @floatFromInt(i / (chunk_size * chunk_size) * 2);
                 const y_chunk: Float = @floatFromInt(((i / chunk_size) % chunk_size) * 2);

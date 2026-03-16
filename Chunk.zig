@@ -4,15 +4,21 @@ const BlockType = @import("Atlas.zig").BlockTypes;
 
 const ChunkCoord = @import("math/types.zig").ChunkCoord;
 
+const Block = @import("world/Block.zig");
+const Quad = Block.Quad;
+const BlockId = Block.BlockId;
+
 pub const Chunk = struct {
     coord: ChunkCoord,
 
     dimensions: usize,
 
-    voxels: []BlockType,
+    voxels: []BlockId,
 
     dirty: bool = true,
     meshed: bool = false,
+
+    mesh: std.ArrayList(Quad),
 
     // output of meshing
     face_count: usize = 0,
@@ -28,7 +34,7 @@ pub const Chunk = struct {
         const world_min = coord * size_vec;
         const world_max = world_min + size_vec;
 
-        const voxels = try allocator.alloc(BlockType, size * size * size);
+        const voxels = try allocator.alloc(BlockId, size * size * size);
 
         for (0..voxels.len) |i| voxels[i] = @enumFromInt(i % 3);
 
@@ -39,6 +45,7 @@ pub const Chunk = struct {
             .world_min = world_min,
             .world_max = world_max,
             .dimensions = size,
+            .mesh = undefined,
         };
     }
 

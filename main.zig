@@ -14,14 +14,14 @@ const Camera = @import("Camera.zig").Camera;
 const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Renderer = @import("Renderer.zig").Renderer;
-const cube_worker = @import("cube-worker.zig");
 const Chunk = @import("Chunk.zig").Chunk;
 const ChunkCoord = @import("Chunk.zig").ChunkCoord;
+const Profiler = @import("Profiler.zig").Profiler;
 
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 40.0,
+        .view_distance = 20.0,
         .from = .{ 0, 0, 0 },
         .to = .{ 0, 0, 0 },
         .speed = 15.0,
@@ -31,7 +31,7 @@ const engine_config = EngineConfig{
         .width = 1920,
         .height = 1080,
         .scale = 1,
-        .tile_dimensions = 8,
+        .tile_dimensions = 16,
     },
     .atlas_config = .{
         .width = 96,
@@ -42,7 +42,7 @@ const engine_config = EngineConfig{
         .channels_rgb = 3,
     },
     .world_config = .{
-        .chunk_size = 16,
+        .chunk_size = 8,
     },
     .debug_config = .{
         .show_fps = true,
@@ -52,6 +52,10 @@ const engine_config = EngineConfig{
 };
 
 var engine: Engine = undefined;
+
+var main_prof = Profiler{};
+
+var total_frame_ns: u64 = 0;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -69,14 +73,17 @@ pub fn main() !void {
     var t: usize = 0;
 
     _ = try engine.world.ensureChunk(.{ 0, 0, 0 });
-    // _ = try engine.world.ensureChunk(.{ 3, 0, 0 });
+    _ = try engine.world.ensureChunk(.{ 2, 0, 0 });
 
     while (engine.platform.running) : (t += 1) {
+        var frame_timer = try std.time.Timer.start();
+
         var frame = try engine.beginFrame();
         defer engine.endFrame(&frame);
 
         engine.camera.view_mat = mat.create_view(engine.camera.from, engine.camera.to);
 
+        var prof_scope = try main_prof.begin(.triangle_setup);
         try engine.renderer.renderWorld(
             engine.camera.from,
             @intFromFloat(engine.camera.view_distance),
@@ -85,7 +92,9 @@ pub fn main() !void {
             &engine.camera,
             &engine.atlas,
         );
+        prof_scope.end();
 
+        prof_scope = try main_prof.begin(.tile_raster);
         try engine.triangle_rasterizer.render(
             allocator,
             &pool,
@@ -95,6 +104,7 @@ pub fn main() !void {
             frame.framebuffer,
             &engine.atlas,
         );
+        prof_scope.end();
 
         if (engine_config.debug_config.show_tex_atlas) engine.atlas.debug_show_atlas(&frame.framebuffer);
         if (engine_config.debug_config.show_occupied_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);
@@ -102,5 +112,9 @@ pub fn main() !void {
         if (engine_config.debug_config.show_fps) engine.platform.fps_counter_update();
 
         engine.platform.process_inputs(frame.dt, &engine.camera, &engine.graphics);
+
+        total_frame_ns += frame_timer.read();
     }
+
+    main_prof.printReport(total_frame_ns);
 }

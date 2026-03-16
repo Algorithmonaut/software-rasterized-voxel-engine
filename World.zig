@@ -26,8 +26,6 @@ pub const World = struct {
         self.chunks.deinit();
     }
 
-    // We want a ordinary hashable scalar,
-    // apparently can have weird representation / comparaison constraints
     inline fn chunkKey(coord: ChunkCoord) u64 {
         // [-1048576, +1048575] (i32) ===[1 << 20 = 1048576]===> [0, 2097151]
         // [0, 2097151] fits in 21 bits; 21*3 = 63 bits

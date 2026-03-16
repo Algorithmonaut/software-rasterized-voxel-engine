@@ -1,0 +1,12 @@
+* 16/03/26
+  Started implementing chunk meshes. I computed quad offsets to generate quads
+  from a block in chunk space. My implementation is maybe overkill for now, and
+  I mixed texture coordinates offsets and chunk coordinates offsets, which I
+  think is bad. See the file for proposed cleaner implementation. 
+  Try to not overcomplicate things.
+
+  TODO: Iterate over all the voxels in a chunk to generate a basic mesh of the chunk.
+  TODO: Using bitwise op, implement chunk-local overlapped hidden face removal.
+  TODO: Make the hidden face removal work with faces that overlap from two separate chunks.
+  TODO: Implement a basic wireframe mode (maybe keeping UV lerp for the wire).
+

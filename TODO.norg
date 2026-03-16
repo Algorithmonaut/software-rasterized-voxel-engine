@@ -1,0 +1,102 @@
+* ( ) Implement chunk meshing (mesh chunk once, reuse)
+
+** ( ) Replace BlockTypes with this: 
+   @code zig
+    pub const BlockId = enum(u8) {
+        air,
+        dirt,
+        stone,
+        grass,
+    };
+
+    pub const Face = enum(u3) {
+        back,
+        front,
+        left,
+        right,
+        bottom,
+        top,
+    };
+
+    pub const BlockDef = struct {
+        solid: bool,
+        opaque: bool,
+        face_tiles: [6]u16,
+    };
+    pub const block_defs = [_]BlockDef{
+        // air
+        .{
+            .solid = false,
+            .opaque = false,
+            .face_tiles = .{0,0,0,0,0,0},
+        },
+        // dirt
+        .{
+            .solid = true,
+            .opaque = true,
+            .face_tiles = .{ dirt_tile, dirt_tile, dirt_tile, dirt_tile, dirt_tile, dirt_tile },
+        },
+        // stone
+   @end
+
+** ( ) Use quads in the chunk mesh
+   @code zig
+    pub const MeshQuad = struct {
+        positions: [4]@Vector(3, f32), // or integer local voxel corners
+        uvs: [4]@Vector(2, u16),
+        tile_id: u16, // optional alternative to explicit uvs
+        normal_face: Face,
+    };
+
+    pub const ChunkMesh = struct {
+        quads: []MeshQuad,
+        quad_count: usize,
+    };
+   @end
+
+
+** ( ) Implement basic hidden face removal (two touching quads should not be rendered)
+** ( ) Implement world wise hidden face removal (such that hidden face removal also works for cubes in chunk's border)
+
+* ( ) Implement wireframe mode
+* ( ) Integrate the profiler in the code
+
+* ( ) Refactor code structure (also clean main)
+  @code 
+    engine/
+      Engine.zig
+      EngineConfig.zig
+      FrameContext.zig
+
+    platform/
+      SdlPlatform.zig
+      SdlGraphics.zig
+
+    world/
+      World.zig
+      Chunk.zig
+      Block.zig
+      ChunkMesher.zig
+
+    render/
+      Visibility.zig
+      Mesh.zig
+      TriangleSetup.zig
+      TriangleBinner.zig
+      TrianglesRasterizer.zig
+      Atlas.zig
+      Framebuffer.zig
+
+    math/
+      matrix.zig
+      vector.zig
+      types.zig
+  @end
+
+* ( ) Optimize the triangle's rasterization
+
+* ( ) Print average quads per chunk after main loop 
+
+* ( ) Binary greedy meshing
+
+* ( ) Create a basic UI

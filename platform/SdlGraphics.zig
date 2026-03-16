@@ -1,14 +1,14 @@
 // NOTE: Refactored: YES
 
-const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
+const FramebufferConfig = @import("../EngineConfig.zig").EngineConfig.FramebufferConfig;
 
 const std = @import("std");
 const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");
     @cInclude("SDL2/SDL.h");
 });
-const Framebuffer = @import("Framebuffer.zig").Framebuffer;
-const Float = @import("math/types.zig").Float;
+const Framebuffer = @import("../Framebuffer.zig").Framebuffer;
+const Float = @import("../math/types.zig").Float;
 
 pub const SdlGraphics = struct {
     window: *c.SDL_Window,
