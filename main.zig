@@ -17,6 +17,8 @@ const Renderer = @import("Renderer.zig").Renderer;
 const Chunk = @import("Chunk.zig").Chunk;
 const ChunkCoord = @import("Chunk.zig").ChunkCoord;
 const Profiler = @import("Profiler.zig").Profiler;
+const chunk_mesher = @import("world/chunk-mesher.zig");
+const RasterTriangles = @import("triangle.zig").RasterTriangle;
 
 const engine_config = EngineConfig{
     .camera_config = .{
@@ -65,6 +67,9 @@ pub fn main() !void {
         allocator, // Allocator
         engine_config,
     );
+
+    var mesher = chunk_mesher.Mesher.init(&engine.atlas);
+
     @setFloatMode(.optimized);
 
     var pool: std.Thread.Pool = undefined;
@@ -72,8 +77,11 @@ pub fn main() !void {
 
     var t: usize = 0;
 
-    _ = try engine.world.ensureChunk(.{ 0, 0, 0 });
+    const chunk = try engine.world.ensureChunk(.{ 0, 0, 0 });
     _ = try engine.world.ensureChunk(.{ 2, 0, 0 });
+
+    try mesher.generateMesh(chunk, &engine.atlas, allocator);
+    std.debug.print("{any}\n", .{chunk.mesh.items});
 
     while (engine.platform.running) : (t += 1) {
         var frame_timer = try std.time.Timer.start();
@@ -95,16 +103,39 @@ pub fn main() !void {
         prof_scope.end();
 
         prof_scope = try main_prof.begin(.tile_raster);
+        // try engine.triangle_rasterizer.render(
+        //     allocator,
+        //     &pool,
+        //     engine.renderer.triangles,
+        //     engine.renderer.triangles_per_cube,
+        //     &engine.tile_pool,
+        //     frame.framebuffer,
+        //     &engine.atlas,
+        // );
+        prof_scope.end();
+
+        var triangles: [1]RasterTriangles = undefined;
+
+        triangles[0] = .{
+            .v0 = .{ 0, 0 },
+            .v1 = .{ 200, 300 },
+            .v2 = .{ 0, 300 },
+            .v0_uv = .{ 0, 0 },
+            .v1_uv = .{ 0, 100 },
+            .v2_uv = .{ 200, 100 },
+            .v0_rec_z = 0.25,
+            .v1_rec_z = 0.25,
+            .v2_rec_z = 0.25,
+        };
+
         try engine.triangle_rasterizer.render(
             allocator,
             &pool,
-            engine.renderer.triangles,
-            engine.renderer.triangles_per_cube,
+            &triangles,
             &engine.tile_pool,
             frame.framebuffer,
             &engine.atlas,
         );
-        prof_scope.end();
 
         if (engine_config.debug_config.show_tex_atlas) engine.atlas.debug_show_atlas(&frame.framebuffer);
         if (engine_config.debug_config.show_occupied_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);

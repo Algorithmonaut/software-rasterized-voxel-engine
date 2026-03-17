@@ -266,7 +266,6 @@ pub const TrianglesRasterizer = struct {
         allocator: std.mem.Allocator,
         pool: *std.Thread.Pool,
         triangles: []RasterTriangle,
-        triangles_per_cube: []usize,
         tile_pool: *TilePool,
         fb: Framebuffer,
         atlas: *Atlas,
@@ -274,30 +273,23 @@ pub const TrianglesRasterizer = struct {
         @memset(self.tile_counts, 0);
 
         // P: 1st pass, count the triangles for each tile
-        for (0..triangles_per_cube.len) |cube_i| { // we work cube-wise
-            const count = triangles_per_cube[cube_i];
-            if (count == 0) continue;
+        for (0..triangles.len) |tri_i| {
+            const tri = triangles[tri_i];
+            const range = tileRangeForTriangle(tri, tile_pool.tile_dimensions, fb.width, fb.height);
 
-            const base = cube_i * 12;
-
-            for (triangles[base .. base + count]) |tri| {
-                const range = tileRangeForTriangle(tri, tile_pool.tile_dimensions, fb.width, fb.height);
-
-                // NOTE: Try to consider the cache, array is row major, notice the loop order
-                var y = range.min_ty;
-                while (y < range.max_ty) : (y += 1) {
-                    var x = range.min_tx;
-                    while (x < range.max_tx) : (x += 1) {
-                        const idx = x + tile_pool.count_w * y;
-                        self.tile_counts[idx] += 1;
-                        tile_pool.tiles[idx].was_occupied = true;
-                    }
+            // NOTE: Try to consider the cache, array is row major, notice the loop order
+            var y = range.min_ty;
+            while (y < range.max_ty) : (y += 1) {
+                var x = range.min_tx;
+                while (x < range.max_tx) : (x += 1) {
+                    const idx = x + tile_pool.count_w * y;
+                    self.tile_counts[idx] += 1;
+                    tile_pool.tiles[idx].was_occupied = true;
                 }
             }
         }
 
         var sum: usize = 0;
-
         for (0..tile_pool.count) |t| {
             self.tile_offsets[t] = sum;
             sum += @as(usize, self.tile_counts[t]);
@@ -310,23 +302,19 @@ pub const TrianglesRasterizer = struct {
         for (0..tile_pool.count) |t| self.write_pos[t] = self.tile_offsets[t];
 
         // P: 2nd pass, scatter triangle indices into tile_refs
-        for (0..triangles_per_cube.len) |cube_i| {
-            const count = triangles_per_cube[cube_i];
-            const base = cube_i * 12;
+        for (0..triangles.len) |tri_i| { // we work cube-wise
+            const tri = triangles[tri_i];
+            const range = tileRangeForTriangle(tri, tile_pool.tile_dimensions, fb.width, fb.height);
 
-            for (triangles[base .. base + count], 0..) |tri, tri_i| {
-                const range = tileRangeForTriangle(tri, tile_pool.tile_dimensions, fb.width, fb.height);
+            var ty = range.min_ty;
+            while (ty < range.max_ty) : (ty += 1) {
+                var tx = range.min_tx;
+                while (tx < range.max_tx) : (tx += 1) {
+                    const tile_i = tx + tile_pool.count_w * ty;
 
-                var ty = range.min_ty;
-                while (ty < range.max_ty) : (ty += 1) {
-                    var tx = range.min_tx;
-                    while (tx < range.max_tx) : (tx += 1) {
-                        const tile_i = tx + tile_pool.count_w * ty;
-
-                        const dst = self.write_pos[tile_i];
-                        self.tile_triangle_indices[dst] = @intCast(base + tri_i);
-                        self.write_pos[tile_i] = dst + 1;
-                    }
+                    const dst = self.write_pos[tile_i];
+                    self.tile_triangle_indices[dst] = @intCast(tri_i);
+                    self.write_pos[tile_i] = dst + 1;
                 }
             }
         }

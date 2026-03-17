@@ -3,7 +3,7 @@ const t = @import("../math/types.zig");
 
 /// The vertex position should be in chunk space
 pub const Vertex = struct {
-    pos: [3]t.Int,
+    pos: [3]usize,
     uv: [2]usize,
 };
 

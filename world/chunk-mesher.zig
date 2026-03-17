@@ -12,6 +12,7 @@ const Face = Block.Face;
 
 const types = @import("../math/types.zig");
 const Vec3i = types.Vec3i;
+const PosVec = @Vector(3, usize);
 
 const UV = @Vector(2, usize);
 
@@ -36,15 +37,22 @@ const UV = @Vector(2, usize);
 
 // NOTE: Also maybe make the mesher stateless
 
+const UvCoord = struct {
+    left: usize,
+    right: usize,
+    top: usize,
+    bottom: usize,
+};
+
 pub const Mesher = struct {
     face_offsets: [6]Quad,
 
     fn makeQuad(
-        p0: Vec3i, // bottom-left
-        p1: Vec3i, // top-left
-        p2: Vec3i, // top-right
-        p3: Vec3i, // bottom-right
-        uv: struct { left: usize, right: usize, top: usize, bottom: usize },
+        p0: PosVec, // bottom-left
+        p1: PosVec, // top-left
+        p2: PosVec, // top-right
+        p3: PosVec, // bottom-right
+        uv: UvCoord,
     ) Quad {
         return .{
             .v0 = .{ .pos = p0, .uv = .{ uv.left, uv.bottom } },
@@ -54,12 +62,7 @@ pub const Mesher = struct {
         };
     }
 
-    fn faceUv(face: Face, tex_w: usize, tex_h: usize) struct {
-        left: usize,
-        right: usize,
-        top: usize,
-        bottom: usize,
-    } {
+    fn faceUv(face: Face, tex_w: usize, tex_h: usize) UvCoord {
         const left = @intFromEnum(face) * tex_w;
         return .{
             .left = left,
@@ -131,16 +134,57 @@ pub const Mesher = struct {
         };
     }
 
-    // pub fn generateMesh(chunk: *Chunk, atlas: *Atlas, allocator: std.mem.Allocator) void {
-    //     const size = chunk.dimensions;
-    //
-    //     const mesh = std.ArrayList(Quad).init(allocator, size);
-    //
-    //     for (0..chunk.voxels.len) |i| {
-    //         const x = i % size;
-    //         const y = (i / size) % size;
-    //         const z = i % (size * size);
-    //
-    //         const id: BlockId = @enumFromInt(chunk.voxels[i]);
-    //     }
+    fn generateQuadCoordinates(
+        quad_offset: Quad,
+        x: usize,
+        y: usize,
+        z: usize,
+    ) Quad {
+        var quad = quad_offset;
+
+        quad.v0.pos[0] += x;
+        quad.v1.pos[0] += x;
+        quad.v2.pos[0] += x;
+        quad.v3.pos[0] += x;
+
+        quad.v0.pos[1] += y;
+        quad.v1.pos[1] += y;
+        quad.v2.pos[1] += y;
+        quad.v3.pos[1] += y;
+
+        quad.v0.pos[2] += z;
+        quad.v1.pos[2] += z;
+        quad.v2.pos[2] += z;
+        quad.v3.pos[2] += z;
+
+        return quad;
+    }
+
+    pub fn generateMesh(self: *Mesher, chunk: *Chunk, atlas: *Atlas, allocator: std.mem.Allocator) !void {
+        _ = atlas;
+        const size = chunk.dimensions;
+        var mesh = try std.ArrayList(Quad).initCapacity(allocator, size);
+
+        for (0..chunk.voxels.len) |i| {
+            const x = i % size;
+            const y = (i / size) % size;
+            const z = i % (size * size);
+
+            // const id: BlockId = @enumFromInt(chunk.voxels[i]);
+
+            for (0..6) |face| {
+                const quad = generateQuadCoordinates(
+                    self.face_offsets[face],
+                    x,
+                    y,
+                    z,
+                );
+
+                try mesh.append(allocator, quad);
+            }
+        }
+
+        chunk.mesh.clearAndFree(allocator);
+        chunk.mesh = mesh;
+    }
 };
