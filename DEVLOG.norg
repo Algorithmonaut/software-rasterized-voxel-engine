@@ -5,8 +5,23 @@
   think is bad. See the file for proposed cleaner implementation. 
   Try to not overcomplicate things.
 
-  TODO: Iterate over all the voxels in a chunk to generate a basic mesh of the chunk.
+
+* 17/03/26
+  Created a (worryingly small) function to generate a basic mesh from a chunk.
+
+  I refactored TriangleRasterizer.zig by removing cube offsets, because the 
+  chunk's RasterTriangle count will now be compact (the total number of 
+  RasterTriangle per chunk/mesh is known).
+
+  I also rewrote the Renderer.zig file, adding support for the generation of 
+  the RasterTriangles from a WorldQuad (Quad in world space). 
+  Finding which chunk is visible in the view sphere remains to be verified.
+  Same thing for the generate of RasterTriangles from the WorldQuads of the mesh.
+
+
+  TODO: In Renderer.zig, for all chunk meshes, generate WorldQuad and at to triangles.
+  TODO: Fix bugs and test implementation.
+  TODO: Implement a basic wireframe mode (maybe keeping UV lerp for the wire).
   TODO: Using bitwise op, implement chunk-local overlapped hidden face removal.
   TODO: Make the hidden face removal work with faces that overlap from two separate chunks.
-  TODO: Implement a basic wireframe mode (maybe keeping UV lerp for the wire).
 

@@ -1,106 +1,68 @@
 const std = @import("std");
-const ctx = @import("context.zig"); // WARN: To refactor
-const Triangle = @import("triangle.zig").Triangle;
+
 const RasterTriangle = @import("triangle.zig").RasterTriangle;
-const Atlas = @import("Atlas.zig").Atlas;
-const Camera = @import("Camera.zig").Camera;
-const tile = @import("tile.zig");
-const Framebuffer = @import("Framebuffer.zig").Framebuffer;
-
-const t = @import("math/types.zig");
-const Int = t.Int; // WARN: To refactor
-const Uint = t.Uint;
-const Vec4f = t.Vec4f;
-const Vec3f = t.Vec3f;
-const Float = t.Float;
-const Chunk = @import("Chunk.zig").Chunk;
-const Cube = @import("Cube.zig").Cube;
 const World = @import("World.zig").World;
-
-const cube_worker = @import("cube-worker.zig");
-
-const WorldCoord = @import("math/types.zig").WorldCoord;
-const ChunkCoord = @import("math/types.zig").ChunkCoord;
-
 const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
-const CameraConfig = @import("EngineConfig.zig").EngineConfig.CameraConfig;
+const Camera = @import("Camera.zig").Camera;
+const Chunk = @import("Chunk.zig").Chunk;
+const Atlas = @import("Atlas.zig").Atlas;
+
+const Block = @import("world/Block.zig");
+const WorldQuad = Block.WorldQuad;
+const WorldVertex = Block.WorldVertex;
+const WorldTriangle = Block.WorldTriangle;
+
+const types = @import("math/types.zig");
+const Vec4f = types.Vec4f;
+const Vec3f = types.Vec3f;
+const Float = types.Float;
+const Int = types.Int;
+const WorldCoord = types.WorldCoord;
+const ChunkCoord = types.ChunkCoord;
 
 pub const Renderer = struct {
-    triangles: []RasterTriangle,
-    triangles_per_cube: []usize,
-
-    width: usize,
-    height: usize,
-    tile_dimensions: usize,
-
-    tile_counts: []usize,
-    tile_offsets: []usize,
-    write_pos: []usize, // Per tile write cursor
-    tile_refs: []Uint, // FIX: CHANGE TO USIZE, IAM GETTING TIRED OF BEING DUMB
+    triangles: std.ArrayList(RasterTriangle),
     chunk_entries: std.ArrayList(ChunkRenderEntry),
+
+    fb_width: usize,
+    fb_height: usize,
+    tile_dimensions: usize,
 
     pub fn init(
         allocator: std.mem.Allocator,
         conf: FramebufferConfig,
-        tile_counts: usize,
-        view_distance: f32,
+        view_distance: Float,
     ) !Renderer {
-        const side: usize = @intFromFloat(view_distance / 5);
-
-        const estimated: usize = side * side * side; // AABB of the view sphere
+        // TODO: Find a better way to do this
+        const half_view_dist = view_distance / 2;
+        const estimate = half_view_dist * half_view_dist * half_view_dist;
 
         return .{
-            // FIX: For now I consider pseudo AABB of the view sphere,
-            // but later please implement alloc for the view sphere
-            // Remove magic numbers here before I have a big issue MQLSJDLKJSDF KJSF
-            .triangles = try allocator.alloc(RasterTriangle, estimated * 8 * 8 * 8 * 12),
-            .triangles_per_cube = try allocator.alloc(usize, estimated * 8 * 8 * 8),
+            .triangles = try std.ArrayList(RasterTriangle).initCapacity(
+                allocator,
+                10_000,
+            ),
+            .chunk_entries = try std.ArrayList(ChunkRenderEntry).initCapacity(
+                allocator,
+                estimate,
+            ),
 
-            .width = conf.width,
-            .height = conf.height,
+            .fb_width = conf.width,
+            .fb_height = conf.height,
             .tile_dimensions = conf.tile_dimensions,
-            .tile_counts = try allocator.alloc(usize, tile_counts),
-            .tile_offsets = try allocator.alloc(usize, tile_counts + 1),
-            .write_pos = try allocator.alloc(usize, tile_counts),
-            .tile_refs = try allocator.alloc(Uint, 1000000), // Initial guess
-            .chunk_entries = try std.ArrayList(ChunkRenderEntry).initCapacity(allocator, estimated),
         };
     }
 
     pub fn deinit(self: *Renderer, allocator: std.mem.Allocator) void {
-        allocator.free(self.tile_counts);
-        allocator.free(self.tile_offsets);
-        allocator.free(self.write_pos);
-        allocator.free(self.tile_refs);
-        allocator.free(self.triangles_per_cube);
-        self.chunk_entries.deinit(allocator);
+        self.triangles.clearAndFree(allocator);
+        self.chunk_entries.clearAndFree(allocator);
     }
 
-    pub fn begin_frame(self: *Renderer, allocator: std.mem.Allocator) !void {
-        // self.triangles.clearRetainingCapacity();
-        // try self.triangles.ensureTotalCapacity(allocator, cube_count * 6 * 2);
-        _ = self;
-        _ = allocator;
+    pub fn beginFrame(self: *Renderer) void {
+        self.triangles.clearRetainingCapacity();
     }
 
-    inline fn tile_range_for_tri(self: *Renderer, triangle: RasterTriangle) struct {
-        min_tx: usize,
-        max_tx: usize,
-        min_ty: usize,
-        max_ty: usize,
-    } {
-        const bb = triangle.bounding_box();
-
-        // WARN: Change to divCeil if it does not work for max
-        const min_tx = @divFloor(bb.min_x, self.tile_dimensions);
-        const min_ty = @divFloor(bb.min_y, self.tile_dimensions);
-        const max_tx = std.math.divCeil(usize, bb.max_x, self.tile_dimensions) catch unreachable;
-        const max_ty = std.math.divCeil(usize, bb.max_y, self.tile_dimensions) catch unreachable;
-
-        // WARN: Clamp to tile grid if necessary
-
-        return .{ .min_tx = min_tx, .max_tx = max_tx, .min_ty = min_ty, .max_ty = max_ty };
-    }
+    // QUAD RENDERING //////////////////////////////////////////////////////////
 
     fn clip_outcode(v: Vec4f) u8 {
         var code: u8 = 0; // bitfield
@@ -113,29 +75,33 @@ pub const Renderer = struct {
         return code;
     }
 
-    pub inline fn gen_raster_triangle(
-        self: *const Renderer,
-        tri: *Triangle,
-        camera: *Camera,
-    ) ?RasterTriangle {
+    pub inline fn genRasterTriangleFromWorldTriangle(
+        self: *Renderer,
+        allocator: std.mem.Allocator,
+        tri: WorldTriangle,
+        camera: *Camera, // TODO: Pass the projection matrix directly for clarity
+    ) void {
+        // First we project the WorldTriangle in clip space
         var clip: [3]Vec4f = .{
             camera.proj_mat.mul_vec(.{ tri.v0[0], tri.v0[1], tri.v0[2], 1.0 }),
             camera.proj_mat.mul_vec(.{ tri.v1[0], tri.v1[1], tri.v1[2], 1.0 }),
             camera.proj_mat.mul_vec(.{ tri.v2[0], tri.v2[1], tri.v2[2], 1.0 }),
         };
 
+        // Then we do culling for the 6 planes
         const code_0 = clip_outcode(clip[0]);
         const code_1 = clip_outcode(clip[1]);
         const code_2 = clip_outcode(clip[2]);
         if ((code_0 & code_1 & code_2) != 0) return null;
 
-        var rec_ws: Vec3f = undefined; // reciprocal of w = reciprocal of z in camera space
+        var rec_ws: Vec3f = undefined; // rec of w = rec of z in clip space
 
+        // We normalize by w and store reciprocal w in an array (is it necessary?)
         inline for (&clip, 0..) |*vert_h, i| {
             const clip_w = vert_h[3];
             const inv_w = 1.0 / clip_w;
             rec_ws[i] = inv_w;
-            vert_h.* = vert_h.* * @as(Vec4f, @splat(inv_w));
+            vert_h.* = vert_h.* * @as(Vec4f, @splat(inv_w)); // we normalize
 
             clip[i] = vert_h.*;
         }
@@ -168,7 +134,7 @@ pub const Renderer = struct {
             @intFromFloat((1 - (v2[1] + 1.0) * 0.5) * fh + 0.5),
         };
 
-        return .{
+        self.triangles.append(allocator, .{
             .v0 = a,
             .v1 = b,
             .v2 = c,
@@ -178,10 +144,33 @@ pub const Renderer = struct {
             .v0_uv = tri.v0_uv,
             .v1_uv = tri.v1_uv,
             .v2_uv = tri.v2_uv,
-        };
+        });
     }
 
-    ////////////////////////////////////////////////////////////////////////////
+    pub inline fn genRasterTriangleFromWorldQuad(
+        self: *Renderer,
+        allocator: std.mem.Allocator,
+        camera: *Camera,
+        quad: *WorldQuad,
+    ) void {
+        // NOTE: Maybe my triangles vertices aren't set in the correct order
+        const tri_1 = WorldTriangle{
+            .v0 = quad.v0,
+            .v1 = quad.v1,
+            .v2 = quad.v3,
+        };
+
+        const tri_2 = WorldTriangle{
+            .v0 = quad.v1,
+            .v1 = quad.v2,
+            .v2 = quad.v3,
+        };
+
+        self.genRasterTriangleFromWorldTriangle(allocator, tri_1, camera);
+        self.genRasterTriangleFromWorldTriangle(allocator, tri_2, camera);
+    }
+
+    // CHUNK RENDERING /////////////////////////////////////////////////////////
 
     fn worldToChunkCoord(coord: WorldCoord, chunk_size: i32) ChunkCoord {
         const x_i = @as(i32, @intFromFloat(@floor(coord[0])));
@@ -217,6 +206,7 @@ pub const Renderer = struct {
 
     pub fn renderWorld(
         self: *Renderer,
+        allocator: std.mem.Allocator,
         player_pos: WorldCoord,
         view_distance: i32,
         chunk_size: usize,
@@ -224,11 +214,6 @@ pub const Renderer = struct {
         camera: *Camera,
         atlas: *Atlas,
     ) !void {
-        // Move these out of here
-        var cube_grass = Cube.init(.grass);
-        // var cube_dirt = Cube.init(.dirt);
-        // var cube_stone = Cube.init(.stone);
-
         const chunk_size_i: i32 = @intCast(chunk_size);
         const player_chunk = worldToChunkCoord(player_pos, chunk_size_i);
 
@@ -246,7 +231,8 @@ pub const Renderer = struct {
                     if (world.getChunk(coord)) |chunk| {
                         // TODO: Frustum cull here first
 
-                        try self.chunk_entries.appendBounded(
+                        try self.chunk_entries.append(
+                            allocator,
                             .{
                                 .chunk = chunk,
                                 .dist2 = dist2ToPlayer(player_pos, chunk),
@@ -265,26 +251,11 @@ pub const Renderer = struct {
         }.lessThan);
 
         for (self.chunk_entries.items, 0..) |chunk, chunk_i| {
-            const cubes_per_chunk = chunk_size * chunk_size * chunk_size;
-            const chunk_offset = chunk_i * cubes_per_chunk;
+            _ = chunk;
+            _ = chunk_i;
 
-            // Then we render the chunk
-            for (0..chunk.chunk.voxels.len) |i| {
-                // Coordinates of the block in the chunk
-                const x_chunk: Float = @floatFromInt(i / (chunk_size * chunk_size) * 2);
-                const y_chunk: Float = @floatFromInt(((i / chunk_size) % chunk_size) * 2);
-                const z_chunk: Float = @floatFromInt((i % chunk_size) * 2);
-
-                // Coordinates of the block in world space
-                const x: Float = x_chunk + @as(Float, @floatFromInt(chunk.chunk.coord[0] * chunk_size_i));
-                const y: Float = y_chunk + @as(Float, @floatFromInt(chunk.chunk.coord[1] * chunk_size_i));
-                const z: Float = z_chunk + @as(Float, @floatFromInt(chunk.chunk.coord[2] * chunk_size_i));
-
-                const cube_start = chunk_offset * 12 + i * 12;
-                const cube_end = cube_start + 12;
-                self.triangles_per_cube[chunk_offset + i] =
-                    cube_grass.genRasterTriangles(self, camera, atlas, self.triangles[cube_start..cube_end], .{ x, y, z, 0 });
-            }
+            // TODO: For all the quads in the mesh,
+            // generate the world mesh, and render
         }
     }
 };

@@ -1,9 +1,16 @@
 const std = @import("std");
+
 const t = @import("../math/types.zig");
+const Float = t.Float; // NOTE: Maybe change to f64
 
 /// The vertex position should be in chunk space
 pub const Vertex = struct {
     pos: [3]usize,
+    uv: [2]usize,
+};
+
+pub const WorldVertex = struct {
+    pos: [3]Float,
     uv: [2]usize,
 };
 
@@ -12,6 +19,19 @@ pub const Quad = struct {
     v1: Vertex,
     v2: Vertex,
     v3: Vertex,
+};
+
+pub const WorldQuad = struct {
+    v0: WorldVertex,
+    v1: WorldVertex,
+    v2: WorldVertex,
+    v3: WorldVertex,
+};
+
+pub const WorldTriangle = struct {
+    v0: WorldVertex,
+    v1: WorldVertex,
+    v2: WorldVertex,
 };
 
 pub const BlockId = enum(u8) {
