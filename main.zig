@@ -20,12 +20,15 @@ const Profiler = @import("Profiler.zig").Profiler;
 const chunk_mesher = @import("world/chunk-mesher.zig");
 const RasterTriangles = @import("triangle.zig").RasterTriangle;
 
+const Block = @import("world/Block.zig");
+const WorldQuad = Block.WorldQuad;
+
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 20.0,
-        .from = .{ 4, 4, -20 },
-        .to = .{ 4, 4, 0 },
+        .view_distance = 200.0,
+        .from = .{ 4, 4, 4 },
+        .to = .{ 4, 4, 3 },
         .speed = 15.0,
         .sensivity = 0.0025,
     },
@@ -78,11 +81,16 @@ pub fn main() !void {
     var t: usize = 0;
 
     const chunk = try engine.world.ensureChunk(.{ 0, 0, 0 });
-    const chunk2 = try engine.world.ensureChunk(.{ 2, 0, 0 });
+    // const chunk2 = try engine.world.ensureChunk(.{ 2, 0, 0 });
 
     try mesher.generateMesh(chunk, &engine.atlas, allocator);
-    try mesher.generateMesh(chunk2, &engine.atlas, allocator);
-    std.debug.print("{any}\n", .{chunk.mesh.items});
+
+    // const world_quad = WorldQuad{
+    //     .v0 = .{ .pos = .{ 0, 0, 0 }, .uv = .{ 0, 0 } },
+    //     .v1 = .{ .pos = .{ 0, 1, 0 }, .uv = .{ 0, 0 } },
+    //     .v2 = .{ .pos = .{ 1, 1, 0 }, .uv = .{ 0, 0 } },
+    //     .v3 = .{ .pos = .{ 1, 0, 0 }, .uv = .{ 0, 0 } },
+    // };
 
     while (engine.platform.running) : (t += 1) {
         var frame_timer = try std.time.Timer.start();
@@ -101,6 +109,8 @@ pub fn main() !void {
             &engine.camera,
         );
         prof_scope.end();
+
+        // try engine.renderer.genRasterTriangleFromWorldQuad(allocator, &engine.camera, &world_quad);
 
         prof_scope = try main_prof.begin(.tile_raster);
         try engine.triangle_rasterizer.render(

@@ -82,26 +82,19 @@ pub const Renderer = struct {
         tri: WorldTriangle,
         camera: *Camera, // TODO: Pass the projection matrix directly for clarity
     ) !void {
-        // First we project the WorldTriangle in clip space
+        var v0_c: Vec4f = .{ tri.v0.pos[0], tri.v0.pos[1], tri.v0.pos[2], 1.0 };
+        var v1_c: Vec4f = .{ tri.v1.pos[0], tri.v1.pos[1], tri.v1.pos[2], 1.0 };
+        var v2_c: Vec4f = .{ tri.v2.pos[0], tri.v2.pos[1], tri.v2.pos[2], 1.0 };
+
+        v0_c = camera.view_mat.mul_vec(v0_c);
+        v1_c = camera.view_mat.mul_vec(v1_c);
+        v2_c = camera.view_mat.mul_vec(v2_c);
+
+        // We project the WorldTriangle in clip space
         var clip: [3]Vec4f = .{
-            camera.proj_mat.mul_vec(.{
-                tri.v0.pos[0],
-                tri.v0.pos[1],
-                tri.v0.pos[2],
-                1.0,
-            }),
-            camera.proj_mat.mul_vec(.{
-                tri.v1.pos[0],
-                tri.v1.pos[1],
-                tri.v1.pos[2],
-                1.0,
-            }),
-            camera.proj_mat.mul_vec(.{
-                tri.v2.pos[0],
-                tri.v2.pos[1],
-                tri.v2.pos[2],
-                1.0,
-            }),
+            camera.proj_mat.mul_vec(v0_c),
+            camera.proj_mat.mul_vec(v1_c),
+            camera.proj_mat.mul_vec(v2_c),
         };
 
         // Then we do culling for the 6 planes
@@ -109,7 +102,6 @@ pub const Renderer = struct {
         const code_1 = clip_outcode(clip[1]);
         const code_2 = clip_outcode(clip[2]);
         if ((code_0 & code_1 & code_2) != 0) return;
-
         var rec_ws: Vec3f = undefined; // rec of w = rec of z in clip space
 
         // We normalize by w and store reciprocal w in an array (is it necessary?)
@@ -129,12 +121,15 @@ pub const Renderer = struct {
         // Backface culling
         const signed_area = (v1[0] - v0[0]) * (v2[1] - v0[1]) -
             (v1[1] - v0[1]) * (v2[0] - v0[0]);
-        if (signed_area > 0) return;
+        if (signed_area < 0) return;
 
         // P: Clip -> raster
         const fw: Float = @floatFromInt(self.fb_width);
         const fh: Float = @floatFromInt(self.fb_height);
 
+        // NOTE: The clip -> raster conversion of y flips the triangle's
+        // orientation (CCW -> CW), so the order of the vertices in edge functions
+        // in TriangleRasterizer needs to be flipped
         const a = @Vector(2, Int){
             @intFromFloat((v0[0] + 1.0) * 0.5 * fw + 0.5),
             @intFromFloat((1 - (v0[1] + 1.0) * 0.5) * fh + 0.5),
@@ -163,7 +158,7 @@ pub const Renderer = struct {
         });
     }
 
-    inline fn genRasterTriangleFromWorldQuad(
+    pub inline fn genRasterTriangleFromWorldQuad(
         self: *Renderer,
         allocator: std.mem.Allocator,
         camera: *Camera,

@@ -2,15 +2,16 @@ const std = @import("std");
 
 const t = @import("../math/types.zig");
 const Float = t.Float; // NOTE: Maybe change to f64
+const Vec3f = t.Vec3f;
 
 /// The vertex position should be in chunk space
 pub const Vertex = struct {
-    pos: [3]usize,
+    pos: @Vector(3, usize),
     uv: [2]usize,
 };
 
 pub const WorldVertex = struct {
-    pos: [3]Float,
+    pos: Vec3f,
     uv: [2]usize,
 };
 

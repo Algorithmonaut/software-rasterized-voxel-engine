@@ -63,9 +63,9 @@ inline fn renderTriangleInTile(
     const b = triangle.v1;
     const c = triangle.v2;
 
-    const e0 = makeEdge(c, b);
-    const e1 = makeEdge(a, c);
-    const e2 = makeEdge(b, a);
+    const e0 = makeEdge(b, c);
+    const e1 = makeEdge(c, a);
+    const e2 = makeEdge(a, b);
     const area = e0.eval(a[0], a[1]);
 
     if (area == 0) return; // triangle is degenerate
