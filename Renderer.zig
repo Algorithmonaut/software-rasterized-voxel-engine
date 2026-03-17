@@ -118,7 +118,7 @@ pub const Renderer = struct {
         const v1 = clip[1];
         const v2 = clip[2];
 
-        // Backface culling
+        // Backface culling (vertices are oriented CCW)
         const signed_area = (v1[0] - v0[0]) * (v2[1] - v0[1]) -
             (v1[1] - v0[1]) * (v2[0] - v0[0]);
         if (signed_area < 0) return;
@@ -220,14 +220,10 @@ pub const Renderer = struct {
         chunk_pos: ChunkCoord,
         chunk_size: usize,
     ) WorldVertex {
-        const v_pos_vec: @Vector(3, usize) = .{
-            vert.pos[0],
-            vert.pos[1],
-            vert.pos[2],
-        };
-        const v_pos_f: Vec3f = @floatFromInt(v_pos_vec);
+        const v_pos_f: Vec3f = @floatFromInt(vert.pos);
         const chunk_pos_f: Vec3f = @floatFromInt(chunk_pos);
         const size_splat_f: Vec3f = @splat(@as(Float, @floatFromInt(chunk_size)));
+
         const v_pos: Vec3f = v_pos_f + chunk_pos_f * size_splat_f;
 
         return .{

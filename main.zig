@@ -3,9 +3,6 @@ const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");
     @cInclude("SDL2/SDL.h");
 });
-const cube = @import("Cube.zig");
-const ctx = @import("context.zig");
-const tri = @import("triangle.zig");
 const mat = @import("math/matrix.zig");
 
 const Engine = @import("Engine.zig").Engine;
@@ -15,13 +12,8 @@ const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Renderer = @import("Renderer.zig").Renderer;
 const Chunk = @import("Chunk.zig").Chunk;
-const ChunkCoord = @import("Chunk.zig").ChunkCoord;
 const Profiler = @import("Profiler.zig").Profiler;
 const chunk_mesher = @import("world/chunk-mesher.zig");
-const RasterTriangles = @import("triangle.zig").RasterTriangle;
-
-const Block = @import("world/Block.zig");
-const WorldQuad = Block.WorldQuad;
 
 const engine_config = EngineConfig{
     .camera_config = .{
@@ -80,17 +72,27 @@ pub fn main() !void {
 
     var t: usize = 0;
 
-    const chunk = try engine.world.ensureChunk(.{ 0, 0, 0 });
-    // const chunk2 = try engine.world.ensureChunk(.{ 2, 0, 0 });
+    const chunk0 = try engine.world.ensureChunk(.{ 0, 0, 0 });
+    const chunk1 = try engine.world.ensureChunk(.{ 1, 0, 0 });
+    const chunk2 = try engine.world.ensureChunk(.{ 2, 0, 0 });
+    const chunk3 = try engine.world.ensureChunk(.{ 3, 0, 0 });
+    const chunk4 = try engine.world.ensureChunk(.{ 4, 0, 0 });
+    const chunk5 = try engine.world.ensureChunk(.{ 5, 0, 0 });
+    const chunk6 = try engine.world.ensureChunk(.{ 6, 0, 0 });
+    const chunk7 = try engine.world.ensureChunk(.{ 7, 0, 0 });
+    const chunk8 = try engine.world.ensureChunk(.{ 8, 0, 0 });
+    const chunk9 = try engine.world.ensureChunk(.{ 9, 0, 0 });
 
-    try mesher.generateMesh(chunk, &engine.atlas, allocator);
-
-    // const world_quad = WorldQuad{
-    //     .v0 = .{ .pos = .{ 0, 0, 0 }, .uv = .{ 0, 0 } },
-    //     .v1 = .{ .pos = .{ 0, 1, 0 }, .uv = .{ 0, 0 } },
-    //     .v2 = .{ .pos = .{ 1, 1, 0 }, .uv = .{ 0, 0 } },
-    //     .v3 = .{ .pos = .{ 1, 0, 0 }, .uv = .{ 0, 0 } },
-    // };
+    try mesher.generateMesh(chunk0, allocator);
+    try mesher.generateMesh(chunk1, allocator);
+    try mesher.generateMesh(chunk2, allocator);
+    try mesher.generateMesh(chunk3, allocator);
+    try mesher.generateMesh(chunk4, allocator);
+    try mesher.generateMesh(chunk5, allocator);
+    try mesher.generateMesh(chunk6, allocator);
+    try mesher.generateMesh(chunk7, allocator);
+    try mesher.generateMesh(chunk8, allocator);
+    try mesher.generateMesh(chunk9, allocator);
 
     while (engine.platform.running) : (t += 1) {
         var frame_timer = try std.time.Timer.start();
@@ -110,8 +112,6 @@ pub fn main() !void {
         );
         prof_scope.end();
 
-        // try engine.renderer.genRasterTriangleFromWorldQuad(allocator, &engine.camera, &world_quad);
-
         prof_scope = try main_prof.begin(.tile_raster);
         try engine.triangle_rasterizer.render(
             allocator,
@@ -122,29 +122,6 @@ pub fn main() !void {
             &engine.atlas,
         );
         prof_scope.end();
-
-        // var triangles: [1]RasterTriangles = undefined;
-        //
-        // triangles[0] = .{
-        //     .v0 = .{ 0, 0 },
-        //     .v1 = .{ 200, 300 },
-        //     .v2 = .{ 0, 300 },
-        //     .v0_uv = .{ 0, 0 },
-        //     .v1_uv = .{ 0, 100 },
-        //     .v2_uv = .{ 200, 100 },
-        //     .v0_rec_z = 0.25,
-        //     .v1_rec_z = 0.25,
-        //     .v2_rec_z = 0.25,
-        // };
-        //
-        // try engine.triangle_rasterizer.render(
-        //     allocator,
-        //     &pool,
-        //     &triangles,
-        //     &engine.tile_pool,
-        //     frame.framebuffer,
-        //     &engine.atlas,
-        // );
 
         if (engine_config.debug_config.show_tex_atlas) engine.atlas.debug_show_atlas(&frame.framebuffer);
         if (engine_config.debug_config.show_occupied_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);

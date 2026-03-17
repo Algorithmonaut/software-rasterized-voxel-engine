@@ -1,13 +1,11 @@
 const std = @import("std");
 
-const Cube = @import("../Cube.zig").Cube;
 const Chunk = @import("../Chunk.zig").Chunk;
 const Atlas = @import("../Atlas.zig").Atlas;
 
 const Block = @import("Block.zig");
 const Quad = Block.Quad;
 const BlockId = Block.BlockId;
-const Vertex = Block.Vertex;
 const Face = Block.Face;
 
 const types = @import("../math/types.zig");
@@ -66,9 +64,9 @@ pub const Mesher = struct {
         const left = @intFromEnum(face) * tex_w;
         return .{
             .left = left,
-            .right = left + tex_w,
+            .right = left + tex_w - 1,
             .top = 0,
-            .bottom = tex_h,
+            .bottom = tex_h - 1,
         };
     }
 
@@ -140,47 +138,48 @@ pub const Mesher = struct {
         y: usize,
         z: usize,
     ) Quad {
+        const offset: PosVec = .{ x, y, z };
         var quad = quad_offset;
 
-        quad.v0.pos[0] += x;
-        quad.v1.pos[0] += x;
-        quad.v2.pos[0] += x;
-        quad.v3.pos[0] += x;
-
-        quad.v0.pos[1] += y;
-        quad.v1.pos[1] += y;
-        quad.v2.pos[1] += y;
-        quad.v3.pos[1] += y;
-
-        quad.v0.pos[2] += z;
-        quad.v1.pos[2] += z;
-        quad.v2.pos[2] += z;
-        quad.v3.pos[2] += z;
+        quad.v0.pos += offset;
+        quad.v1.pos += offset;
+        quad.v2.pos += offset;
+        quad.v3.pos += offset;
 
         return quad;
     }
 
-    pub fn generateMesh(self: *Mesher, chunk: *Chunk, atlas: *Atlas, allocator: std.mem.Allocator) !void {
-        _ = atlas;
+    pub fn generateMesh(self: *const Mesher, chunk: *Chunk, allocator: std.mem.Allocator) !void {
         const size = chunk.dimensions;
+        const voxels = chunk.voxels;
+
+        const stride_y = size;
+        const stride_z = size * size;
+
         var mesh = try std.ArrayList(Quad).initCapacity(allocator, size);
 
-        for (0..chunk.voxels.len) |i| {
-            const x = i % size;
-            const y = (i / size) % size;
-            const z = i % (size * size);
+        for (0..size) |z| {
+            const z_base = z * stride_z;
 
-            // const id: BlockId = @enumFromInt(chunk.voxels[i]);
+            for (0..size) |y| {
+                const y_base = z_base + y * stride_y;
 
-            for (0..6) |face| {
-                const quad = generateQuadCoordinates(
-                    self.face_offsets[face],
-                    x,
-                    y,
-                    z,
-                );
+                for (0..size) |x| {
+                    const i = y_base + x;
 
-                try mesh.append(allocator, quad);
+                    const id = voxels[i];
+                    if (id == .air) continue;
+
+                    for (0..6) |face| {
+                        const quad = generateQuadCoordinates(
+                            self.face_offsets[face],
+                            x,
+                            y,
+                            z,
+                        );
+                        try mesh.append(allocator, quad);
+                    }
+                }
             }
         }
 
