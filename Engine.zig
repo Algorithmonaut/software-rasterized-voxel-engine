@@ -39,12 +39,11 @@ pub const Engine = struct {
             conf.framebuffer_config.width,
             conf.framebuffer_config.height,
         );
-        const renderer = Renderer.init(
+        const renderer = try Renderer.init(
             allocator,
             conf.framebuffer_config,
-            tile_pool.count,
             conf.camera_config.view_distance,
-        ) catch unreachable;
+        );
 
         return .{
             .allocator = allocator,
@@ -69,7 +68,7 @@ pub const Engine = struct {
     }
 
     pub fn beginFrame(self: *Engine) !FrameContext {
-        try self.renderer.begin_frame(self.allocator);
+        self.renderer.beginFrame();
         const dt = self.platform.begin_frame();
         const framebuffer = try self.graphics.begin_frame();
         framebuffer.clear_black();

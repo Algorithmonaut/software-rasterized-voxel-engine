@@ -24,8 +24,8 @@ const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
         .view_distance = 20.0,
-        .from = .{ 0, 0, 0 },
-        .to = .{ 0, 0, 0 },
+        .from = .{ 4, 4, -20 },
+        .to = .{ 4, 4, 0 },
         .speed = 15.0,
         .sensivity = 0.0025,
     },
@@ -78,9 +78,10 @@ pub fn main() !void {
     var t: usize = 0;
 
     const chunk = try engine.world.ensureChunk(.{ 0, 0, 0 });
-    _ = try engine.world.ensureChunk(.{ 2, 0, 0 });
+    const chunk2 = try engine.world.ensureChunk(.{ 2, 0, 0 });
 
     try mesher.generateMesh(chunk, &engine.atlas, allocator);
+    try mesher.generateMesh(chunk2, &engine.atlas, allocator);
     std.debug.print("{any}\n", .{chunk.mesh.items});
 
     while (engine.platform.running) : (t += 1) {
@@ -93,49 +94,47 @@ pub fn main() !void {
 
         var prof_scope = try main_prof.begin(.triangle_setup);
         try engine.renderer.renderWorld(
+            allocator,
             engine.camera.from,
-            @intFromFloat(engine.camera.view_distance),
             engine.world.chunk_size,
             &engine.world,
             &engine.camera,
-            &engine.atlas,
         );
         prof_scope.end();
 
         prof_scope = try main_prof.begin(.tile_raster);
-        // try engine.triangle_rasterizer.render(
-        //     allocator,
-        //     &pool,
-        //     engine.renderer.triangles,
-        //     engine.renderer.triangles_per_cube,
-        //     &engine.tile_pool,
-        //     frame.framebuffer,
-        //     &engine.atlas,
-        // );
-        prof_scope.end();
-
-        var triangles: [1]RasterTriangles = undefined;
-
-        triangles[0] = .{
-            .v0 = .{ 0, 0 },
-            .v1 = .{ 200, 300 },
-            .v2 = .{ 0, 300 },
-            .v0_uv = .{ 0, 0 },
-            .v1_uv = .{ 0, 100 },
-            .v2_uv = .{ 200, 100 },
-            .v0_rec_z = 0.25,
-            .v1_rec_z = 0.25,
-            .v2_rec_z = 0.25,
-        };
-
         try engine.triangle_rasterizer.render(
             allocator,
             &pool,
-            &triangles,
+            engine.renderer.triangles.items,
             &engine.tile_pool,
             frame.framebuffer,
             &engine.atlas,
         );
+        prof_scope.end();
+
+        // var triangles: [1]RasterTriangles = undefined;
+        //
+        // triangles[0] = .{
+        //     .v0 = .{ 0, 0 },
+        //     .v1 = .{ 200, 300 },
+        //     .v2 = .{ 0, 300 },
+        //     .v0_uv = .{ 0, 0 },
+        //     .v1_uv = .{ 0, 100 },
+        //     .v2_uv = .{ 200, 100 },
+        //     .v0_rec_z = 0.25,
+        //     .v1_rec_z = 0.25,
+        //     .v2_rec_z = 0.25,
+        // };
+        //
+        // try engine.triangle_rasterizer.render(
+        //     allocator,
+        //     &pool,
+        //     &triangles,
+        //     &engine.tile_pool,
+        //     frame.framebuffer,
+        //     &engine.atlas,
+        // );
 
         if (engine_config.debug_config.show_tex_atlas) engine.atlas.debug_show_atlas(&frame.framebuffer);
         if (engine_config.debug_config.show_occupied_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);

@@ -45,7 +45,7 @@ pub const Chunk = struct {
             .world_min = world_min,
             .world_max = world_max,
             .dimensions = size,
-            .mesh = undefined,
+            .mesh = try std.ArrayList(Quad).initCapacity(allocator, 0),
         };
     }
 

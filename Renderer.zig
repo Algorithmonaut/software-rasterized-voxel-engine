@@ -11,6 +11,7 @@ const Block = @import("world/Block.zig");
 const WorldQuad = Block.WorldQuad;
 const WorldVertex = Block.WorldVertex;
 const WorldTriangle = Block.WorldTriangle;
+const Vertex = Block.Vertex;
 
 const types = @import("math/types.zig");
 const Vec4f = types.Vec4f;
@@ -34,7 +35,7 @@ pub const Renderer = struct {
         view_distance: Float,
     ) !Renderer {
         // TODO: Find a better way to do this
-        const half_view_dist = view_distance / 2;
+        const half_view_dist: usize = @intFromFloat(view_distance / 2);
         const estimate = half_view_dist * half_view_dist * half_view_dist;
 
         return .{
@@ -75,24 +76,39 @@ pub const Renderer = struct {
         return code;
     }
 
-    pub inline fn genRasterTriangleFromWorldTriangle(
+    inline fn genRasterTriangleFromWorldTriangle(
         self: *Renderer,
         allocator: std.mem.Allocator,
         tri: WorldTriangle,
         camera: *Camera, // TODO: Pass the projection matrix directly for clarity
-    ) void {
+    ) !void {
         // First we project the WorldTriangle in clip space
         var clip: [3]Vec4f = .{
-            camera.proj_mat.mul_vec(.{ tri.v0[0], tri.v0[1], tri.v0[2], 1.0 }),
-            camera.proj_mat.mul_vec(.{ tri.v1[0], tri.v1[1], tri.v1[2], 1.0 }),
-            camera.proj_mat.mul_vec(.{ tri.v2[0], tri.v2[1], tri.v2[2], 1.0 }),
+            camera.proj_mat.mul_vec(.{
+                tri.v0.pos[0],
+                tri.v0.pos[1],
+                tri.v0.pos[2],
+                1.0,
+            }),
+            camera.proj_mat.mul_vec(.{
+                tri.v1.pos[0],
+                tri.v1.pos[1],
+                tri.v1.pos[2],
+                1.0,
+            }),
+            camera.proj_mat.mul_vec(.{
+                tri.v2.pos[0],
+                tri.v2.pos[1],
+                tri.v2.pos[2],
+                1.0,
+            }),
         };
 
         // Then we do culling for the 6 planes
         const code_0 = clip_outcode(clip[0]);
         const code_1 = clip_outcode(clip[1]);
         const code_2 = clip_outcode(clip[2]);
-        if ((code_0 & code_1 & code_2) != 0) return null;
+        if ((code_0 & code_1 & code_2) != 0) return;
 
         var rec_ws: Vec3f = undefined; // rec of w = rec of z in clip space
 
@@ -113,11 +129,11 @@ pub const Renderer = struct {
         // Backface culling
         const signed_area = (v1[0] - v0[0]) * (v2[1] - v0[1]) -
             (v1[1] - v0[1]) * (v2[0] - v0[0]);
-        if (signed_area > 0) return null;
+        if (signed_area > 0) return;
 
         // P: Clip -> raster
-        const fw: Float = @floatFromInt(self.width);
-        const fh: Float = @floatFromInt(self.height);
+        const fw: Float = @floatFromInt(self.fb_width);
+        const fh: Float = @floatFromInt(self.fb_height);
 
         const a = @Vector(2, Int){
             @intFromFloat((v0[0] + 1.0) * 0.5 * fw + 0.5),
@@ -134,25 +150,25 @@ pub const Renderer = struct {
             @intFromFloat((1 - (v2[1] + 1.0) * 0.5) * fh + 0.5),
         };
 
-        self.triangles.append(allocator, .{
+        try self.triangles.append(allocator, .{
             .v0 = a,
             .v1 = b,
             .v2 = c,
             .v0_rec_z = rec_ws[0],
             .v1_rec_z = rec_ws[1],
             .v2_rec_z = rec_ws[2],
-            .v0_uv = tri.v0_uv,
-            .v1_uv = tri.v1_uv,
-            .v2_uv = tri.v2_uv,
+            .v0_uv = tri.v0.uv,
+            .v1_uv = tri.v1.uv,
+            .v2_uv = tri.v2.uv,
         });
     }
 
-    pub inline fn genRasterTriangleFromWorldQuad(
+    inline fn genRasterTriangleFromWorldQuad(
         self: *Renderer,
         allocator: std.mem.Allocator,
         camera: *Camera,
-        quad: *WorldQuad,
-    ) void {
+        quad: *const WorldQuad,
+    ) !void {
         // NOTE: Maybe my triangles vertices aren't set in the correct order
         const tri_1 = WorldTriangle{
             .v0 = quad.v0,
@@ -166,8 +182,8 @@ pub const Renderer = struct {
             .v2 = quad.v3,
         };
 
-        self.genRasterTriangleFromWorldTriangle(allocator, tri_1, camera);
-        self.genRasterTriangleFromWorldTriangle(allocator, tri_2, camera);
+        try self.genRasterTriangleFromWorldTriangle(allocator, tri_1, camera);
+        try self.genRasterTriangleFromWorldTriangle(allocator, tri_2, camera);
     }
 
     // CHUNK RENDERING /////////////////////////////////////////////////////////
@@ -204,28 +220,49 @@ pub const Renderer = struct {
         dist2: f32,
     };
 
+    pub fn worldVertexFromChunkVertex(
+        vert: Vertex,
+        chunk_pos: ChunkCoord,
+        chunk_size: usize,
+    ) WorldVertex {
+        const v_pos_vec: @Vector(3, usize) = .{
+            vert.pos[0],
+            vert.pos[1],
+            vert.pos[2],
+        };
+        const v_pos_f: Vec3f = @floatFromInt(v_pos_vec);
+        const chunk_pos_f: Vec3f = @floatFromInt(chunk_pos);
+        const size_splat_f: Vec3f = @splat(@as(Float, @floatFromInt(chunk_size)));
+        const v_pos: Vec3f = v_pos_f + chunk_pos_f * size_splat_f;
+
+        return .{
+            .pos = v_pos,
+            .uv = vert.uv,
+        };
+    }
+
     pub fn renderWorld(
         self: *Renderer,
         allocator: std.mem.Allocator,
         player_pos: WorldCoord,
-        view_distance: i32,
         chunk_size: usize,
         world: *World,
         camera: *Camera,
-        atlas: *Atlas,
     ) !void {
         const chunk_size_i: i32 = @intCast(chunk_size);
         const player_chunk = worldToChunkCoord(player_pos, chunk_size_i);
+        const chunk_view_radius: i32 = @intFromFloat(@ceil(camera.view_distance /
+            @as(f32, @floatFromInt(chunk_size))));
 
         self.chunk_entries.clearRetainingCapacity();
 
-        // For a render radius R = view_distance, gather chunk coords around the player
-        var cz = player_chunk[2] - view_distance;
-        while (cz <= player_chunk[2] + view_distance) : (cz += 1) {
-            var cy = player_chunk[1] - view_distance;
-            while (cy <= player_chunk[1] + view_distance) : (cy += 1) {
-                var cx = player_chunk[0] - view_distance;
-                while (cx <= player_chunk[0] + view_distance) : (cx += 1) {
+        // For a render radius R = chunk_view_radius, gather chunk coords around the player
+        var cz = player_chunk[2] - chunk_view_radius;
+        while (cz <= player_chunk[2] + chunk_view_radius) : (cz += 1) {
+            var cy = player_chunk[1] - chunk_view_radius;
+            while (cy <= player_chunk[1] + chunk_view_radius) : (cy += 1) {
+                var cx = player_chunk[0] - chunk_view_radius;
+                while (cx <= player_chunk[0] + chunk_view_radius) : (cx += 1) {
                     const coord = ChunkCoord{ cx, cy, cz };
 
                     if (world.getChunk(coord)) |chunk| {
@@ -250,12 +287,17 @@ pub const Renderer = struct {
             }
         }.lessThan);
 
-        for (self.chunk_entries.items, 0..) |chunk, chunk_i| {
-            _ = chunk;
-            _ = chunk_i;
+        for (self.chunk_entries.items) |chunk| {
+            for (chunk.chunk.mesh.items) |quad| {
+                const world_quad = WorldQuad{
+                    .v0 = worldVertexFromChunkVertex(quad.v0, chunk.chunk.coord, chunk.chunk.dimensions),
+                    .v1 = worldVertexFromChunkVertex(quad.v1, chunk.chunk.coord, chunk.chunk.dimensions),
+                    .v2 = worldVertexFromChunkVertex(quad.v2, chunk.chunk.coord, chunk.chunk.dimensions),
+                    .v3 = worldVertexFromChunkVertex(quad.v3, chunk.chunk.coord, chunk.chunk.dimensions),
+                };
 
-            // TODO: For all the quads in the mesh,
-            // generate the world mesh, and render
+                try self.genRasterTriangleFromWorldQuad(allocator, camera, &world_quad);
+            }
         }
     }
 };

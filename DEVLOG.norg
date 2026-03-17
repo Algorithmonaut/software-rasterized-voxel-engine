@@ -15,10 +15,12 @@
 
   I also rewrote the Renderer.zig file, adding support for the generation of 
   the RasterTriangles from a WorldQuad (Quad in world space). 
+  Then I looped over all the quads in the meshes of the visible chunks, generating 
+  raster triangles.
   Finding which chunk is visible in the view sphere remains to be verified.
-  Same thing for the generate of RasterTriangles from the WorldQuads of the mesh.
 
 
+  TODO: Decide if WorldVertex pos should be i64 or float
   TODO: In Renderer.zig, for all chunk meshes, generate WorldQuad and at to triangles.
   TODO: Fix bugs and test implementation.
   TODO: Implement a basic wireframe mode (maybe keeping UV lerp for the wire).
