@@ -58,6 +58,7 @@ inline fn renderTriangleInTile(
     triangle: *const RasterTriangle,
     tile: *Tile,
     atlas: *Atlas,
+    render_wireframe: bool,
 ) void {
     const a = triangle.v0;
     const b = triangle.v1;
@@ -85,6 +86,10 @@ inline fn renderTriangleInTile(
     const q0: Float = triangle.v0_rec_z;
     const q1: Float = triangle.v1_rec_z;
     const q2: Float = triangle.v2_rec_z;
+
+    const avg_rec_depth: Float = (q0 + q1 + q2) / 3.0; // Used for wireframe mode
+    const base_thickness: Float = 700;
+    const thickness: i32 = @intFromFloat(base_thickness * avg_rec_depth);
 
     const Uvf = @Vector(2, Float);
 
@@ -119,6 +124,9 @@ inline fn renderTriangleInTile(
             defer w += right_inc;
 
             if (w[0] + e0.bias >= 0 and w[1] + e1.bias >= 0 and w[2] + e2.bias >= 0) {
+                if (render_wireframe and w[0] > thickness and w[1] > thickness and w[2] > thickness)
+                    continue;
+
                 const wf: Vec3f = @floatFromInt(w);
                 const den_scaled = (wf[0] * q0 + wf[1] * q1 + wf[2] * q2);
                 const inv_z = den_scaled * inv_area;
@@ -163,6 +171,7 @@ fn tileWorker(
     tile_offsets: []const usize,
     tile_refs: []const usize,
     atlas: *Atlas,
+    render_wireframe: bool,
 ) void {
     while (true) {
         const tile_base = next.fetchAdd(batch_size, .monotonic);
@@ -182,7 +191,7 @@ fn tileWorker(
 
             for (tile_refs[start..end]) |tri_i_u| {
                 const tri_i: usize = @intCast(tri_i_u);
-                renderTriangleInTile(&triangles[tri_i], t, atlas);
+                renderTriangleInTile(&triangles[tri_i], t, atlas, render_wireframe);
             }
 
             t.write_to_fb(buf);
@@ -202,6 +211,8 @@ pub const TrianglesRasterizer = struct {
     /// For all tiles, holds the index of the triangles that overlap
     tile_triangle_indices: []usize,
 
+    render_wireframe: bool,
+
     pub fn init(
         allocator: std.mem.Allocator,
         tile_count: usize,
@@ -211,6 +222,8 @@ pub const TrianglesRasterizer = struct {
             .tile_offsets = try allocator.alloc(usize, tile_count + 1),
             .write_pos = try allocator.alloc(usize, tile_count + 1),
             .tile_triangle_indices = try allocator.alloc(usize, 10_000), // initial guess, will grow
+
+            .render_wireframe = false,
         };
     }
 
@@ -333,6 +346,7 @@ pub const TrianglesRasterizer = struct {
                 self.tile_offsets,
                 self.tile_triangle_indices,
                 atlas,
+                self.render_wireframe,
             });
         }
 

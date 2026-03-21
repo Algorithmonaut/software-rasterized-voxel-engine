@@ -19,8 +19,8 @@ const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
         .view_distance = 200.0,
-        .from = .{ 4, 4, 4 },
-        .to = .{ 4, 4, 3 },
+        .from = .{ 0, 0, -20 },
+        .to = .{ 0, 0, -21 },
         .speed = 15.0,
         .sensivity = 0.0025,
     },
@@ -39,7 +39,7 @@ const engine_config = EngineConfig{
         .channels_rgb = 3,
     },
     .world_config = .{
-        .chunk_size = 8,
+        .chunk_size = 16,
     },
     .debug_config = .{
         .show_fps = true,
@@ -73,26 +73,26 @@ pub fn main() !void {
     var t: usize = 0;
 
     const chunk0 = try engine.world.ensureChunk(.{ 0, 0, 0 });
-    const chunk1 = try engine.world.ensureChunk(.{ 1, 0, 0 });
-    const chunk2 = try engine.world.ensureChunk(.{ 2, 0, 0 });
-    const chunk3 = try engine.world.ensureChunk(.{ 3, 0, 0 });
-    const chunk4 = try engine.world.ensureChunk(.{ 4, 0, 0 });
-    const chunk5 = try engine.world.ensureChunk(.{ 5, 0, 0 });
-    const chunk6 = try engine.world.ensureChunk(.{ 6, 0, 0 });
-    const chunk7 = try engine.world.ensureChunk(.{ 7, 0, 0 });
-    const chunk8 = try engine.world.ensureChunk(.{ 8, 0, 0 });
-    const chunk9 = try engine.world.ensureChunk(.{ 9, 0, 0 });
-
+    // const chunk1 = try engine.world.ensureChunk(.{ 1, 0, 0 });
+    // const chunk2 = try engine.world.ensureChunk(.{ 2, 0, 0 });
+    // const chunk3 = try engine.world.ensureChunk(.{ 3, 0, 0 });
+    // const chunk4 = try engine.world.ensureChunk(.{ 4, 0, 0 });
+    // const chunk5 = try engine.world.ensureChunk(.{ 5, 0, 0 });
+    // const chunk6 = try engine.world.ensureChunk(.{ 6, 0, 0 });
+    // const chunk7 = try engine.world.ensureChunk(.{ 7, 0, 0 });
+    // const chunk8 = try engine.world.ensureChunk(.{ 8, 0, 0 });
+    // const chunk9 = try engine.world.ensureChunk(.{ 9, 0, 0 });
+    //
     try mesher.generateMesh(chunk0, allocator);
-    try mesher.generateMesh(chunk1, allocator);
-    try mesher.generateMesh(chunk2, allocator);
-    try mesher.generateMesh(chunk3, allocator);
-    try mesher.generateMesh(chunk4, allocator);
-    try mesher.generateMesh(chunk5, allocator);
-    try mesher.generateMesh(chunk6, allocator);
-    try mesher.generateMesh(chunk7, allocator);
-    try mesher.generateMesh(chunk8, allocator);
-    try mesher.generateMesh(chunk9, allocator);
+    // try mesher.generateMesh(chunk1, allocator);
+    // try mesher.generateMesh(chunk2, allocator);
+    // try mesher.generateMesh(chunk3, allocator);
+    // try mesher.generateMesh(chunk4, allocator);
+    // try mesher.generateMesh(chunk5, allocator);
+    // try mesher.generateMesh(chunk6, allocator);
+    // try mesher.generateMesh(chunk7, allocator);
+    // try mesher.generateMesh(chunk8, allocator);
+    // try mesher.generateMesh(chunk9, allocator);
 
     while (engine.platform.running) : (t += 1) {
         var frame_timer = try std.time.Timer.start();
@@ -128,7 +128,7 @@ pub fn main() !void {
 
         if (engine_config.debug_config.show_fps) engine.platform.fps_counter_update();
 
-        engine.platform.process_inputs(frame.dt, &engine.camera, &engine.graphics);
+        engine.platform.process_inputs(frame.dt, &engine.camera, &engine.graphics, &engine.triangle_rasterizer);
 
         total_frame_ns += frame_timer.read();
     }

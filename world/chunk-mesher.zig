@@ -137,6 +137,7 @@ pub const Mesher = struct {
         x: usize,
         y: usize,
         z: usize,
+        block_id: BlockId,
     ) Quad {
         const offset: PosVec = .{ x, y, z };
         var quad = quad_offset;
@@ -145,6 +146,10 @@ pub const Mesher = struct {
         quad.v1.pos += offset;
         quad.v2.pos += offset;
         quad.v3.pos += offset;
+        quad.v0.uv[1] += @intFromEnum(block_id) * 16;
+        quad.v1.uv[1] += @intFromEnum(block_id) * 16;
+        quad.v2.uv[1] += @intFromEnum(block_id) * 16;
+        quad.v3.uv[1] += @intFromEnum(block_id) * 16;
 
         return quad;
     }
@@ -176,6 +181,7 @@ pub const Mesher = struct {
                             x,
                             y,
                             z,
+                            id,
                         );
                         try mesh.append(allocator, quad);
                     }

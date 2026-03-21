@@ -36,7 +36,7 @@ pub const Chunk = struct {
 
         const voxels = try allocator.alloc(BlockId, size * size * size);
 
-        for (0..voxels.len) |i| voxels[i] = @enumFromInt(i % 3);
+        for (0..voxels.len / size) |i| voxels[i] = @enumFromInt(i % 3);
 
         return .{
             .coord = coord,
