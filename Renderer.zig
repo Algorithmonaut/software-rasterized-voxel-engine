@@ -6,6 +6,7 @@ const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferCo
 const Camera = @import("Camera.zig").Camera;
 const Chunk = @import("Chunk.zig").Chunk;
 const Atlas = @import("Atlas.zig").Atlas;
+const Mesher = @import("world/chunk-mesher.zig").Mesher;
 
 const Block = @import("world/Block.zig");
 const WorldQuad = Block.WorldQuad;
@@ -250,25 +251,29 @@ pub const Renderer = struct {
         // For a render radius R = chunk_view_radius, gather chunk coords around the player
         var cz = player_chunk[2] - chunk_view_radius;
         while (cz <= player_chunk[2] + chunk_view_radius) : (cz += 1) {
-            var cy = player_chunk[1] - chunk_view_radius;
-            while (cy <= player_chunk[1] + chunk_view_radius) : (cy += 1) {
-                var cx = player_chunk[0] - chunk_view_radius;
-                while (cx <= player_chunk[0] + chunk_view_radius) : (cx += 1) {
-                    const coord = ChunkCoord{ cx, cy, cz };
+            // var cy = player_chunk[1] - chunk_view_radius;
+            // while (cy <= player_chunk[1] + chunk_view_radius) : (cy += 1) {
+            var cx = player_chunk[0] - chunk_view_radius;
+            while (cx <= player_chunk[0] + chunk_view_radius) : (cx += 1) {
+                const dx = cx - player_chunk[0];
+                const dz = cz - player_chunk[2];
+                if (dx * dx + dz * dz > chunk_view_radius * chunk_view_radius) continue;
 
-                    if (world.getChunk(coord)) |chunk| {
-                        // TODO: Frustum cull here first
+                const coord = ChunkCoord{ cx, 0, cz };
 
-                        try self.chunk_entries.append(
-                            allocator,
-                            .{
-                                .chunk = chunk,
-                                .dist2 = dist2ToPlayer(player_pos, chunk),
-                            },
-                        );
-                    }
-                }
+                const chunk = try world.ensureChunk(coord);
+                chunk.buildBitfields();
+
+                // TODO: Frustum cull here first
+                try self.chunk_entries.append(
+                    allocator,
+                    .{
+                        .chunk = chunk,
+                        .dist2 = dist2ToPlayer(player_pos, chunk),
+                    },
+                );
             }
+            // }
         }
 
         // Front to back rendering

@@ -4,6 +4,8 @@ const WorldConfig = @import("EngineConfig.zig").EngineConfig.WorldConfig;
 
 const ChunkCoord = @import("math/types.zig").ChunkCoord;
 
+const Mesher = @import("world/chunk-mesher.zig").Mesher;
+
 pub const World = struct {
     allocator: std.mem.Allocator,
     chunks: std.AutoHashMap(u64, *Chunk),
@@ -42,7 +44,10 @@ pub const World = struct {
         return self.chunks.get(chunkKey(coord));
     }
 
-    pub fn ensureChunk(self: *World, coord: ChunkCoord) !*Chunk {
+    pub fn ensureChunk(
+        self: *World,
+        coord: ChunkCoord,
+    ) !*Chunk {
         const key = chunkKey(coord);
 
         if (self.chunks.get(key)) |chunk| {
@@ -69,5 +74,17 @@ pub const World = struct {
         }
 
         return false;
+    }
+
+    pub fn meshChunks(self: *World, mesher: *Mesher, allocator: std.mem.Allocator) !void {
+        var it = self.chunks.iterator();
+
+        while (it.next()) |entry| {
+            const chunk = entry.value_ptr.*;
+            if (!chunk.dirty) continue;
+
+            try mesher.generateMesh(chunk, self, allocator);
+            chunk.dirty = false;
+        }
     }
 };

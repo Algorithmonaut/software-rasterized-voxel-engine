@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Chunk = @import("../Chunk.zig").Chunk;
 const Atlas = @import("../Atlas.zig").Atlas;
+const World = @import("../World.zig").World;
 
 const Block = @import("Block.zig");
 const Quad = Block.Quad;
@@ -13,37 +14,6 @@ const Vec3i = types.Vec3i;
 const PosVec = @Vector(3, usize);
 
 const UV = @Vector(2, usize);
-
-fn buildBitFields(chunk: *Chunk) void {
-    chunk.bitfields.clearBitfields();
-
-    const chunk_size = chunk.dimensions;
-
-    for (0..chunk_size) |x_usize| {
-        const x: u5 = @intCast(x_usize); // consequently the max chunk size is 32
-        const mx: u32 = @as(u32, 1) << x; // x mask
-
-        for (0..chunk_size) |y_usize| {
-            const y: u5 = @intCast(y_usize);
-            const my: u32 = @as(u32, 1) << y;
-
-            for (0..chunk_size) |z_usize| {
-                const z: u5 = @intCast(z_usize);
-                const mz: u32 = @as(u32, 1) << z;
-
-                const idx = x_usize + y_usize * chunk_size +
-                    z_usize * chunk_size * chunk_size;
-                if (chunk.voxels[idx] == BlockId.air) continue;
-
-                chunk.bitfields.solid_x[y_usize][z_usize] |= mx;
-                chunk.bitfields.solid_y[x_usize][z_usize] |= my;
-                chunk.bitfields.solid_z[x_usize][y_usize] |= mz;
-            }
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
 
 // NOTE: For simplicity and to avoid mixing chunk coordinates / textures coordinates
 // maybe use this (much simpler) architecture:
@@ -199,6 +169,16 @@ pub const Mesher = struct {
         return row & ~(row << 1);
     }
 
+    fn visiblePosWithNeighbor(row: u32, neighbor_first_bit: u32) u32 {
+        const shifted = (row >> 1) | (neighbor_first_bit << 31);
+        return row & ~shifted;
+    }
+
+    fn visibleNegWithNeighbor(row: u32, neighbor_last_bit: u32) u32 {
+        const shifted = (row << 1) | neighbor_last_bit;
+        return row & ~shifted;
+    }
+
     inline fn appendQuad(
         self: *const Mesher,
         mesh: *std.ArrayList(Quad),
@@ -221,33 +201,90 @@ pub const Mesher = struct {
         try mesh.append(allocator, quad);
     }
 
+    //// X AXIS ////
+
+    fn emitMaskX(
+        self: *const Mesher,
+        mesh: *std.ArrayList(Quad),
+        allocator: std.mem.Allocator,
+        voxels: []const BlockId,
+        size: usize,
+        y: usize,
+        z: usize,
+        face: Face,
+        mask_in: u32,
+    ) !void {
+        var mask = mask_in;
+        while (mask != 0) {
+            const x: usize = @intCast(@ctz(mask));
+            mask &= mask - 1;
+            try appendQuad(self, mesh, allocator, voxels, size, face, x, y, z);
+        }
+    }
+
     fn emitXFaces(
         self: *const Mesher,
         chunk: *const Chunk,
         mesh: *std.ArrayList(Quad),
         allocator: std.mem.Allocator,
+        world: *World,
     ) !void {
         const size = chunk.dimensions;
         const voxels = chunk.voxels;
+
+        const pos_neighbor = world.getChunk(.{
+            chunk.coord[0] + 1,
+            chunk.coord[1],
+            chunk.coord[2],
+        });
+
+        const neg_neighbor = world.getChunk(.{
+            chunk.coord[0] + 1,
+            chunk.coord[1],
+            chunk.coord[2],
+        });
+
+        if (pos_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
+        if (neg_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
 
         for (0..size) |y| {
             for (0..size) |z| {
                 const row = chunk.bitfields.solid_x[y][z];
 
-                var pos_mask = visiblePos(row);
-                while (pos_mask != 0) {
-                    const x: usize = @intCast(@ctz(pos_mask));
-                    pos_mask &= pos_mask - 1;
-                    try appendQuad(self, mesh, allocator, voxels, size, .right, x, y, z);
-                }
+                const pos_mask = if (pos_neighbor) |adjacent|
+                    visiblePosWithNeighbor(row, adjacent.bitfields.solid_x[y][z] & @as(u32, 1))
+                else
+                    visiblePos(row);
 
-                var neg_mask = visibleNeg(row);
-                while (neg_mask != 0) {
-                    const x: usize = @intCast(@ctz(neg_mask));
-                    neg_mask &= neg_mask - 1;
-                    try appendQuad(self, mesh, allocator, voxels, size, .left, x, y, z);
-                }
+                const neg_mask = if (neg_neighbor) |adjacent|
+                    visibleNegWithNeighbor(row, adjacent.bitfields.solid_x[y][z] & @as(u32, 1))
+                else
+                    visibleNeg(row);
+
+                try self.emitMaskX(mesh, allocator, voxels, size, y, z, Face.right, pos_mask);
+                try self.emitMaskX(mesh, allocator, voxels, size, y, z, Face.left, neg_mask);
             }
+        }
+    }
+
+    //// Y AXIS ////
+
+    fn emitMaskY(
+        self: *const Mesher,
+        mesh: *std.ArrayList(Quad),
+        allocator: std.mem.Allocator,
+        voxels: []const BlockId,
+        size: usize,
+        x: usize,
+        z: usize,
+        face: Face,
+        mask_in: u32,
+    ) !void {
+        var mask = mask_in;
+        while (mask != 0) {
+            const y: usize = @intCast(@ctz(mask));
+            mask &= mask - 1;
+            try appendQuad(self, mesh, allocator, voxels, size, face, x, y, z);
         }
     }
 
@@ -256,71 +293,124 @@ pub const Mesher = struct {
         chunk: *const Chunk,
         mesh: *std.ArrayList(Quad),
         allocator: std.mem.Allocator,
+        world: *World,
     ) !void {
         const size = chunk.dimensions;
         const voxels = chunk.voxels;
+
+        const pos_neighbor = world.getChunk(.{
+            chunk.coord[0],
+            chunk.coord[1] + 1,
+            chunk.coord[2],
+        });
+
+        const neg_neighbor = world.getChunk(.{
+            chunk.coord[0],
+            chunk.coord[1] - 1,
+            chunk.coord[2],
+        });
+
+        if (pos_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
+        if (neg_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
 
         for (0..size) |x| {
             for (0..size) |z| {
                 const row = chunk.bitfields.solid_y[x][z];
 
-                var pos_mask = visiblePos(row);
-                while (pos_mask != 0) {
-                    const y: usize = @intCast(@ctz(pos_mask));
-                    pos_mask &= pos_mask - 1;
-                    try appendQuad(self, mesh, allocator, voxels, size, .top, x, y, z);
-                }
+                const pos_mask = if (pos_neighbor) |adjacent|
+                    visiblePosWithNeighbor(row, adjacent.bitfields.solid_y[x][z] & @as(u32, 1))
+                else
+                    visiblePos(row);
 
-                var neg_mask = visibleNeg(row);
-                while (neg_mask != 0) {
-                    const y: usize = @intCast(@ctz(neg_mask));
-                    neg_mask &= neg_mask - 1;
-                    try appendQuad(self, mesh, allocator, voxels, size, .bottom, x, y, z);
-                }
+                const neg_mask = if (neg_neighbor) |adjacent|
+                    visibleNegWithNeighbor(row, adjacent.bitfields.solid_y[x][z] & @as(u32, 1))
+                else
+                    visibleNeg(row);
+
+                try self.emitMaskY(mesh, allocator, voxels, size, x, z, Face.top, pos_mask);
+                try self.emitMaskY(mesh, allocator, voxels, size, x, z, Face.bottom, neg_mask);
             }
         }
     }
 
+    //// Z AXIS ////
+
+    fn emitMaskZ(
+        self: *const Mesher,
+        mesh: *std.ArrayList(Quad),
+        allocator: std.mem.Allocator,
+        voxels: []const BlockId,
+        size: usize,
+        x: usize,
+        y: usize,
+        face: Face,
+        mask_in: u32,
+    ) !void {
+        var mask = mask_in;
+        while (mask != 0) {
+            const z: usize = @intCast(@ctz(mask));
+            mask &= mask - 1;
+            try appendQuad(self, mesh, allocator, voxels, size, face, x, y, z);
+        }
+    }
     fn emitZFaces(
         self: *const Mesher,
         chunk: *const Chunk,
         mesh: *std.ArrayList(Quad),
         allocator: std.mem.Allocator,
+        world: *World,
     ) !void {
         const size = chunk.dimensions;
         const voxels = chunk.voxels;
+
+        const pos_neighbor = world.getChunk(.{
+            chunk.coord[0],
+            chunk.coord[1],
+            chunk.coord[2] + 1,
+        });
+
+        const neg_neighbor = world.getChunk(.{
+            chunk.coord[0],
+            chunk.coord[1],
+            chunk.coord[2] - 1,
+        });
+
+        if (pos_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
+        if (neg_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
 
         for (0..size) |x| {
             for (0..size) |y| {
                 const row = chunk.bitfields.solid_z[x][y];
 
-                var pos_mask = visiblePos(row);
-                while (pos_mask != 0) {
-                    const z: usize = @intCast(@ctz(pos_mask));
-                    pos_mask &= pos_mask - 1;
-                    try appendQuad(self, mesh, allocator, voxels, size, .back, x, y, z);
-                }
+                const pos_mask = if (pos_neighbor) |adjacent|
+                    visiblePosWithNeighbor(row, adjacent.bitfields.solid_z[x][y] & @as(u32, 1))
+                else
+                    visiblePos(row);
 
-                var neg_mask = visibleNeg(row);
-                while (neg_mask != 0) {
-                    const z: usize = @intCast(@ctz(neg_mask));
-                    neg_mask &= neg_mask - 1;
-                    try appendQuad(self, mesh, allocator, voxels, size, .front, x, y, z);
-                }
+                const neg_mask = if (neg_neighbor) |adjacent|
+                    visibleNegWithNeighbor(row, adjacent.bitfields.solid_z[x][y] & @as(u32, 1))
+                else
+                    visibleNeg(row);
+
+                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.right, pos_mask);
+                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.left, neg_mask);
             }
         }
     }
 
-    pub fn generateMesh(self: *const Mesher, chunk: *Chunk, allocator: std.mem.Allocator) !void {
+    pub fn generateMesh(
+        self: *const Mesher,
+        chunk: *Chunk,
+        world: *World,
+        allocator: std.mem.Allocator,
+    ) !void {
         const size = chunk.dimensions;
 
         var mesh = try std.ArrayList(Quad).initCapacity(allocator, size);
 
-        buildBitFields(chunk);
-
-        try self.emitXFaces(chunk, &mesh, allocator);
-        try self.emitYFaces(chunk, &mesh, allocator);
-        try self.emitZFaces(chunk, &mesh, allocator);
+        try self.emitXFaces(chunk, &mesh, allocator, world);
+        try self.emitYFaces(chunk, &mesh, allocator, world);
+        try self.emitZFaces(chunk, &mesh, allocator, world);
 
         chunk.mesh.clearAndFree(allocator);
         chunk.mesh = mesh;

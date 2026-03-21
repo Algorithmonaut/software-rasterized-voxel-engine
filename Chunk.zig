@@ -48,6 +48,32 @@ pub const Chunk = struct {
     world_min: ChunkCoord,
     world_max: ChunkCoord,
 
+    pub fn buildBitfields(self: *Chunk) void {
+        const size = self.dimensions;
+
+        for (0..size) |x_usize| {
+            const x: u5 = @intCast(x_usize); // consequently the max chunk size is 32
+            const mx: u32 = @as(u32, 1) << x; // x mask
+
+            for (0..size) |y_usize| {
+                const y: u5 = @intCast(y_usize);
+                const my: u32 = @as(u32, 1) << y;
+
+                for (0..size) |z_usize| {
+                    const z: u5 = @intCast(z_usize);
+                    const mz: u32 = @as(u32, 1) << z;
+
+                    const idx = x_usize + y_usize * size + z_usize * size * size;
+                    if (self.voxels[idx] == BlockId.air) continue;
+
+                    self.bitfields.solid_x[y_usize][z_usize] |= mx;
+                    self.bitfields.solid_y[x_usize][z_usize] |= my;
+                    self.bitfields.solid_z[x_usize][y_usize] |= mz;
+                }
+            }
+        }
+    }
+
     pub fn generate(allocator: std.mem.Allocator, coord: ChunkCoord, size: usize) !Chunk {
         const size_i = @as(i32, @intCast(size));
         const size_vec = @as(ChunkCoord, @splat(size_i));
@@ -57,9 +83,9 @@ pub const Chunk = struct {
 
         const voxels = try allocator.alloc(BlockId, size * size * size);
 
-        for (0..voxels.len / size) |i| voxels[i] = @enumFromInt(i % 3);
+        for (0..voxels.len) |i| voxels[i] = @enumFromInt(i % 3);
 
-        return .{
+        var chunk = Chunk{
             .coord = coord,
             .voxels = voxels,
 
@@ -70,6 +96,10 @@ pub const Chunk = struct {
 
             .bitfields = undefined,
         };
+
+        chunk.buildBitfields();
+
+        return chunk;
     }
 
     pub fn deinit(self: *Chunk, allocator: std.mem.Allocator) void {

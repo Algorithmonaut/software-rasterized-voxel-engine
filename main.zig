@@ -18,9 +18,9 @@ const chunk_mesher = @import("world/chunk-mesher.zig");
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 200.0,
-        .from = .{ 0, 0, -20 },
-        .to = .{ 0, 0, -21 },
+        .view_distance = 100.0,
+        .from = .{ 0, 40, -20 },
+        .to = .{ 0, 40, -21 },
         .speed = 15.0,
         .sensivity = 0.0025,
     },
@@ -72,8 +72,8 @@ pub fn main() !void {
 
     var t: usize = 0;
 
-    const chunk0 = try engine.world.ensureChunk(.{ 0, 0, 0 });
-    const chunk1 = try engine.world.ensureChunk(.{ 1, 0, 0 });
+    // const chunk0 = try engine.world.ensureChunk(.{ 0, 0, 0 });
+    // const chunk1 = try engine.world.ensureChunk(.{ 1, 0, 0 });
     // const chunk2 = try engine.world.ensureChunk(.{ 2, 0, 0 });
     // const chunk3 = try engine.world.ensureChunk(.{ 3, 0, 0 });
     // const chunk4 = try engine.world.ensureChunk(.{ 4, 0, 0 });
@@ -83,8 +83,8 @@ pub fn main() !void {
     // const chunk8 = try engine.world.ensureChunk(.{ 8, 0, 0 });
     // const chunk9 = try engine.world.ensureChunk(.{ 9, 0, 0 });
     //
-    try mesher.generateMesh(chunk0, allocator);
-    try mesher.generateMesh(chunk1, allocator);
+    // try mesher.generateMesh(chunk0, allocator);
+    // try mesher.generateMesh(chunk1, allocator);
     // try mesher.generateMesh(chunk2, allocator);
     // try mesher.generateMesh(chunk3, allocator);
     // try mesher.generateMesh(chunk4, allocator);
@@ -131,6 +131,8 @@ pub fn main() !void {
         engine.platform.process_inputs(frame.dt, &engine.camera, &engine.graphics, &engine.triangle_rasterizer);
 
         total_frame_ns += frame_timer.read();
+
+        try engine.world.meshChunks(&mesher, allocator);
     }
 
     main_prof.printReport(total_frame_ns);

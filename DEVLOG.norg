@@ -26,10 +26,15 @@
 
   Added a first improvement to chunk meshing. Using bitfields, all quads that overlap 
   (in the local chunk) will not be emitted in the mesh.
+  Finalized this improvement to chunk meshing by being aware of the surrounding chunks.
+  My FPS goes brrrrrrrrrr!
 
-  TODO: Make the hidden face removal work with faces that overlap from two separate chunks.
+  TODO: Optimize triangle rasterization.
+  TODO: Value noise.
+  TODO: Greedy meshing.
   TODO: Conventionalize coordinate system.
   TODO: Decide if WorldVertex pos should be i64 or float
   TODO: In Renderer.zig, for all chunk meshes, generate WorldQuad and at to triangles.
   TODO: Fix bugs and test implementation.
+  TODO: Viewing sphere seems to change depending on the orientation of the camera, this is not good.
 
