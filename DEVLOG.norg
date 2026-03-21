@@ -24,8 +24,9 @@
   At first I tried using the Xiaolin Wu's line algorithm + Liang Barsky's line clipping
   for clipping the edges in each tile; but it was overkill.
 
+  Added a first improvement to chunk meshing. Using bitfields, all quads that overlap 
+  (in the local chunk) will not be emitted in the mesh.
 
-  TODO: Using bitwise op, implement chunk-local overlapped hidden face removal.
   TODO: Make the hidden face removal work with faces that overlap from two separate chunks.
   TODO: Conventionalize coordinate system.
   TODO: Decide if WorldVertex pos should be i64 or float

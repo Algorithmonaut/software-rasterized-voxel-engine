@@ -39,7 +39,7 @@ const engine_config = EngineConfig{
         .channels_rgb = 3,
     },
     .world_config = .{
-        .chunk_size = 16,
+        .chunk_size = 32,
     },
     .debug_config = .{
         .show_fps = true,
@@ -73,7 +73,7 @@ pub fn main() !void {
     var t: usize = 0;
 
     const chunk0 = try engine.world.ensureChunk(.{ 0, 0, 0 });
-    // const chunk1 = try engine.world.ensureChunk(.{ 1, 0, 0 });
+    const chunk1 = try engine.world.ensureChunk(.{ 1, 0, 0 });
     // const chunk2 = try engine.world.ensureChunk(.{ 2, 0, 0 });
     // const chunk3 = try engine.world.ensureChunk(.{ 3, 0, 0 });
     // const chunk4 = try engine.world.ensureChunk(.{ 4, 0, 0 });
@@ -84,7 +84,7 @@ pub fn main() !void {
     // const chunk9 = try engine.world.ensureChunk(.{ 9, 0, 0 });
     //
     try mesher.generateMesh(chunk0, allocator);
-    // try mesher.generateMesh(chunk1, allocator);
+    try mesher.generateMesh(chunk1, allocator);
     // try mesher.generateMesh(chunk2, allocator);
     // try mesher.generateMesh(chunk3, allocator);
     // try mesher.generateMesh(chunk4, allocator);

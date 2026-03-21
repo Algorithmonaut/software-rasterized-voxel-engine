@@ -8,6 +8,25 @@ const Block = @import("world/Block.zig");
 const Quad = Block.Quad;
 const BlockId = Block.BlockId;
 
+const chunk_size = 32;
+const Bitfield = u32; // TODO: Make the generation of this dependant on the chunk size
+
+pub const BitfieldViews = struct {
+    solid_x: [chunk_size][chunk_size]Bitfield, // [y][z], bits are x
+    solid_y: [chunk_size][chunk_size]Bitfield, // [x][z], bits are y
+    solid_z: [chunk_size][chunk_size]Bitfield, // [x][y], bits are z
+
+    pub fn clearBitfields(self: *BitfieldViews) void {
+        for (0..chunk_size) |a| {
+            for (0..chunk_size) |b| {
+                self.solid_x[a][b] = 0;
+                self.solid_y[a][b] = 0;
+                self.solid_z[a][b] = 0;
+            }
+        }
+    }
+};
+
 pub const Chunk = struct {
     coord: ChunkCoord,
 
@@ -22,6 +41,8 @@ pub const Chunk = struct {
 
     // output of meshing
     face_count: usize = 0,
+
+    bitfields: BitfieldViews,
 
     // aabb for culling
     world_min: ChunkCoord,
@@ -46,6 +67,8 @@ pub const Chunk = struct {
             .world_max = world_max,
             .dimensions = size,
             .mesh = try std.ArrayList(Quad).initCapacity(allocator, 0),
+
+            .bitfields = undefined,
         };
     }
 

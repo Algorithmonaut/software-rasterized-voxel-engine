@@ -14,6 +14,37 @@ const PosVec = @Vector(3, usize);
 
 const UV = @Vector(2, usize);
 
+fn buildBitFields(chunk: *Chunk) void {
+    chunk.bitfields.clearBitfields();
+
+    const chunk_size = chunk.dimensions;
+
+    for (0..chunk_size) |x_usize| {
+        const x: u5 = @intCast(x_usize); // consequently the max chunk size is 32
+        const mx: u32 = @as(u32, 1) << x; // x mask
+
+        for (0..chunk_size) |y_usize| {
+            const y: u5 = @intCast(y_usize);
+            const my: u32 = @as(u32, 1) << y;
+
+            for (0..chunk_size) |z_usize| {
+                const z: u5 = @intCast(z_usize);
+                const mz: u32 = @as(u32, 1) << z;
+
+                const idx = x_usize + y_usize * chunk_size +
+                    z_usize * chunk_size * chunk_size;
+                if (chunk.voxels[idx] == BlockId.air) continue;
+
+                chunk.bitfields.solid_x[y_usize][z_usize] |= mx;
+                chunk.bitfields.solid_y[x_usize][z_usize] |= my;
+                chunk.bitfields.solid_z[x_usize][y_usize] |= mz;
+            }
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 // NOTE: For simplicity and to avoid mixing chunk coordinates / textures coordinates
 // maybe use this (much simpler) architecture:
 
@@ -132,6 +163,8 @@ pub const Mesher = struct {
         };
     }
 
+    // MESHER //////////////////////////////////////////////////////////////////
+
     fn generateQuadCoordinates(
         quad_offset: Quad,
         x: usize,
@@ -154,40 +187,140 @@ pub const Mesher = struct {
         return quad;
     }
 
-    pub fn generateMesh(self: *const Mesher, chunk: *Chunk, allocator: std.mem.Allocator) !void {
+    inline fn voxelIndex(size: usize, x: usize, y: usize, z: usize) usize {
+        return x + y * size + z * size * size;
+    }
+
+    inline fn visiblePos(row: u32) u32 {
+        return row & ~(row >> 1);
+    }
+
+    inline fn visibleNeg(row: u32) u32 {
+        return row & ~(row << 1);
+    }
+
+    inline fn appendQuad(
+        self: *const Mesher,
+        mesh: *std.ArrayList(Quad),
+        allocator: std.mem.Allocator,
+        voxels: []const BlockId,
+        size: usize,
+        face: Face,
+        x: usize,
+        y: usize,
+        z: usize,
+    ) !void {
+        const id = voxels[voxelIndex(size, x, y, z)];
+        const quad = generateQuadCoordinates(
+            self.face_offsets[@intFromEnum(face)],
+            x,
+            y,
+            z,
+            id,
+        );
+        try mesh.append(allocator, quad);
+    }
+
+    fn emitXFaces(
+        self: *const Mesher,
+        chunk: *const Chunk,
+        mesh: *std.ArrayList(Quad),
+        allocator: std.mem.Allocator,
+    ) !void {
         const size = chunk.dimensions;
         const voxels = chunk.voxels;
 
-        const stride_y = size;
-        const stride_z = size * size;
+        for (0..size) |y| {
+            for (0..size) |z| {
+                const row = chunk.bitfields.solid_x[y][z];
 
-        var mesh = try std.ArrayList(Quad).initCapacity(allocator, size);
+                var pos_mask = visiblePos(row);
+                while (pos_mask != 0) {
+                    const x: usize = @intCast(@ctz(pos_mask));
+                    pos_mask &= pos_mask - 1;
+                    try appendQuad(self, mesh, allocator, voxels, size, .right, x, y, z);
+                }
 
-        for (0..size) |z| {
-            const z_base = z * stride_z;
-
-            for (0..size) |y| {
-                const y_base = z_base + y * stride_y;
-
-                for (0..size) |x| {
-                    const i = y_base + x;
-
-                    const id = voxels[i];
-                    if (id == .air) continue;
-
-                    for (0..6) |face| {
-                        const quad = generateQuadCoordinates(
-                            self.face_offsets[face],
-                            x,
-                            y,
-                            z,
-                            id,
-                        );
-                        try mesh.append(allocator, quad);
-                    }
+                var neg_mask = visibleNeg(row);
+                while (neg_mask != 0) {
+                    const x: usize = @intCast(@ctz(neg_mask));
+                    neg_mask &= neg_mask - 1;
+                    try appendQuad(self, mesh, allocator, voxels, size, .left, x, y, z);
                 }
             }
         }
+    }
+
+    fn emitYFaces(
+        self: *const Mesher,
+        chunk: *const Chunk,
+        mesh: *std.ArrayList(Quad),
+        allocator: std.mem.Allocator,
+    ) !void {
+        const size = chunk.dimensions;
+        const voxels = chunk.voxels;
+
+        for (0..size) |x| {
+            for (0..size) |z| {
+                const row = chunk.bitfields.solid_y[x][z];
+
+                var pos_mask = visiblePos(row);
+                while (pos_mask != 0) {
+                    const y: usize = @intCast(@ctz(pos_mask));
+                    pos_mask &= pos_mask - 1;
+                    try appendQuad(self, mesh, allocator, voxels, size, .top, x, y, z);
+                }
+
+                var neg_mask = visibleNeg(row);
+                while (neg_mask != 0) {
+                    const y: usize = @intCast(@ctz(neg_mask));
+                    neg_mask &= neg_mask - 1;
+                    try appendQuad(self, mesh, allocator, voxels, size, .bottom, x, y, z);
+                }
+            }
+        }
+    }
+
+    fn emitZFaces(
+        self: *const Mesher,
+        chunk: *const Chunk,
+        mesh: *std.ArrayList(Quad),
+        allocator: std.mem.Allocator,
+    ) !void {
+        const size = chunk.dimensions;
+        const voxels = chunk.voxels;
+
+        for (0..size) |x| {
+            for (0..size) |y| {
+                const row = chunk.bitfields.solid_z[x][y];
+
+                var pos_mask = visiblePos(row);
+                while (pos_mask != 0) {
+                    const z: usize = @intCast(@ctz(pos_mask));
+                    pos_mask &= pos_mask - 1;
+                    try appendQuad(self, mesh, allocator, voxels, size, .back, x, y, z);
+                }
+
+                var neg_mask = visibleNeg(row);
+                while (neg_mask != 0) {
+                    const z: usize = @intCast(@ctz(neg_mask));
+                    neg_mask &= neg_mask - 1;
+                    try appendQuad(self, mesh, allocator, voxels, size, .front, x, y, z);
+                }
+            }
+        }
+    }
+
+    pub fn generateMesh(self: *const Mesher, chunk: *Chunk, allocator: std.mem.Allocator) !void {
+        const size = chunk.dimensions;
+
+        var mesh = try std.ArrayList(Quad).initCapacity(allocator, size);
+
+        buildBitFields(chunk);
+
+        try self.emitXFaces(chunk, &mesh, allocator);
+        try self.emitYFaces(chunk, &mesh, allocator);
+        try self.emitZFaces(chunk, &mesh, allocator);
 
         chunk.mesh.clearAndFree(allocator);
         chunk.mesh = mesh;
