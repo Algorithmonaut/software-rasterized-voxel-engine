@@ -256,6 +256,7 @@ inline fn triangleMayOverlapTile(tri: *const RasterTriangle, tile: *const Tile) 
     const bl = tl + Vec2i{ 0, max_off };
     const br = tl + Vec2i{ max_off, max_off };
 
+    // TODO: Compute edge only once and use incremental stepping
     const e0_outside =
         e0.eval(tl[0], tl[1]) < 0 and
         e0.eval(tr[0], tr[1]) < 0 and

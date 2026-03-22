@@ -14,6 +14,8 @@ pub const Camera = struct {
 
     view_mat: mat.Mat4f,
     proj_mat: mat.Mat4f,
+    combined_mat: mat.Mat4f,
+
     yaw: f32,
     pitch: f32,
 
@@ -44,6 +46,7 @@ pub const Camera = struct {
             .yaw = 0.0,
             .pitch = 0.0,
             .view_mat = undefined,
+            .combined_mat = undefined,
         };
     }
 

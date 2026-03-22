@@ -14,6 +14,8 @@ const WorldVertex = Block.WorldVertex;
 const WorldTriangle = Block.WorldTriangle;
 const Vertex = Block.Vertex;
 
+const Mat4f = @import("math/matrix.zig").Mat4f;
+
 const types = @import("math/types.zig");
 const Vec4f = types.Vec4f;
 const Vec3f = types.Vec3f;
@@ -73,7 +75,7 @@ pub const Renderer = struct {
         if (v[1] < -v[3]) code |= 1 << 2; // bottom
         if (v[1] > v[3]) code |= 1 << 3; // top
         if (v[2] < 0) code |= 1 << 4; // near
-        if (v[2] > v[3]) code |= 1 << 5; // far
+        // if (v[2] > v[3]) code |= 1 << 5; // far
         return code;
     }
 
@@ -184,6 +186,33 @@ pub const Renderer = struct {
 
     // CHUNK RENDERING /////////////////////////////////////////////////////////
 
+    fn isChunkInFrustum(chunk: *Chunk, combined_mat: Mat4f) bool {
+        const planes = [5]Vec4f{
+            combined_mat.r[3] + combined_mat.r[0], // left
+            combined_mat.r[3] - combined_mat.r[0], // right
+            combined_mat.r[3] + combined_mat.r[1], // bottom
+            combined_mat.r[3] - combined_mat.r[1], // top
+            combined_mat.r[2], // near
+        };
+
+        const world_max: Vec3f = @floatFromInt(chunk.world_max);
+        const world_min: Vec3f = @floatFromInt(chunk.world_min);
+
+        for (planes) |plane| {
+            const point = Vec4f{
+                if (plane[0] >= 0) world_max[0] else world_min[0],
+                if (plane[1] >= 0) world_max[1] else world_min[1],
+                if (plane[2] >= 0) world_max[2] else world_min[2],
+                1,
+            };
+
+            const dist = @reduce(.Add, point * plane);
+            if (dist < 0) return false;
+        }
+
+        return true;
+    }
+
     fn worldToChunkCoord(coord: WorldCoord, chunk_size: i32) ChunkCoord {
         const x_i = @as(i32, @intFromFloat(@floor(coord[0])));
         const y_i = @as(i32, @intFromFloat(@floor(coord[1])));
@@ -260,11 +289,10 @@ pub const Renderer = struct {
                 if (dx * dx + dz * dz > chunk_view_radius * chunk_view_radius) continue;
 
                 const coord = ChunkCoord{ cx, 0, cz };
-
                 const chunk = try world.ensureChunk(coord);
-                chunk.buildBitfields();
 
-                // TODO: Frustum cull here first
+                if (!isChunkInFrustum(chunk, camera.combined_mat)) continue;
+
                 try self.chunk_entries.append(
                     allocator,
                     .{

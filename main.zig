@@ -18,7 +18,7 @@ const chunk_mesher = @import("world/chunk-mesher.zig");
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 100.0,
+        .view_distance = 120.0,
         .from = .{ 0, 40, -20 },
         .to = .{ 0, 40, -21 },
         .speed = 15.0,
@@ -101,6 +101,7 @@ pub fn main() !void {
         defer engine.endFrame(&frame);
 
         engine.camera.view_mat = mat.create_view(engine.camera.from, engine.camera.to);
+        engine.camera.combined_mat = engine.camera.proj_mat.mul(engine.camera.view_mat);
 
         var prof_scope = try main_prof.begin(.triangle_setup);
         try engine.renderer.renderWorld(

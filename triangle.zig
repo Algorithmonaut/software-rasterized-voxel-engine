@@ -19,20 +19,20 @@ pub const RasterTriangle = struct {
     v1: @Vector(2, Int),
     v2: @Vector(2, Int),
 
-    e0: Edge,
-    e1: Edge,
-    e2: Edge,
+    e0: Edge = undefined,
+    e1: Edge = undefined,
+    e2: Edge = undefined,
 
-    area: i32,
-    inv_area: Float,
+    area: i32 = undefined,
+    inv_area: Float = undefined,
 
-    q0: f32,
-    q1: f32,
-    q2: f32,
+    q0: f32 = undefined,
+    q1: f32 = undefined,
+    q2: f32 = undefined,
 
-    uv0: @Vector(2, usize),
-    uv1: @Vector(2, usize),
-    uv2: @Vector(2, usize),
+    uv0: @Vector(2, usize) = undefined,
+    uv1: @Vector(2, usize) = undefined,
+    uv2: @Vector(2, usize) = undefined,
 
     /// Max is exclusive
     pub inline fn boundingBox(self: RasterTriangle, fb_width: usize, fb_height: usize) struct {

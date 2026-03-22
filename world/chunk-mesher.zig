@@ -241,7 +241,7 @@ pub const Mesher = struct {
         });
 
         const neg_neighbor = world.getChunk(.{
-            chunk.coord[0] + 1,
+            chunk.coord[0] - 1,
             chunk.coord[1],
             chunk.coord[2],
         });
@@ -394,8 +394,8 @@ pub const Mesher = struct {
                 else
                     visibleNeg(row);
 
-                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.right, pos_mask);
-                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.left, neg_mask);
+                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.front, pos_mask);
+                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.back, neg_mask);
             }
         }
     }

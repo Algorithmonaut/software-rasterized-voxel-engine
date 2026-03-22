@@ -38,6 +38,8 @@
   Precomputation of some triangle attributes (IDK if this is a perf downgrade, more mem traffic).
   Early tile reject (if all 4 tile edges are outside of any triangle edge, reject).
 
+  Chunk level frustum culling by deriving frustum planes form the combined clip transform.
+
   TODO: Value noise.
   TODO: Greedy meshing.
   TODO: Conventionalize coordinate system.
