@@ -11,16 +11,28 @@ const Vec4i = t.Vec4i;
 const mat = @import("math/matrix.zig");
 const ctx = @import("context.zig");
 
+const TriangleRasterizer = @import("renderer/TrianglesRasterizer.zig");
+const Edge = TriangleRasterizer.Edge;
+
 pub const RasterTriangle = struct {
     v0: @Vector(2, Int),
-    v0_uv: @Vector(2, usize),
-    v0_rec_z: f32,
     v1: @Vector(2, Int),
-    v1_uv: @Vector(2, usize),
-    v1_rec_z: f32,
     v2: @Vector(2, Int),
-    v2_uv: @Vector(2, usize),
-    v2_rec_z: f32,
+
+    e0: Edge,
+    e1: Edge,
+    e2: Edge,
+
+    area: i32,
+    inv_area: Float,
+
+    q0: f32,
+    q1: f32,
+    q2: f32,
+
+    uv0: @Vector(2, usize),
+    uv1: @Vector(2, usize),
+    uv2: @Vector(2, usize),
 
     /// Max is exclusive
     pub inline fn boundingBox(self: RasterTriangle, fb_width: usize, fb_height: usize) struct {

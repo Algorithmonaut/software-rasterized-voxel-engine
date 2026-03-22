@@ -18,6 +18,7 @@ const Vec3f = @import("../math/types.zig").Vec3f;
 const AtomicUsize = std.atomic.Value(usize);
 
 const Uvf = @Vector(2, Float);
+const Vec2i = @Vector(2, i32);
 
 /////// NEW IMPL
 
@@ -27,232 +28,7 @@ const step_y_size = 1;
 const I8 = @Vector(8, i32);
 const F8 = @Vector(8, f32);
 
-inline fn renderTriangleInTile(
-    triangle: *const RasterTriangle,
-    tile: *Tile,
-    atlas: *Atlas,
-    render_wireframe: bool,
-) void {
-    _ = render_wireframe;
-
-    const a = triangle.v0;
-    const b = triangle.v1;
-    const c = triangle.v2;
-
-    const e0 = makeEdge(b, c);
-    const e1 = makeEdge(c, a);
-    const e2 = makeEdge(a, b);
-
-    const area = e0.eval(a[0], a[1]);
-    if (area == 0) return;
-
-    const inv_area: Float = 1.0 / @as(Float, @floatFromInt(area));
-
-    const tile_size = tile.dimensions;
-    const tx0: i32 = @intCast(tile.pos[0]);
-    const ty0: i32 = @intCast(tile.pos[1]);
-
-    const max_u_f: Float = @floatFromInt(atlas.width - 1);
-    const max_v_f: Float = @floatFromInt(atlas.height - 1);
-
-    const lane_x = I8{ 0, 1, 2, 3, 4, 5, 6, 7 };
-
-    const w0_row0: I8 =
-        @as(I8, @splat(e0.eval(tx0, ty0))) +
-        @as(I8, @splat(e0.A)) * lane_x;
-    const w1_row0: I8 =
-        @as(I8, @splat(e1.eval(tx0, ty0))) +
-        @as(I8, @splat(e1.A)) * lane_x;
-    const w2_row0: I8 =
-        @as(I8, @splat(e2.eval(tx0, ty0))) +
-        @as(I8, @splat(e2.A)) * lane_x;
-
-    const bias0 = @as(I8, @splat(e0.bias));
-    const bias1 = @as(I8, @splat(e1.bias));
-    const bias2 = @as(I8, @splat(e2.bias));
-
-    const step_x0 = @as(I8, @splat(e0.A * 8));
-    const step_x1 = @as(I8, @splat(e1.A * 8));
-    const step_x2 = @as(I8, @splat(e2.A * 8));
-
-    const step_y0 = @as(I8, @splat(e0.B));
-    const step_y1 = @as(I8, @splat(e1.B));
-    const step_y2 = @as(I8, @splat(e2.B));
-
-    // Reciprocal depth at the vertices
-    const q0: Float = triangle.v0_rec_z;
-    const q1: Float = triangle.v1_rec_z;
-    const q2: Float = triangle.v2_rec_z;
-
-    const uv0f: Uvf = @floatFromInt(triangle.v0_uv);
-    const uv1f: Uvf = @floatFromInt(triangle.v1_uv);
-    const uv2f: Uvf = @floatFromInt(triangle.v2_uv);
-
-    const uv0q: Uvf = uv0f * @as(Uvf, @splat(q0));
-    const uv1q: Uvf = uv1f * @as(Uvf, @splat(q1));
-    const uv2q: Uvf = uv2f * @as(Uvf, @splat(q2));
-
-    var w0_row_cur = w0_row0;
-    var w1_row_cur = w1_row0;
-    var w2_row_cur = w2_row0;
-
-    var y: usize = 0;
-    while (y < tile_size) : (y += 1) {
-        const row_base = y * tile_size;
-
-        var w0_blk = w0_row_cur;
-        var w1_blk = w1_row_cur;
-        var w2_blk = w2_row_cur;
-
-        var x: usize = 0;
-        while (x + 8 <= tile_size) : (x += 8) {
-            const w0b = w0_blk + bias0;
-            const w1b = w1_blk + bias1;
-            const w2b = w2_blk + bias2;
-
-            const inside: @Vector(8, bool) =
-                (w0b | w1b | w2b) >= @as(I8, @splat(0));
-
-            if (@reduce(.Or, inside)) {
-                var lane: usize = 0;
-                while (lane < 8) : (lane += 1) {
-                    if (!inside[lane]) continue;
-
-                    const px = x + lane;
-                    const idx = row_base + px;
-
-                    const wf = @Vector(3, Float){
-                        @floatFromInt(w0_blk[lane]),
-                        @floatFromInt(w1_blk[lane]),
-                        @floatFromInt(w2_blk[lane]),
-                    };
-
-                    const den_scaled =
-                        wf[0] * q0 +
-                        wf[1] * q1 +
-                        wf[2] * q2;
-
-                    const inv_z = den_scaled * inv_area;
-
-                    if (inv_z <= tile.z_buf[idx]) continue;
-                    tile.z_buf[idx] = inv_z;
-
-                    const uv_num =
-                        uv0q * @as(Uvf, @splat(wf[0])) +
-                        uv1q * @as(Uvf, @splat(wf[1])) +
-                        uv2q * @as(Uvf, @splat(wf[2]));
-
-                    const rcp_den: Float = 1.0 / den_scaled;
-                    const uv = uv_num * @as(Uvf, @splat(rcp_den));
-
-                    const u_f = std.math.clamp(uv[0], 0.0, max_u_f);
-                    const v_f = std.math.clamp(uv[1], 0.0, max_v_f);
-
-                    const u: usize = @intFromFloat(u_f);
-                    const v: usize = @intFromFloat(v_f);
-
-                    const tex_idx = u + v * atlas.width;
-                    tile.buf[idx] = atlas.atlas[tex_idx];
-                }
-            }
-
-            w0_blk += step_x0;
-            w1_blk += step_x1;
-            w2_blk += step_x2;
-        }
-
-        w0_row_cur += step_y0;
-        w1_row_cur += step_y1;
-        w2_row_cur += step_y2;
-    }
-
-    // w0_row += @as(I8, @splat(e0.bias));
-    // w1_row += @as(I8, @splat(e1.bias));
-    // w2_row += @as(I8, @splat(e2.bias));
-    //
-    // // Reciprocal depth at the vertices
-    // const q0: Float = triangle.v0_rec_z;
-    // const q1: Float = triangle.v1_rec_z;
-    // const q2: Float = triangle.v2_rec_z;
-    //
-    // // Depth affine coefficients
-    // const depth_x: Float = e0.A * q0 + e1.A * q1 + e2.A * q2;
-    // const depth_y: Float = e0.B * q0 + e1.B * q1 + e2.B * q2;
-    // const depth_c: Float = e0.C * q0 + e1.C * q1 + e2.C * q2;
-    //
-    // const lane_x_depth = F8{ 0, 1, 2, 3, 4, 5, 6, 7 };
-    // const lane_y_depth = F8{ 0, 0, 0, 0, 0, 0, 0, 0 };
-    //
-    // // const q0_row: F8 =
-    //
-    // // Determine wire thickness for wireframe rendering
-    // // const avg_rec_depth: Float = (q0 + q1 + q2) / 3.0;
-    // // const base_thickness: Float = 700;
-    // // const thickness: i32 = @intFromFloat(base_thickness * avg_rec_depth);
-    //
-    // // Step vectors
-    // const step_x0 = @as(I8, @splat(e0.A * step_x_size));
-    // const step_x1 = @as(I8, @splat(e1.A * step_x_size));
-    // const step_x2 = @as(I8, @splat(e2.A * step_x_size));
-    //
-    // const step_y0 = @as(I8, @splat(e0.B * step_y_size));
-    // const step_y1 = @as(I8, @splat(e1.B * step_y_size));
-    // const step_y2 = @as(I8, @splat(e2.B * step_y_size));
-    //
-    // // I don't know what to use them for yet
-    // // const uv0f: Uvf = @floatFromInt(triangle.v0_uv);
-    // // const uv1f: Uvf = @floatFromInt(triangle.v1_uv);
-    // // const uv2f: Uvf = @floatFromInt(triangle.v2_uv);
-    //
-    // // const uv0q: Uvf = uv0f * @as(Uvf, @splat(q0));
-    // // const uv1q: Uvf = uv1f * @as(Uvf, @splat(q1));
-    // // const uv2q: Uvf = uv2f * @as(Uvf, @splat(q2));
-    //
-    // var w0_row_cur = w0_row;
-    // var w1_row_cur = w1_row;
-    // var w2_row_cur = w2_row;
-    //
-    // var y: usize = 0;
-    // while (y < tile_size) : (y += 1) {
-    //     const z_row_base = y * tile_size;
-    //     const buf_row_base = y * tile_size;
-    //
-    //     var w0_blk = w0_row_cur;
-    //     var w1_blk = w1_row_cur;
-    //     var w2_blk = w2_row_cur;
-    //
-    //     var x: usize = 0;
-    //     while (x + 8 <= tile_size) : (x += 8) {
-    //         const w0b = w0_blk + e0.bias;
-    //         const w1b = w1_blk + e1.bias;
-    //         const w2b = w2_blk + e2.bias;
-    //         const inside: @Vector(step_x_size, bool) =
-    //             (w0b | w1b | w2b) >= @as(I8, @splat(0));
-    //
-    //         if (@reduce(.Or, inside)) {
-    //             var lane: usize = 0;
-    //             while (lane < step_x_size) : (lane += 1) {
-    //                 if (!inside[lane]) continue;
-    //
-    //                 const px = x + lane;
-    //                 const idx = z_row_base + px;
-    //             }
-    //         }
-    //
-    //         w0_blk += step_x0;
-    //         w1_blk += step_x1;
-    //         w2_blk += step_x2;
-    //     }
-    //
-    //     w0_row_cur += step_y0;
-    //     w1_row_cur += step_y1;
-    //     w2_row_cur += step_y2;
-    // }
-}
-
-///////////////////////////
-
-const Edge = struct {
+pub const Edge = struct {
     // Edge function can be refactored: E(x,y) = Ax + By + C with A B C constants
     A: i32,
     B: i32,
@@ -266,7 +42,6 @@ const Edge = struct {
     }
 };
 
-/// Create Edge from two (oriented) vertex
 inline fn makeEdge(a: @Vector(2, i32), b: @Vector(2, i32)) Edge {
     const x0 = a[0];
     const y0 = a[1];
@@ -286,111 +61,141 @@ inline fn makeEdge(a: @Vector(2, i32), b: @Vector(2, i32)) Edge {
     };
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-// NOTE: TO VERIFY
-inline fn renderTriangleInTile2(
+inline fn renderTriangleInTile(
     triangle: *const RasterTriangle,
     tile: *Tile,
     atlas: *Atlas,
     render_wireframe: bool,
 ) void {
-    const a = triangle.v0;
-    const b = triangle.v1;
-    const c = triangle.v2;
+    const e0 = triangle.e0;
+    const e1 = triangle.e1;
+    const e2 = triangle.e2;
 
-    const e0 = makeEdge(b, c);
-    const e1 = makeEdge(c, a);
-    const e2 = makeEdge(a, b);
-    const area = e0.eval(a[0], a[1]);
-
+    const area = triangle.area;
     if (area == 0) return; // triangle is degenerate
 
-    const inv_area = 1 / @as(Float, @floatFromInt(area));
+    const inv_area = triangle.inv_area;
 
     const tx0: i32 = @intCast(tile.pos[0]);
     const ty0: i32 = @intCast(tile.pos[1]);
-
-    // P: Evaluate edges at top-left of tile
-    const w0_row = e0.eval(tx0, ty0);
-    const w1_row = e1.eval(tx0, ty0);
-    const w2_row = e2.eval(tx0, ty0);
-    var w_row = @Vector(3, i32){ w0_row, w1_row, w2_row };
-
-    // P: Reciprocal depth at the vertices
-    const q0: Float = triangle.v0_rec_z;
-    const q1: Float = triangle.v1_rec_z;
-    const q2: Float = triangle.v2_rec_z;
-
-    const avg_rec_depth: Float = (q0 + q1 + q2) / 3.0; // Used for wireframe mode
-    const base_thickness: Float = 700;
-    const thickness: i32 = @intFromFloat(base_thickness * avg_rec_depth);
-
-    const uv0f: Uvf = @floatFromInt(triangle.v0_uv);
-    const uv1f: Uvf = @floatFromInt(triangle.v1_uv);
-    const uv2f: Uvf = @floatFromInt(triangle.v2_uv);
-
-    const uv0q: Uvf = uv0f * @as(Uvf, @splat(q0));
-    const uv1q: Uvf = uv1f * @as(Uvf, @splat(q1));
-    const uv2q: Uvf = uv2f * @as(Uvf, @splat(q2));
-
-    // P: Step vectors
-    const right_inc = Vec3i{ e0.A, e1.A, e2.A };
-    const down_inc = Vec3i{ e0.B, e1.B, e2.B };
-
     const tile_size = tile.dimensions;
 
     const max_u_f: Float = @floatFromInt(atlas.width - 1);
     const max_v_f: Float = @floatFromInt(atlas.height - 1);
 
-    // P: Main loop
+    // P: Edge values at tile origin, without fill-rule bias
+    const w0_origin: i32 = e0.eval(tx0, ty0);
+    const w1_origin: i32 = e1.eval(tx0, ty0);
+    const w2_origin: i32 = e2.eval(tx0, ty0);
+
+    // P: Integer edge stepping FOR coverage
+    const right_inc = Vec3i{ e0.A, e1.A, e2.A };
+    const down_inc = Vec3i{ e0.B, e1.B, e2.B };
+
+    var w_row = Vec3i{ w0_origin, w1_origin, w2_origin };
+
+    // P: Reciprocal depth at vertices.
+    const q0: Float = triangle.q0;
+    const q1: Float = triangle.q1;
+    const q2: Float = triangle.q2;
+
+    // P: Wireframe thickness
+    const avg_rec_depth: Float = (q0 + q1 + q2) / 3.0;
+    const base_thickness: Float = 700.0;
+    const thickness: i32 = @intFromFloat(base_thickness * avg_rec_depth);
+
+    // P: Attribute values multiplied by reciprocal depth
+    const uv0f: Uvf = @floatFromInt(triangle.uv0);
+    const uv1f: Uvf = @floatFromInt(triangle.uv1);
+    const uv2f: Uvf = @floatFromInt(triangle.uv2);
+
+    const uq0: Float = uv0f[0] * q0;
+    const uq1: Float = uv1f[0] * q1;
+    const uq2: Float = uv2f[0] * q2;
+
+    const vq0: Float = uv0f[1] * q0;
+    const vq1: Float = uv1f[1] * q1;
+    const vq2: Float = uv2f[1] * q2;
+
+    // P: Evaluate depth/uv interpolants once at tile origin
+    // This is a 'base' for incremental stepping
+    const w0_origin_f: Float = @floatFromInt(w0_origin);
+    const w1_origin_f: Float = @floatFromInt(w1_origin);
+    const w2_origin_f: Float = @floatFromInt(w2_origin);
+
+    // den_row is both the denominator of attribute interpolation
+    // and the numerator of depth interpolation
+    var den_row: Float = w0_origin_f * q0 + w1_origin_f * q1 + w2_origin_f * q2;
+    var u_num_row: Float = w0_origin_f * uq0 + w1_origin_f * uq1 + w2_origin_f * uq2;
+    var v_num_row: Float = w0_origin_f * vq0 + w1_origin_f * vq1 + w2_origin_f * vq2;
+
+    // P: Incremental values (constant x/y derivatives) FOR depth/uv
+    const e0_a_f: Float = @floatFromInt(e0.A);
+    const e1_a_f: Float = @floatFromInt(e1.A);
+    const e2_a_f: Float = @floatFromInt(e2.A);
+    const e0_b_f: Float = @floatFromInt(e0.B);
+    const e1_b_f: Float = @floatFromInt(e1.B);
+    const e2_b_f: Float = @floatFromInt(e2.B);
+
+    const den_dx: Float = e0_a_f * q0 + e1_a_f * q1 + e2_a_f * q2;
+    const den_dy: Float = e0_b_f * q0 + e1_b_f * q1 + e2_b_f * q2;
+
+    const u_num_dx: Float = e0_a_f * uq0 + e1_a_f * uq1 + e2_a_f * uq2;
+    const u_num_dy: Float = e0_b_f * uq0 + e1_b_f * uq1 + e2_b_f * uq2;
+
+    const v_num_dx: Float = e0_a_f * vq0 + e1_a_f * vq1 + e2_a_f * vq2;
+    const v_num_dy: Float = e0_b_f * vq0 + e1_b_f * vq1 + e2_b_f * vq2;
+
+    // P: Stepping
     var y: usize = 0;
     while (y < tile_size) : (y += 1) {
-        const z_row_base: usize = y * tile_size; // base addr in z-buffer for row
-        const buf_row_base: usize = y * tile_size; // base addr in fb for row
+        const row_base: usize = y * tile_size;
 
-        var w = w_row + @Vector(3, i32){ e0.bias, e1.bias, e2.bias };
+        // Top-left rule bias
+        var w = w_row + Vec3i{ e0.bias, e1.bias, e2.bias };
+
+        var den: Float = den_row;
+        var u_num: Float = u_num_row;
+        var v_num: Float = v_num_row;
 
         var x: usize = 0;
         while (x < tile_size) : (x += 1) {
-            // Step right (also runs if the z-test fails, thanks to the defer)
-            defer w += right_inc;
-
-            // All we really need is the sign bit
-            if ((w[0] | w[1] | w[2]) >= 0) {
-                const w_thick: Vec3i = w - @as(Vec3i, @splat(thickness));
-                if (render_wireframe and (w_thick[0] | w_thick[1] | w_thick[2]) >= 0)
-                    continue;
-
-                const wf: Vec3f = @floatFromInt(w);
-                const den_scaled = (wf[0] * q0 + wf[1] * q1 + wf[2] * q2);
-                const inv_z = den_scaled * inv_area;
-
-                const z_idx = z_row_base + x;
-                if (inv_z <= tile.z_buf[z_idx]) continue;
-                tile.z_buf[z_idx] = inv_z;
-
-                const uv_num = uv0q * @as(Uvf, @splat(wf[0])) +
-                    uv1q * @as(Uvf, @splat(wf[1])) +
-                    uv2q * @as(Uvf, @splat(wf[2]));
-
-                const rcp_den: Float = 1.0 / den_scaled;
-                const uv = uv_num * @as(Uvf, @splat(rcp_den));
-
-                const u_f = std.math.clamp(uv[0], 0.0, max_u_f);
-                const v_f = std.math.clamp(uv[1], 0.0, max_v_f);
-
-                const u: usize = @intFromFloat(u_f);
-                const v: usize = @intFromFloat(v_f);
-
-                const base: usize = (u + v * atlas.width);
-                const argb = atlas.atlas[base];
-                tile.buf[buf_row_base + x] = argb;
+            defer {
+                w += right_inc;
+                den += den_dx;
+                u_num += u_num_dx;
+                v_num += v_num_dx;
             }
+
+            if ((w[0] | w[1] | w[2]) < 0) continue;
+
+            if (render_wireframe) {
+                const w_thick = w - @as(Vec3i, @splat(thickness));
+                if ((w_thick[0] | w_thick[1] | w_thick[2]) >= 0) continue;
+            }
+
+            const inv_z: Float = den * inv_area;
+            const idx: usize = row_base + x;
+
+            if (inv_z <= tile.z_buf[idx]) continue;
+            tile.z_buf[idx] = inv_z;
+
+            const rcp_den: Float = 1.0 / den;
+
+            const u_f = std.math.clamp(u_num * rcp_den, 0.0, max_u_f);
+            const v_f = std.math.clamp(v_num * rcp_den, 0.0, max_v_f);
+
+            const u: usize = @intFromFloat(u_f);
+            const v: usize = @intFromFloat(v_f);
+
+            const tex_idx: usize = u + v * atlas.width;
+            tile.buf[idx] = atlas.atlas[tex_idx];
         }
 
-        // Step down
         w_row += down_inc;
+        den_row += den_dy;
+        u_num_row += u_num_dy;
+        v_num_row += v_num_dy;
     }
 }
 
@@ -435,6 +240,42 @@ fn tileWorker(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+inline fn triangleMayOverlapTile(tri: *const RasterTriangle, tile: *const Tile) bool {
+    const e0 = tri.e0;
+    const e1 = tri.e1;
+    const e2 = tri.e2;
+
+    const max_off: i32 = @intCast(tile.dimensions - 1);
+
+    const tl: Vec2i = .{
+        @as(i32, @intCast(tile.pos[0])),
+        @as(i32, @intCast(tile.pos[1])),
+    };
+    const tr = tl + Vec2i{ max_off, 0 };
+    const bl = tl + Vec2i{ 0, max_off };
+    const br = tl + Vec2i{ max_off, max_off };
+
+    const e0_outside =
+        e0.eval(tl[0], tl[1]) < 0 and
+        e0.eval(tr[0], tr[1]) < 0 and
+        e0.eval(bl[0], bl[1]) < 0 and
+        e0.eval(br[0], br[1]) < 0;
+
+    const e1_outside =
+        e1.eval(tl[0], tl[1]) < 0 and
+        e1.eval(tr[0], tr[1]) < 0 and
+        e1.eval(bl[0], bl[1]) < 0 and
+        e1.eval(br[0], br[1]) < 0;
+
+    const e2_outside =
+        e2.eval(tl[0], tl[1]) < 0 and
+        e2.eval(tr[0], tr[1]) < 0 and
+        e2.eval(bl[0], bl[1]) < 0 and
+        e2.eval(br[0], br[1]) < 0;
+
+    return !(e0_outside or e1_outside or e2_outside);
+}
 
 pub const TrianglesRasterizer = struct {
     tile_counts: []usize,
@@ -520,6 +361,22 @@ pub const TrianglesRasterizer = struct {
     ) !void {
         @memset(self.tile_counts, 0);
 
+        // TODO: A lot of these properties are shared between the
+        // two quad's triangles, set them there
+
+        // P: Set the properties of triangles, idk if I should multithread
+        for (triangles) |*tri| {
+            const a = tri.v0;
+            const b = tri.v1;
+            const c = tri.v2;
+
+            tri.e0 = makeEdge(b, c);
+            tri.e1 = makeEdge(c, a);
+            tri.e2 = makeEdge(a, b);
+            tri.area = tri.e0.eval(a[0], a[1]);
+            tri.inv_area = 1 / @as(Float, @floatFromInt(tri.area));
+        }
+
         // P: 1st pass, count the triangles for each tile
         for (0..triangles.len) |tri_i| {
             const tri = triangles[tri_i];
@@ -531,8 +388,10 @@ pub const TrianglesRasterizer = struct {
                 var x = range.min_tx;
                 while (x < range.max_tx) : (x += 1) {
                     const idx = x + tile_pool.count_w * y;
+                    const tile = &tile_pool.tiles[idx];
+                    if (!triangleMayOverlapTile(&tri, tile)) continue;
                     self.tile_counts[idx] += 1;
-                    tile_pool.tiles[idx].was_occupied = true;
+                    tile.was_occupied = true;
                 }
             }
         }
@@ -559,6 +418,7 @@ pub const TrianglesRasterizer = struct {
                 var tx = range.min_tx;
                 while (tx < range.max_tx) : (tx += 1) {
                     const tile_i = tx + tile_pool.count_w * ty;
+                    if (!triangleMayOverlapTile(&tri, &tile_pool.tiles[tile_i])) continue;
 
                     const dst = self.write_pos[tile_i];
                     self.tile_triangle_indices[dst] = @intCast(tri_i);

@@ -33,7 +33,11 @@
   I separated the generation of bitfields from meshing (to avoid cross dependency),
   and regenerate the 6 adjacent chunks when generating a new one.
 
-  TODO: Optimize triangle rasterization.
+* 22/03/26
+  Finally interpolating u/v/q (with the big help of AI I got lost so hard).
+  Precomputation of some triangle attributes (IDK if this is a perf downgrade, more mem traffic).
+  Early tile reject (if all 4 tile edges are outside of any triangle edge, reject).
+
   TODO: Value noise.
   TODO: Greedy meshing.
   TODO: Conventionalize coordinate system.

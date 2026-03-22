@@ -150,12 +150,12 @@ pub const Renderer = struct {
             .v0 = a,
             .v1 = b,
             .v2 = c,
-            .v0_rec_z = rec_ws[0],
-            .v1_rec_z = rec_ws[1],
-            .v2_rec_z = rec_ws[2],
-            .v0_uv = tri.v0.uv,
-            .v1_uv = tri.v1.uv,
-            .v2_uv = tri.v2.uv,
+            .q0 = rec_ws[0],
+            .q1 = rec_ws[1],
+            .q2 = rec_ws[2],
+            .uv0 = tri.v0.uv,
+            .uv1 = tri.v1.uv,
+            .uv2 = tri.v2.uv,
         });
     }
 
