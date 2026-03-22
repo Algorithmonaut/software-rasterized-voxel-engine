@@ -26,7 +26,7 @@ const Edge = struct {
     bias: i32,
 
     /// Evaluate the point (x, y) against the edge
-    inline fn eval(self: Edge, x: i32, y: i32) i64 {
+    inline fn eval(self: Edge, x: i32, y: i32) i32 {
         return self.A * x + self.B * y + self.C;
     }
 };
@@ -80,7 +80,7 @@ inline fn renderTriangleInTile(
     const w0_row = e0.eval(tx0, ty0);
     const w1_row = e1.eval(tx0, ty0);
     const w2_row = e2.eval(tx0, ty0);
-    var w_row = @Vector(3, i64){ w0_row, w1_row, w2_row };
+    var w_row = @Vector(3, i32){ w0_row, w1_row, w2_row };
 
     // P: Reciprocal depth at the vertices
     const q0: Float = triangle.v0_rec_z;
@@ -116,14 +116,14 @@ inline fn renderTriangleInTile(
         const z_row_base: usize = y * tile_size; // base addr in z-buffer for row
         const buf_row_base: usize = y * tile_size; // base addr in fb for row
 
-        var w = w_row;
+        var w = w_row + @Vector(3, i32){ e0.bias, e1.bias, e2.bias };
 
         var x: usize = 0;
         while (x < tile_size) : (x += 1) {
             // Step right (also runs if the z-test fails, thanks to the defer)
             defer w += right_inc;
 
-            if (w[0] + e0.bias >= 0 and w[1] + e1.bias >= 0 and w[2] + e2.bias >= 0) {
+            if (w[0] >= 0 and w[1] >= 0 and w[2] >= 0) {
                 if (render_wireframe and w[0] > thickness and w[1] > thickness and w[2] > thickness)
                     continue;
 

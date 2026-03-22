@@ -57,7 +57,7 @@ pub const World = struct {
         const chunk_ptr = try self.allocator.create(Chunk);
         errdefer self.allocator.destroy(chunk_ptr);
 
-        chunk_ptr.* = try Chunk.generate(self.allocator, coord, self.chunk_size);
+        chunk_ptr.* = try Chunk.generate(self.allocator, coord, self.chunk_size, self);
         errdefer chunk_ptr.deinit(self.allocator);
 
         try self.chunks.put(key, chunk_ptr);

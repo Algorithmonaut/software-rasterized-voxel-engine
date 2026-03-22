@@ -161,6 +161,8 @@ pub const Mesher = struct {
         return x + y * size + z * size * size;
     }
 
+    // TODO: Find if not generating quads when adjacent chunk is not yet
+    // generated is better
     inline fn visiblePos(row: u32) u32 {
         return row & ~(row >> 1);
     }

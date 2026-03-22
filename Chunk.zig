@@ -3,6 +3,7 @@ const Float = @import("math/types.zig").Float;
 const BlockType = @import("Atlas.zig").BlockTypes;
 
 const ChunkCoord = @import("math/types.zig").ChunkCoord;
+const World = @import("World.zig").World;
 
 const Block = @import("world/Block.zig");
 const Quad = Block.Quad;
@@ -74,7 +75,21 @@ pub const Chunk = struct {
         }
     }
 
-    pub fn generate(allocator: std.mem.Allocator, coord: ChunkCoord, size: usize) !Chunk {
+    fn markAdjacentChunksAsDirty(c: ChunkCoord, world: *World) void {
+        if (world.getChunk(.{ c[0] + 1, c[1], c[2] })) |a| a.dirty = true;
+        if (world.getChunk(.{ c[0] - 1, c[1], c[2] })) |a| a.dirty = true;
+        if (world.getChunk(.{ c[0], c[1] + 1, c[2] })) |a| a.dirty = true;
+        if (world.getChunk(.{ c[0], c[1] - 1, c[2] })) |a| a.dirty = true;
+        if (world.getChunk(.{ c[0], c[1], c[2] + 1 })) |a| a.dirty = true;
+        if (world.getChunk(.{ c[0], c[1], c[2] - 1 })) |a| a.dirty = true;
+    }
+
+    pub fn generate(
+        allocator: std.mem.Allocator,
+        coord: ChunkCoord,
+        size: usize,
+        world: *World,
+    ) !Chunk {
         const size_i = @as(i32, @intCast(size));
         const size_vec = @as(ChunkCoord, @splat(size_i));
 
@@ -98,6 +113,7 @@ pub const Chunk = struct {
         };
 
         chunk.buildBitfields();
+        markAdjacentChunksAsDirty(coord, world);
 
         return chunk;
     }

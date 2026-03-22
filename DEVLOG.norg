@@ -28,6 +28,10 @@
   (in the local chunk) will not be emitted in the mesh.
   Finalized this improvement to chunk meshing by being aware of the surrounding chunks.
   My FPS goes brrrrrrrrrr!
+  Just figured, it is called *_culled meshing_*.
+
+  I separated the generation of bitfields from meshing (to avoid cross dependency),
+  and regenerate the 6 adjacent chunks when generating a new one.
 
   TODO: Optimize triangle rasterization.
   TODO: Value noise.
