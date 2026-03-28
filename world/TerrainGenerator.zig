@@ -32,6 +32,15 @@ fn hash2Signed(x: i32, y: i32, seed: u32) f32 {
 
 //// VALUE NOISE ////
 
+/// Classic perlin quintic fade
+inline fn fadeQuintic(t: f32) f32 {
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+
+inline fn lerp(a: f32, b: f32, t: f32) f32 {
+    return a + (b - a) * t;
+}
+
 fn valueNoise2(x: f32, y: f32, seed: u32) f32 {
     const x0: i32 = @intFromFloat(@floor(x));
     const y0: i32 = @intFromFloat(@floor(y));
@@ -55,13 +64,21 @@ fn valueNoise2(x: f32, y: f32, seed: u32) f32 {
     return lerp(ix0, ix1, sy);
 }
 
-/// Classic perlin quintic fade
-inline fn fadeQuintic(t: f32) f32 {
-    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
-}
+fn fbm2(x: f32, y: f32, octaves: u32, gain: f32, lacunarity: f32, seed: u32) f32 {
+    var sum: f32 = 0.0;
+    var amp: f32 = 1.0;
+    var freq: f32 = 1.0;
+    var norm: f32 = 0.0;
 
-inline fn lerp(a: f32, b: f32, t: f32) f32 {
-    return a + (b - a) * t;
+    var i: u32 = 0;
+    while (i < octaves) : (i += 1) {
+        sum += valueNoise2(x * freq, y * freq, seed + i * 1013) * amp;
+        norm += amp;
+        amp *= gain;
+        freq *= lacunarity;
+    }
+
+    return sum / norm;
 }
 
 //// TERRAIN GENERATION ////
@@ -77,6 +94,12 @@ pub const TerrainGenerator = struct {
     /// Smaller = smoother terrain
     scale: f32,
 
+    mountain_seed: u32,
+    mountain_octaves: u32,
+    mountain_lacunarity: f32,
+    mountain_gain: f32,
+    mountain_scale: f32,
+
     pub fn init(conf: TerrainGeneratorConfig) TerrainGenerator {
         return .{
             .seed = conf.seed,
@@ -84,6 +107,12 @@ pub const TerrainGenerator = struct {
             .lacunarity = conf.lacunarity,
             .gain = conf.gain,
             .scale = conf.scale,
+
+            .mountain_seed = conf.mountain_seed,
+            .mountain_octaves = conf.mountain_octaves,
+            .mountain_lacunarity = conf.mountain_lacunarity,
+            .mountain_gain = conf.mountain_gain,
+            .mountain_scale = conf.mountain_scale,
         };
     }
 
@@ -91,29 +120,12 @@ pub const TerrainGenerator = struct {
         _ = self;
     }
 
-    fn fbm2(self: TerrainGenerator, x: f32, y: f32) f32 {
-        var sum: f32 = 0.0;
-        var amp: f32 = 1.0;
-        var freq: f32 = 1.0;
-        var norm: f32 = 0.0;
-
-        var i: u32 = 0;
-        while (i < self.octaves) : (i += 1) {
-            sum += valueNoise2(x * freq, y * freq, self.seed + i * 1013) * amp;
-            norm += amp;
-            amp *= self.gain;
-            freq *= self.lacunarity;
-        }
-
-        return sum / norm;
-    }
-
     fn terrainHeight(self: TerrainGenerator, world_x: i32, world_z: i32) i32 {
         const nx = @as(f32, @floatFromInt(world_x)) * self.scale;
         const nz = @as(f32, @floatFromInt(world_z)) * self.scale;
 
         // Replace by a valid seed
-        const h = self.fbm2(nx, nz);
+        const h = fbm2(nx, nz, self.octaves, self.gain, self.lacunarity, self.seed);
         const base_height: f32 = 32.0;
         const amplitude: f32 = 24.0;
 

@@ -51,6 +51,12 @@ pub const EngineConfig = struct {
         gain: f32,
         /// Smaller = smoother terrain
         scale: f32,
+
+        mountain_seed: u32,
+        mountain_octaves: u32,
+        mountain_lacunarity: f32,
+        mountain_gain: f32,
+        mountain_scale: f32,
     };
 
     camera_config: CameraConfig,
