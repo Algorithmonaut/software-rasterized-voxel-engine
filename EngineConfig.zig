@@ -36,9 +36,27 @@ pub const EngineConfig = struct {
         show_occupied_tiles: bool,
     };
 
+    pub const TerrainGeneratorConfig = struct {
+        // Typical parameters:
+        // octaves = 4..6
+        // lacunarity = 2.0
+        // gain = 0.5
+
+        seed: u32,
+        /// Number of noise layouts combined together
+        octaves: u32,
+        /// How much the frequency increase between each octaves
+        lacunarity: f32,
+        /// Multiplier for how much each octave contributes to the final result
+        gain: f32,
+        /// Smaller = smoother terrain
+        scale: f32,
+    };
+
     camera_config: CameraConfig,
     framebuffer_config: FramebufferConfig,
     atlas_config: AtlasConfig,
     world_config: WorldConfig,
     debug_config: DebugConfig,
+    terrain_generator_config: TerrainGeneratorConfig,
 };

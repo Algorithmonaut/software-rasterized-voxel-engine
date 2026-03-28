@@ -40,7 +40,24 @@
 
   Chunk level frustum culling by deriving frustum planes form the combined clip transform.
 
-  TODO: Value noise.
+* 28/03/2026
+  Added:
+  - Deterministic fast noise function.
+  - Basic value noise.
+  - Fractal fBm.
+  - ⇒ Basic terrain generation.
+
+
+  TODO: Use different seeds for different fields (this avoids accidental correlation):
+  @code 
+  const height_seed: u32 = 0xC13FA9B7;
+  const cave_seed: u32 = 0x2E8D91F3;
+  const biome_seed: u32 = 0x94B6E02A;
+  const moisture_seed: u32 = 0x5D17C8EF;onst height_seed: u32 = 0xC13FA9B7;
+  const cave_seed: u32 = 0x2E8D91F3;
+  const biome_seed: u32 = 0x94B6E02A;
+  const moisture_seed: u32 = 0x5D17C8EF;
+  @end
   TODO: Greedy meshing.
   TODO: Conventionalize coordinate system.
   TODO: Decide if WorldVertex pos should be i64 or float

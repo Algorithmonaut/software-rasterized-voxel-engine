@@ -12,6 +12,7 @@ const Atlas = @import("Atlas.zig").Atlas;
 const TilePool = @import("tile.zig").TilePool;
 const World = @import("World.zig").World;
 const TriangleRasterizer = @import("renderer/TrianglesRasterizer.zig").TrianglesRasterizer;
+const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
 const Vec3f = @import("math/types.zig").Vec3f;
 
@@ -26,6 +27,7 @@ pub const Engine = struct {
     atlas: Atlas,
     world: World,
     triangle_rasterizer: TriangleRasterizer,
+    terrain_generator: TerrainGenerator,
 
     pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
         const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
@@ -34,6 +36,7 @@ pub const Engine = struct {
         const atlas = try Atlas.init(allocator, conf.atlas_config);
         const world = World.init(allocator, conf.world_config);
         const triangle_rasterizer = try TriangleRasterizer.init(allocator, tile_pool.count);
+        const terrain_generator = TerrainGenerator.init(conf.terrain_generator_config);
         const camera = Camera.init(
             conf.camera_config,
             conf.framebuffer_config.width,
@@ -55,6 +58,7 @@ pub const Engine = struct {
             .atlas = atlas,
             .world = world,
             .triangle_rasterizer = triangle_rasterizer,
+            .terrain_generator = terrain_generator,
         };
     }
 
@@ -65,6 +69,7 @@ pub const Engine = struct {
         self.graphics.deinit();
         self.atlas.deinit(self.allocator);
         self.triangle_rasterizer.deinit(self.allocator);
+        self.terrain_generator.deinit();
     }
 
     pub fn beginFrame(self: *Engine) !FrameContext {

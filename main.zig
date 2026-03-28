@@ -18,10 +18,10 @@ const chunk_mesher = @import("world/chunk-mesher.zig");
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 120.0,
+        .view_distance = 200.0,
         .from = .{ 0, 40, -20 },
         .to = .{ 0, 40, -21 },
-        .speed = 15.0,
+        .speed = 115.0,
         .sensivity = 0.0025,
     },
     .framebuffer_config = .{
@@ -45,6 +45,13 @@ const engine_config = EngineConfig{
         .show_fps = true,
         .show_occupied_tiles = false,
         .show_tex_atlas = false,
+    },
+    .terrain_generator_config = .{
+        .seed = 12345,
+        .gain = 0.5,
+        .lacunarity = 2.0,
+        .octaves = 5,
+        .scale = 0.01,
     },
 };
 
@@ -110,6 +117,7 @@ pub fn main() !void {
             engine.world.chunk_size,
             &engine.world,
             &engine.camera,
+            engine.terrain_generator,
         );
         prof_scope.end();
 

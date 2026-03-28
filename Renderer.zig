@@ -7,6 +7,7 @@ const Camera = @import("Camera.zig").Camera;
 const Chunk = @import("Chunk.zig").Chunk;
 const Atlas = @import("Atlas.zig").Atlas;
 const Mesher = @import("world/chunk-mesher.zig").Mesher;
+const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
 const Block = @import("world/Block.zig");
 const WorldQuad = Block.WorldQuad;
@@ -269,6 +270,7 @@ pub const Renderer = struct {
         chunk_size: usize,
         world: *World,
         camera: *Camera,
+        terrain_generator: TerrainGenerator,
     ) !void {
         const chunk_size_i: i32 = @intCast(chunk_size);
         const player_chunk = worldToChunkCoord(player_pos, chunk_size_i);
@@ -280,28 +282,29 @@ pub const Renderer = struct {
         // For a render radius R = chunk_view_radius, gather chunk coords around the player
         var cz = player_chunk[2] - chunk_view_radius;
         while (cz <= player_chunk[2] + chunk_view_radius) : (cz += 1) {
-            // var cy = player_chunk[1] - chunk_view_radius;
-            // while (cy <= player_chunk[1] + chunk_view_radius) : (cy += 1) {
-            var cx = player_chunk[0] - chunk_view_radius;
-            while (cx <= player_chunk[0] + chunk_view_radius) : (cx += 1) {
-                const dx = cx - player_chunk[0];
-                const dz = cz - player_chunk[2];
-                if (dx * dx + dz * dz > chunk_view_radius * chunk_view_radius) continue;
+            var cy = player_chunk[1] - chunk_view_radius;
+            while (cy <= player_chunk[1] + chunk_view_radius) : (cy += 1) {
+                var cx = player_chunk[0] - chunk_view_radius;
+                while (cx <= player_chunk[0] + chunk_view_radius) : (cx += 1) {
+                    const dx = cx - player_chunk[0];
+                    const dy = cy - player_chunk[1];
+                    const dz = cz - player_chunk[2];
+                    if (dx * dx + dy * dy + dz * dz > chunk_view_radius * chunk_view_radius) continue;
 
-                const coord = ChunkCoord{ cx, 0, cz };
-                const chunk = try world.ensureChunk(coord);
+                    const coord = ChunkCoord{ cx, cy, cz };
+                    const chunk = try world.ensureChunk(coord, terrain_generator);
 
-                if (!isChunkInFrustum(chunk, camera.combined_mat)) continue;
+                    if (!isChunkInFrustum(chunk, camera.combined_mat)) continue;
 
-                try self.chunk_entries.append(
-                    allocator,
-                    .{
-                        .chunk = chunk,
-                        .dist2 = dist2ToPlayer(player_pos, chunk),
-                    },
-                );
+                    try self.chunk_entries.append(
+                        allocator,
+                        .{
+                            .chunk = chunk,
+                            .dist2 = dist2ToPlayer(player_pos, chunk),
+                        },
+                    );
+                }
             }
-            // }
         }
 
         // Front to back rendering

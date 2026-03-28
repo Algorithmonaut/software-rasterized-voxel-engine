@@ -5,6 +5,7 @@ const WorldConfig = @import("EngineConfig.zig").EngineConfig.WorldConfig;
 const ChunkCoord = @import("math/types.zig").ChunkCoord;
 
 const Mesher = @import("world/chunk-mesher.zig").Mesher;
+const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
 pub const World = struct {
     allocator: std.mem.Allocator,
@@ -47,6 +48,7 @@ pub const World = struct {
     pub fn ensureChunk(
         self: *World,
         coord: ChunkCoord,
+        terrain_generator: TerrainGenerator,
     ) !*Chunk {
         const key = chunkKey(coord);
 
@@ -57,7 +59,13 @@ pub const World = struct {
         const chunk_ptr = try self.allocator.create(Chunk);
         errdefer self.allocator.destroy(chunk_ptr);
 
-        chunk_ptr.* = try Chunk.generate(self.allocator, coord, self.chunk_size, self);
+        chunk_ptr.* = try Chunk.generate(
+            self.allocator,
+            coord,
+            self.chunk_size,
+            self,
+            terrain_generator,
+        );
         errdefer chunk_ptr.deinit(self.allocator);
 
         try self.chunks.put(key, chunk_ptr);

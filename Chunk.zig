@@ -8,6 +8,7 @@ const World = @import("World.zig").World;
 const Block = @import("world/Block.zig");
 const Quad = Block.Quad;
 const BlockId = Block.BlockId;
+const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
 const chunk_size = 32;
 const Bitfield = u32; // TODO: Make the generation of this dependant on the chunk size
@@ -89,6 +90,7 @@ pub const Chunk = struct {
         coord: ChunkCoord,
         size: usize,
         world: *World,
+        terrain_generator: TerrainGenerator,
     ) !Chunk {
         const size_i = @as(i32, @intCast(size));
         const size_vec = @as(ChunkCoord, @splat(size_i));
@@ -98,7 +100,9 @@ pub const Chunk = struct {
 
         const voxels = try allocator.alloc(BlockId, size * size * size);
 
-        for (0..voxels.len) |i| voxels[i] = @enumFromInt(i % 3);
+        terrain_generator.fillChunkVoxels(voxels, coord, size);
+
+        // for (0..voxels.len) |i| voxels[i] = @enumFromInt(i % 3);
 
         var chunk = Chunk{
             .coord = coord,
@@ -112,6 +116,7 @@ pub const Chunk = struct {
             .bitfields = undefined,
         };
 
+        chunk.bitfields.clearBitfields();
         chunk.buildBitfields();
         markAdjacentChunksAsDirty(coord, world);
 

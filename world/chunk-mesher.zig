@@ -259,7 +259,7 @@ pub const Mesher = struct {
                     visiblePos(row);
 
                 const neg_mask = if (neg_neighbor) |adjacent|
-                    visibleNegWithNeighbor(row, adjacent.bitfields.solid_x[y][z] & @as(u32, 1))
+                    visibleNegWithNeighbor(row, (adjacent.bitfields.solid_x[y][z] >> 31) & @as(u32, 1))
                 else
                     visibleNeg(row);
 
@@ -325,7 +325,7 @@ pub const Mesher = struct {
                     visiblePos(row);
 
                 const neg_mask = if (neg_neighbor) |adjacent|
-                    visibleNegWithNeighbor(row, adjacent.bitfields.solid_y[x][z] & @as(u32, 1))
+                    visibleNegWithNeighbor(row, (adjacent.bitfields.solid_y[x][z] >> 31) & @as(u32, 1))
                 else
                     visibleNeg(row);
 
@@ -390,12 +390,12 @@ pub const Mesher = struct {
                     visiblePos(row);
 
                 const neg_mask = if (neg_neighbor) |adjacent|
-                    visibleNegWithNeighbor(row, adjacent.bitfields.solid_z[x][y] & @as(u32, 1))
+                    visibleNegWithNeighbor(row, (adjacent.bitfields.solid_z[x][y] >> 31) & @as(u32, 1))
                 else
                     visibleNeg(row);
 
-                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.front, pos_mask);
-                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.back, neg_mask);
+                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.back, pos_mask);
+                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.front, neg_mask);
             }
         }
     }
