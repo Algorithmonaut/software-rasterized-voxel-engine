@@ -47,6 +47,8 @@
   - Fractal fBm.
   - ⇒ Basic terrain generation.
 
+  Tried to generate mountains but it will way more work haha.
+
 
   TODO: Use different seeds for different fields (this avoids accidental correlation):
   @code 

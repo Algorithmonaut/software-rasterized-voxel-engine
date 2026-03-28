@@ -15,6 +15,8 @@ const PosVec = @Vector(3, usize);
 
 const UV = @Vector(2, usize);
 
+const PlaneSet = [32][32]u32;
+
 // NOTE: For simplicity and to avoid mixing chunk coordinates / textures coordinates
 // maybe use this (much simpler) architecture:
 
@@ -205,34 +207,27 @@ pub const Mesher = struct {
 
     //// X AXIS ////
 
-    fn emitMaskX(
-        self: *const Mesher,
-        mesh: *std.ArrayList(Quad),
-        allocator: std.mem.Allocator,
-        voxels: []const BlockId,
-        size: usize,
+    fn scatterMaskX(
+        planes: *PlaneSet,
         y: usize,
         z: usize,
-        face: Face,
         mask_in: u32,
-    ) !void {
+    ) void {
         var mask = mask_in;
         while (mask != 0) {
-            const x: usize = @intCast(@ctz(mask));
+            const x: usize = @ctz(mask);
             mask &= mask - 1;
-            try appendQuad(self, mesh, allocator, voxels, size, face, x, y, z);
+            planes[x][y] |= (@as(u32, 1)) << @intCast(z);
         }
     }
 
-    fn emitXFaces(
-        self: *const Mesher,
+    fn buildXPlanes(
         chunk: *const Chunk,
-        mesh: *std.ArrayList(Quad),
-        allocator: std.mem.Allocator,
         world: *World,
-    ) !void {
+        pos_x_planes: *PlaneSet,
+        neg_x_planes: *PlaneSet,
+    ) void {
         const size = chunk.dimensions;
-        const voxels = chunk.voxels;
 
         const pos_neighbor = world.getChunk(.{
             chunk.coord[0] + 1,
@@ -263,42 +258,35 @@ pub const Mesher = struct {
                 else
                     visibleNeg(row);
 
-                try self.emitMaskX(mesh, allocator, voxels, size, y, z, Face.right, pos_mask);
-                try self.emitMaskX(mesh, allocator, voxels, size, y, z, Face.left, neg_mask);
+                scatterMaskX(pos_x_planes, y, z, pos_mask);
+                scatterMaskX(neg_x_planes, y, z, neg_mask);
             }
         }
     }
 
     //// Y AXIS ////
 
-    fn emitMaskY(
-        self: *const Mesher,
-        mesh: *std.ArrayList(Quad),
-        allocator: std.mem.Allocator,
-        voxels: []const BlockId,
-        size: usize,
+    fn scatterMaskY(
+        planes: *PlaneSet,
         x: usize,
         z: usize,
-        face: Face,
         mask_in: u32,
-    ) !void {
+    ) void {
         var mask = mask_in;
         while (mask != 0) {
-            const y: usize = @intCast(@ctz(mask));
+            const y: usize = @ctz(mask);
             mask &= mask - 1;
-            try appendQuad(self, mesh, allocator, voxels, size, face, x, y, z);
+            planes[y][x] |= (@as(u32, 1)) << @intCast(z);
         }
     }
 
-    fn emitYFaces(
-        self: *const Mesher,
+    fn buildYPlanes(
         chunk: *const Chunk,
-        mesh: *std.ArrayList(Quad),
-        allocator: std.mem.Allocator,
         world: *World,
-    ) !void {
+        pos_y_planes: *PlaneSet,
+        neg_y_planes: *PlaneSet,
+    ) void {
         const size = chunk.dimensions;
-        const voxels = chunk.voxels;
 
         const pos_neighbor = world.getChunk(.{
             chunk.coord[0],
@@ -329,41 +317,35 @@ pub const Mesher = struct {
                 else
                     visibleNeg(row);
 
-                try self.emitMaskY(mesh, allocator, voxels, size, x, z, Face.top, pos_mask);
-                try self.emitMaskY(mesh, allocator, voxels, size, x, z, Face.bottom, neg_mask);
+                scatterMaskY(pos_y_planes, x, z, pos_mask);
+                scatterMaskY(neg_y_planes, x, z, neg_mask);
             }
         }
     }
 
     //// Z AXIS ////
 
-    fn emitMaskZ(
-        self: *const Mesher,
-        mesh: *std.ArrayList(Quad),
-        allocator: std.mem.Allocator,
-        voxels: []const BlockId,
-        size: usize,
+    fn scatterMaskZ(
+        planes: *PlaneSet,
         x: usize,
         y: usize,
-        face: Face,
         mask_in: u32,
-    ) !void {
+    ) void {
         var mask = mask_in;
         while (mask != 0) {
-            const z: usize = @intCast(@ctz(mask));
+            const z: usize = @ctz(mask);
             mask &= mask - 1;
-            try appendQuad(self, mesh, allocator, voxels, size, face, x, y, z);
+            planes[z][x] |= (@as(u32, 1)) << @intCast(y);
         }
     }
-    fn emitZFaces(
-        self: *const Mesher,
+
+    fn buildZPlanes(
         chunk: *const Chunk,
-        mesh: *std.ArrayList(Quad),
-        allocator: std.mem.Allocator,
         world: *World,
-    ) !void {
+        pos_z_planes: *PlaneSet,
+        neg_z_planes: *PlaneSet,
+    ) void {
         const size = chunk.dimensions;
-        const voxels = chunk.voxels;
 
         const pos_neighbor = world.getChunk(.{
             chunk.coord[0],
@@ -394,8 +376,8 @@ pub const Mesher = struct {
                 else
                     visibleNeg(row);
 
-                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.back, pos_mask);
-                try self.emitMaskZ(mesh, allocator, voxels, size, x, y, Face.front, neg_mask);
+                scatterMaskY(pos_z_planes, x, y, pos_mask);
+                scatterMaskY(neg_z_planes, x, y, neg_mask);
             }
         }
     }
@@ -406,15 +388,140 @@ pub const Mesher = struct {
         world: *World,
         allocator: std.mem.Allocator,
     ) !void {
+        var pos_x_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
+        var neg_x_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
+
+        var pos_y_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
+        var neg_y_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
+
+        var pos_z_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
+        var neg_z_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
+
         const size = chunk.dimensions;
 
         var mesh = try std.ArrayList(Quad).initCapacity(allocator, size);
 
-        try self.emitXFaces(chunk, &mesh, allocator, world);
-        try self.emitYFaces(chunk, &mesh, allocator, world);
-        try self.emitZFaces(chunk, &mesh, allocator, world);
+        buildXPlanes(chunk, world, &pos_x_planes, &neg_x_planes);
+        buildYPlanes(chunk, world, &pos_y_planes, &neg_y_planes);
+        buildZPlanes(chunk, world, &pos_z_planes, &neg_z_planes);
+
+        for (0..size) |x| {
+            try self.greedyMergePosXPlane(
+                &mesh,
+                allocator,
+                chunk.voxels,
+                size,
+                x,
+                pos_x_planes[x],
+            );
+        }
 
         chunk.mesh.clearAndFree(allocator);
         chunk.mesh = mesh;
+    }
+
+    //// GREEDY MESHER /////////////////////////////////////////////////////////////
+
+    /// Returns a bitmask with exactly width consecutive 1s starting at bit start.
+    fn rectMask(start: usize, width: usize) u32 {
+        if (width >= 32) return std.math.maxInt(u32);
+        // Example with start = 3, width = 4
+        // STEP 1 | 0b00000001
+        // STEP 2 | 0b00010000
+        // STEP 3 | 0b00001111
+        // STEP 4 | 0b01111000
+        return ((@as(u32, 1) << @intCast(width)) - 1) << @intCast(start);
+    }
+
+    /// Counts how many consecutive 1 bits appear in mask, starting at bit start
+    fn runWidthFromSlow(mask: u32, start: usize, size: usize) usize {
+        var width: usize = 0;
+        var i = start;
+        while (i < size) : (i += 1) {
+            const bit = (@as(u32, 1) << @intCast(i));
+            if ((mask & bit) == 0) break;
+            width += 1;
+        }
+
+        return width;
+    }
+
+    fn greedyMergePosXPlane(
+        self: *const Mesher,
+        mesh: *std.ArrayList(Quad),
+        allocator: std.mem.Allocator,
+        voxels: []const BlockId,
+        size: usize,
+        x: usize,
+        plane_in: [32]u32,
+    ) !void {
+        var plane = plane_in;
+
+        var y0: usize = 0;
+        while (y0 < size) : (y0 += 1) {
+            while (plane[y0] != 0) {
+                const z0: usize = @intCast(@ctz(plane[y0]));
+                const id0 = voxels[voxelIndex(size, x, y0, z0)];
+
+                var width = runWidthFromSlow(plane[y0], z0, size);
+
+                var z = z0;
+                while (z < z0 + width) : (z += 1) {
+                    const id = voxels[voxelIndex(size, x, y0, z)];
+                    if (id != id0) {
+                        width = z - z0;
+                        break;
+                    }
+                }
+
+                const mask = rectMask(z0, width);
+
+                var height: usize = 1;
+                while (y0 + height < size) {
+                    if ((plane[y0 + height] & mask) != mask) break;
+
+                    var ok = true;
+                    z = z0;
+                    while (z < z0 + width) : (z += 1) {
+                        const id = voxels[voxelIndex(size, x, y0 + height, z)];
+                        if (id != id0) {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if (!ok) break;
+
+                    height += 1;
+                }
+
+                try self.appendQuad(
+                    mesh,
+                    allocator,
+                    voxels,
+                    size,
+                    Face.right,
+                    x,
+                    y0,
+                    z0,
+                );
+
+                //     self,
+                //     mesh,
+                //     allocator,
+                //     Face.right,
+                //     x,
+                //     y0,
+                //     z0,
+                //     width, // along z
+                //     height, // along y
+                //     id0,
+                // );
+
+                var yy = y0;
+                while (yy < y0 + height) : (yy += 1) {
+                    plane[yy] &= ~mask;
+                }
+            }
+        }
     }
 };
