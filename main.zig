@@ -18,7 +18,7 @@ const chunk_mesher = @import("world/chunk-mesher.zig");
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 200.0,
+        .view_distance = 300.0,
         .from = .{ 0, 40, -20 },
         .to = .{ 0, 40, -21 },
         .speed = 115.0,
@@ -51,7 +51,7 @@ const engine_config = EngineConfig{
         .gain = 0.5,
         .lacunarity = 2.0,
         .octaves = 5,
-        .scale = 0.01,
+        .scale = 0.005,
 
         .mountain_seed = 54321,
         .mountain_gain = 0.5,
@@ -75,8 +75,6 @@ pub fn main() !void {
         allocator, // Allocator
         engine_config,
     );
-
-    var mesher = chunk_mesher.Mesher.init(&engine.atlas);
 
     @setFloatMode(.optimized);
 
@@ -147,7 +145,7 @@ pub fn main() !void {
 
         total_frame_ns += frame_timer.read();
 
-        try engine.world.meshChunks(&mesher, allocator);
+        try engine.world.meshChunks(allocator);
     }
 
     main_prof.printReport(total_frame_ns);

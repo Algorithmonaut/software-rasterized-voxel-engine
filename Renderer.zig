@@ -135,18 +135,18 @@ pub const Renderer = struct {
         // orientation (CCW -> CW), so the order of the vertices in edge functions
         // in TriangleRasterizer needs to be flipped
         const a = @Vector(2, Int){
-            @intFromFloat((v0[0] + 1.0) * 0.5 * fw + 0.5),
-            @intFromFloat((1 - (v0[1] + 1.0) * 0.5) * fh + 0.5),
+            @intFromFloat((v0[0] + 1.0) * 0.5 * fw),
+            @intFromFloat((1 - (v0[1] + 1.0) * 0.5) * fh),
         };
 
         const b = @Vector(2, Int){
-            @intFromFloat((v1[0] + 1.0) * 0.5 * fw + 0.5),
-            @intFromFloat((1 - (v1[1] + 1.0) * 0.5) * fh + 0.5),
+            @intFromFloat((v1[0] + 1.0) * 0.5 * fw),
+            @intFromFloat((1 - (v1[1] + 1.0) * 0.5) * fh),
         };
 
         const c = @Vector(2, Int){
-            @intFromFloat((v2[0] + 1.0) * 0.5 * fw + 0.5),
-            @intFromFloat((1 - (v2[1] + 1.0) * 0.5) * fh + 0.5),
+            @intFromFloat((v2[0] + 1.0) * 0.5 * fw),
+            @intFromFloat((1 - (v2[1] + 1.0) * 0.5) * fh),
         };
 
         try self.triangles.append(allocator, .{
@@ -159,6 +159,10 @@ pub const Renderer = struct {
             .uv0 = tri.v0.uv,
             .uv1 = tri.v1.uv,
             .uv2 = tri.v2.uv,
+
+            .tex_u = tri.tex_u,
+            .tex_v = tri.tex_v,
+            .tex_tile_size = tri.tex_tile_size,
         });
     }
 
@@ -173,12 +177,20 @@ pub const Renderer = struct {
             .v0 = quad.v0,
             .v1 = quad.v1,
             .v2 = quad.v3,
+
+            .tex_u = quad.tex_u,
+            .tex_v = quad.tex_v,
+            .tex_tile_size = quad.tex_tile_size,
         };
 
         const tri_2 = WorldTriangle{
             .v0 = quad.v1,
             .v1 = quad.v2,
             .v2 = quad.v3,
+
+            .tex_u = quad.tex_u,
+            .tex_v = quad.tex_v,
+            .tex_tile_size = quad.tex_tile_size,
         };
 
         try self.genRasterTriangleFromWorldTriangle(allocator, tri_1, camera);
@@ -321,6 +333,10 @@ pub const Renderer = struct {
                     .v1 = worldVertexFromChunkVertex(quad.v1, chunk.chunk.coord, chunk.chunk.dimensions),
                     .v2 = worldVertexFromChunkVertex(quad.v2, chunk.chunk.coord, chunk.chunk.dimensions),
                     .v3 = worldVertexFromChunkVertex(quad.v3, chunk.chunk.coord, chunk.chunk.dimensions),
+
+                    .tex_tile_size = quad.atlas_tile_size,
+                    .tex_u = quad.u,
+                    .tex_v = quad.v,
                 };
 
                 try self.genRasterTriangleFromWorldQuad(allocator, camera, &world_quad);

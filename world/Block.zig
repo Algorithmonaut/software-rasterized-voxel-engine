@@ -20,6 +20,10 @@ pub const Quad = struct {
     v1: Vertex,
     v2: Vertex,
     v3: Vertex,
+
+    u: usize,
+    v: usize,
+    atlas_tile_size: usize,
 };
 
 pub const WorldQuad = struct {
@@ -27,12 +31,22 @@ pub const WorldQuad = struct {
     v1: WorldVertex,
     v2: WorldVertex,
     v3: WorldVertex,
+
+    // Used to warp the texture of greedy merged quads
+    tex_u: usize,
+    tex_v: usize,
+    tex_tile_size: usize,
 };
 
 pub const WorldTriangle = struct {
     v0: WorldVertex,
     v1: WorldVertex,
     v2: WorldVertex,
+
+    // Used to warp the texture of greedy merged quads
+    tex_u: usize,
+    tex_v: usize,
+    tex_tile_size: usize,
 };
 
 pub const BlockId = enum(u8) {

@@ -4,7 +4,7 @@ const WorldConfig = @import("EngineConfig.zig").EngineConfig.WorldConfig;
 
 const ChunkCoord = @import("math/types.zig").ChunkCoord;
 
-const Mesher = @import("world/chunk-mesher.zig").Mesher;
+const chunk_mesher = @import("world/chunk-mesher.zig");
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
 pub const World = struct {
@@ -84,14 +84,14 @@ pub const World = struct {
         return false;
     }
 
-    pub fn meshChunks(self: *World, mesher: *Mesher, allocator: std.mem.Allocator) !void {
+    pub fn meshChunks(self: *World, allocator: std.mem.Allocator) !void {
         var it = self.chunks.iterator();
 
         while (it.next()) |entry| {
             const chunk = entry.value_ptr.*;
             if (!chunk.dirty) continue;
 
-            try mesher.generateMesh(chunk, self, allocator);
+            try chunk_mesher.generateMesh(chunk, self, allocator);
             chunk.dirty = false;
         }
     }

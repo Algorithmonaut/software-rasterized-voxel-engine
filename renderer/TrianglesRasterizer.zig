@@ -80,9 +80,6 @@ inline fn renderTriangleInTile(
     const ty0: i32 = @intCast(tile.pos[1]);
     const tile_size = tile.dimensions;
 
-    const max_u_f: Float = @floatFromInt(atlas.width - 1);
-    const max_v_f: Float = @floatFromInt(atlas.height - 1);
-
     // P: Edge values at tile origin, without fill-rule bias
     const w0_origin: i32 = e0.eval(tx0, ty0);
     const w1_origin: i32 = e1.eval(tx0, ty0);
@@ -146,12 +143,15 @@ inline fn renderTriangleInTile(
     const v_num_dx: Float = e0_a_f * vq0 + e1_a_f * vq1 + e2_a_f * vq2;
     const v_num_dy: Float = e0_b_f * vq0 + e1_b_f * vq1 + e2_b_f * vq2;
 
+    // Greedy meshing causes T-junctions cracks (float precision issue)
+    // const crack_epsilon: i32 = 5;
+
     // P: Stepping
     var y: usize = 0;
     while (y < tile_size) : (y += 1) {
         const row_base: usize = y * tile_size;
 
-        // Top-left rule bias
+        // Top-left rule and T-junction bias
         var w = w_row + Vec3i{ e0.bias, e1.bias, e2.bias };
 
         var den: Float = den_row;
@@ -168,6 +168,7 @@ inline fn renderTriangleInTile(
             }
 
             if ((w[0] | w[1] | w[2]) < 0) continue;
+            // if (w[0] < -crack_epsilon or w[1] < -crack_epsilon or w[2] < -crack_epsilon) continue;
 
             if (render_wireframe) {
                 const w_thick = w - @as(Vec3i, @splat(thickness));
@@ -182,11 +183,15 @@ inline fn renderTriangleInTile(
 
             const rcp_den: Float = 1.0 / den;
 
-            const u_f = std.math.clamp(u_num * rcp_den, 0.0, max_u_f);
-            const v_f = std.math.clamp(v_num * rcp_den, 0.0, max_v_f);
+            // const u_f = std.math.clamp(u_num * rcp_den, 0.0, max_u_f);
+            // const v_f = std.math.clamp(v_num * rcp_den, 0.0, max_v_f);
 
-            const u: usize = @intFromFloat(u_f);
-            const v: usize = @intFromFloat(v_f);
+            const size_f: Float = @floatFromInt(triangle.tex_tile_size);
+            const u_tile: usize = @intFromFloat(@rem(u_num * rcp_den, size_f));
+            const v_tile: usize = @intFromFloat(@rem(v_num * rcp_den, size_f));
+
+            const u: usize = triangle.tex_u + u_tile;
+            const v: usize = triangle.tex_v + v_tile;
 
             const tex_idx: usize = u + v * atlas.width;
             tile.buf[idx] = atlas.atlas[tex_idx];

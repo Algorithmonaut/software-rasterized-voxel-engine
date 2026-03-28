@@ -34,6 +34,11 @@ pub const RasterTriangle = struct {
     uv1: @Vector(2, usize) = undefined,
     uv2: @Vector(2, usize) = undefined,
 
+    // Used to warp the texture of greedy merged quads
+    tex_u: usize,
+    tex_v: usize,
+    tex_tile_size: usize,
+
     /// Max is exclusive
     pub inline fn boundingBox(self: RasterTriangle, fb_width: usize, fb_height: usize) struct {
         min_x: usize,
