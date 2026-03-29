@@ -8,12 +8,11 @@ const Block = @import("Block.zig");
 const Quad = Block.Quad;
 const BlockId = Block.BlockId;
 const Face = Block.Face;
+const UV = Block.UV;
 
 const types = @import("../math/types.zig");
 const Vec3i = types.Vec3i;
 const PosVec = @Vector(3, usize);
-
-const UV = @Vector(2, usize);
 
 const PlaneSet = [32][32]u32;
 
@@ -253,67 +252,65 @@ fn buildZPlanes(
 //// P: GREEDY MESHER //////////////////////////////////////////////////////////
 
 const QuadLocalUv = struct {
-    uv0: [2]usize,
-    uv1: [2]usize,
-    uv2: [2]usize,
-    uv3: [2]usize,
+    uv0: UV,
+    uv1: UV,
+    uv2: UV,
+    uv3: UV,
 };
 
 // TODO: UNDERSTAND THIS CODE, TIRED TONIGHT
 fn localUVsFor(comptime kind: PlaneKind, width: usize, height: usize) QuadLocalUv {
-    const x_faces_u = width * 16;
-    const x_faces_v = height * 16;
+    const u_extent: f32 = @floatFromInt(switch (kind) {
+        .pos_x, .neg_x => width * 16,
+        .pos_y, .neg_y, .pos_z, .neg_z => height * 16,
+    });
 
-    const yz_faces_u = height * 16;
-    const yz_faces_v = width * 16;
+    const v_extent: f32 = @floatFromInt(switch (kind) {
+        .pos_x, .neg_x => height * 16,
+        .pos_y, .neg_y, .pos_z, .neg_z => width * 16,
+    });
 
     return switch (kind) {
-        // U = +Z, V = -Y
         .pos_x => .{
-            .uv0 = .{ 0, x_faces_v },
+            .uv0 = .{ 0, v_extent },
             .uv1 = .{ 0, 0 },
-            .uv2 = .{ x_faces_u, 0 },
-            .uv3 = .{ x_faces_u, x_faces_v },
+            .uv2 = .{ u_extent, 0 },
+            .uv3 = .{ u_extent, v_extent },
         },
 
-        // U = -Z, V = -Y
         .neg_x => .{
-            .uv0 = .{ x_faces_u, x_faces_v },
-            .uv1 = .{ x_faces_u, 0 },
+            .uv0 = .{ u_extent, v_extent },
+            .uv1 = .{ u_extent, 0 },
             .uv2 = .{ 0, 0 },
-            .uv3 = .{ 0, x_faces_v },
+            .uv3 = .{ 0, v_extent },
         },
 
-        // U = +X, V = -Z
         .pos_y => .{
-            .uv0 = .{ 0, yz_faces_v },
+            .uv0 = .{ 0, v_extent },
             .uv1 = .{ 0, 0 },
-            .uv2 = .{ yz_faces_u, 0 },
-            .uv3 = .{ yz_faces_u, yz_faces_v },
+            .uv2 = .{ u_extent, 0 },
+            .uv3 = .{ u_extent, v_extent },
         },
 
-        // U = +X, V = +Z
         .neg_y => .{
             .uv0 = .{ 0, 0 },
-            .uv1 = .{ 0, yz_faces_v },
-            .uv2 = .{ yz_faces_u, yz_faces_v },
-            .uv3 = .{ yz_faces_u, 0 },
+            .uv1 = .{ 0, v_extent },
+            .uv2 = .{ u_extent, v_extent },
+            .uv3 = .{ u_extent, 0 },
         },
 
-        // U = -X, V = -Y
         .pos_z => .{
-            .uv0 = .{ yz_faces_u, yz_faces_v },
-            .uv1 = .{ yz_faces_u, 0 },
+            .uv0 = .{ u_extent, v_extent },
+            .uv1 = .{ u_extent, 0 },
             .uv2 = .{ 0, 0 },
-            .uv3 = .{ 0, yz_faces_v },
+            .uv3 = .{ 0, v_extent },
         },
 
-        // U = +X, V = -Y
         .neg_z => .{
-            .uv0 = .{ 0, yz_faces_v },
+            .uv0 = .{ 0, v_extent },
             .uv1 = .{ 0, 0 },
-            .uv2 = .{ yz_faces_u, 0 },
-            .uv3 = .{ yz_faces_u, yz_faces_v },
+            .uv2 = .{ u_extent, 0 },
+            .uv3 = .{ u_extent, v_extent },
         },
     };
 }

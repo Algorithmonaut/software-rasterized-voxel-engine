@@ -81,9 +81,13 @@ pub const Mat4f = struct {
     }
 };
 
-pub fn create_projection_matrix(fov: f32, far: f32, fb_width: usize, fb_height: usize) Mat4f {
-    const near = 1;
-
+pub fn create_projection_matrix(
+    fov: f32,
+    far: f32,
+    fb_width: usize,
+    fb_height: usize,
+    near: f32,
+) Mat4f {
     const w: Float = @floatFromInt(fb_width);
     const h: Float = @floatFromInt(fb_height);
     const aspect: Float = w / h;

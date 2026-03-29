@@ -21,9 +21,10 @@ const engine_config = EngineConfig{
         .view_distance = 300.0,
         .from = .{ 0, 40, -20 },
         .to = .{ 0, 40, -21 },
-        // .speed = 315.0,
+        // .speed = 1015.0,
         .speed = 15.0,
         .sensivity = 0.0025,
+        .near = 0.25,
     },
     .framebuffer_config = .{
         .width = 1920,

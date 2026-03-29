@@ -5,15 +5,17 @@ const Float = t.Float; // NOTE: Maybe change to f64
 const Vec3f = t.Vec3f;
 const Vec4f = t.Vec4f;
 
+pub const UV = @Vector(2, Float);
+
 /// The vertex position should be in chunk space
 pub const Vertex = struct {
     pos: @Vector(3, usize),
-    uv: [2]usize,
+    uv: UV,
 };
 
 pub const WorldVertex = struct {
     pos: Vec4f,
-    uv: [2]usize,
+    uv: UV,
 };
 
 pub const Quad = struct {

@@ -14,6 +14,8 @@ const ctx = @import("context.zig");
 const TriangleRasterizer = @import("renderer/TrianglesRasterizer.zig");
 const Edge = TriangleRasterizer.Edge;
 
+const UV = @Vector(2, Float);
+
 pub const RasterTriangle = struct {
     v0: @Vector(2, Int),
     v1: @Vector(2, Int),
@@ -30,9 +32,9 @@ pub const RasterTriangle = struct {
     q1: f32 = undefined,
     q2: f32 = undefined,
 
-    uv0: @Vector(2, usize) = undefined,
-    uv1: @Vector(2, usize) = undefined,
-    uv2: @Vector(2, usize) = undefined,
+    uv0: UV = undefined,
+    uv1: UV = undefined,
+    uv2: UV = undefined,
 
     // Used to warp the texture of greedy merged quads
     tex_u: usize,

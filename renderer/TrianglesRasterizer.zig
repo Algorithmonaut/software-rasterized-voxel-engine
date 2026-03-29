@@ -102,17 +102,17 @@ inline fn renderTriangleInTile(
     const thickness: i32 = @intFromFloat(base_thickness * avg_rec_depth);
 
     // P: Attribute values multiplied by reciprocal depth
-    const uv0f: Uvf = @floatFromInt(triangle.uv0);
-    const uv1f: Uvf = @floatFromInt(triangle.uv1);
-    const uv2f: Uvf = @floatFromInt(triangle.uv2);
+    const uv0: Uvf = triangle.uv0;
+    const uv1: Uvf = triangle.uv1;
+    const uv2: Uvf = triangle.uv2;
 
-    const uq0: Float = uv0f[0] * q0;
-    const uq1: Float = uv1f[0] * q1;
-    const uq2: Float = uv2f[0] * q2;
+    const uq0: Float = uv0[0] * q0;
+    const uq1: Float = uv1[0] * q1;
+    const uq2: Float = uv2[0] * q2;
 
-    const vq0: Float = uv0f[1] * q0;
-    const vq1: Float = uv1f[1] * q1;
-    const vq2: Float = uv2f[1] * q2;
+    const vq0: Float = uv0[1] * q0;
+    const vq1: Float = uv1[1] * q1;
+    const vq2: Float = uv2[1] * q2;
 
     // P: Evaluate depth/uv interpolants once at tile origin
     // This is a 'base' for incremental stepping
@@ -187,8 +187,19 @@ inline fn renderTriangleInTile(
             // const v_f = std.math.clamp(v_num * rcp_den, 0.0, max_v_f);
 
             const size_f: Float = @floatFromInt(triangle.tex_tile_size);
-            const u_tile: usize = @intFromFloat(@rem(u_num * rcp_den, size_f));
-            const v_tile: usize = @intFromFloat(@rem(v_num * rcp_den, size_f));
+            const u_wrap = @mod(u_num * rcp_den, size_f);
+            const v_wrap = @mod(v_num * rcp_den, size_f);
+
+            const u_tile = std.math.clamp(
+                @as(usize, @intFromFloat(u_wrap)),
+                0,
+                triangle.tex_tile_size - 1,
+            );
+            const v_tile = std.math.clamp(
+                @as(usize, @intFromFloat(v_wrap)),
+                0,
+                triangle.tex_tile_size - 1,
+            );
 
             const u: usize = triangle.tex_u + u_tile;
             const v: usize = triangle.tex_v + v_tile;

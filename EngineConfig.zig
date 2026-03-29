@@ -6,6 +6,7 @@ pub const EngineConfig = struct {
         from: WorldCoord,
         to: WorldCoord,
         view_distance: f32,
+        near: f32,
         speed: f32,
         sensivity: f32,
     };

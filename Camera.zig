@@ -8,6 +8,7 @@ pub const Camera = struct {
     from: Vec3f,
     to: Vec3f,
     view_distance: f32,
+    near: f32,
     fov: f32,
     speed: f32,
     sensivity: f32,
@@ -33,6 +34,7 @@ pub const Camera = struct {
             .from = conf.from,
             .to = conf.to,
             .view_distance = conf.view_distance,
+            .near = conf.near,
             .fov = conf.fov,
             .speed = conf.speed,
             .sensivity = conf.sensivity,
@@ -41,6 +43,7 @@ pub const Camera = struct {
                 conf.view_distance,
                 fb_width,
                 fb_height,
+                conf.near,
             ),
 
             .yaw = 0.0,

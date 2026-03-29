@@ -165,18 +165,11 @@ pub const Renderer = struct {
         const fa = a.pos[2] + a.pos[3];
         const fb = b.pos[2] + b.pos[3];
         const t = -fa / (fb - fa);
-
-        const au: f32 = @floatFromInt(a.uv[0]);
-        const av: f32 = @floatFromInt(a.uv[1]);
-        const bu: f32 = @floatFromInt(b.uv[0]);
-        const bv: f32 = @floatFromInt(b.uv[1]);
-
-        const u: usize = @intFromFloat(au + t * (bu - au));
-        const v: usize = @intFromFloat(av + t * (bv - av));
+        const t_uv_vec: @Vector(2, Float) = @splat(t);
 
         return .{
             .pos = a.pos + @as(Vec4f, @splat(t)) * (b.pos - a.pos),
-            .uv = .{ u, v },
+            .uv = a.uv + t_uv_vec * (b.uv - a.uv),
         };
     }
 
@@ -293,7 +286,7 @@ pub const Renderer = struct {
             combined_mat.r[3] - combined_mat.r[0], // right
             combined_mat.r[3] + combined_mat.r[1], // bottom
             combined_mat.r[3] - combined_mat.r[1], // top
-            combined_mat.r[2], // near
+            combined_mat.r[3] + combined_mat.r[2], // near
         };
 
         const world_max: Vec3f = @floatFromInt(chunk.world_max);
