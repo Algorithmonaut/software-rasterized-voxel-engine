@@ -52,13 +52,20 @@
   Implemented greedy meshing.
   Vertex UVs are now ATLAS TILE LOCAL COORDINATES, not ATLAS COORDINATES
 
+* 29/03/2026
+  Now, instead of projecting the world triangles, I directly project the quads
+  (6 -> 4 vertex to manipulate). Note that consequently, my clipping is less correct.
 
-  TODO: Store chunk mesh vertices in world space, not chunk-local space.
-  TODO: Transform each quad's 4 vertices once, not each triangle's 3 vertices.
+  Implemented Sutherland Hodgman polygon clipping algorithm.
+
+
+  TODO: UVs should be float for as long as possible.
+  TODO: Make the near plane nearer.
   TODO: Understand FULLY the greedy meshing and simplify the code.
   TODO: Proper triangle clipping (this is very necessary now that I use quads).
   TODO: Proper wireframe mode (constant thickness).
   TODO: Establish a list of conventions related to computer graphics.
+  TODO: Store chunk mesh vertices in world space, not chunk-local space.
   TODO: Evaluate edges at pixel center (subpixel fixed-point convention, 
   2*x + 1 is the minimal 1 bit version of that).
   TODO: Conventionalize coordinate system.
