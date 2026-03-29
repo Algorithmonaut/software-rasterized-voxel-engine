@@ -17,6 +17,12 @@ const Vec3i = @import("../math/types.zig").Vec3i;
 const Vec3f = @import("../math/types.zig").Vec3f;
 const AtomicUsize = std.atomic.Value(usize);
 
+const types = @import("../math/types.zig");
+const Vec2fx = types.Vec2fx;
+const SUBPIXEL_BITS = types.SUBPIXEL_BITS;
+const SUBPIXEL_SCALE = types.SUBPIXEL_SCALE;
+const HALF_SUBPIXEL = types.HALF_SUBPIXEL;
+
 const Uvf = @Vector(2, Float);
 const Vec2i = @Vector(2, i32);
 
@@ -28,6 +34,8 @@ const step_y_size = 1;
 const I8 = @Vector(8, i32);
 const F8 = @Vector(8, f32);
 
+// FIX: TEMPORARY FIX use i64 for triangles that intersect the near plane
+// to be rendered properly, later change to i32 but consider origin at raster center
 pub const Edge = struct {
     // Edge function can be refactored: E(x,y) = Ax + By + C with A B C constants
     A: i32,
@@ -76,18 +84,22 @@ inline fn renderTriangleInTile(
 
     const inv_area = triangle.inv_area;
 
-    const tx0: i32 = @intCast(tile.pos[0]);
-    const ty0: i32 = @intCast(tile.pos[1]);
+    // const tx0: i32 = @intCast(tile.pos[0]);
+    // const ty0: i32 = @intCast(tile.pos[1]);
+    const tx0_fx: i32 = (@as(i32, @intCast(tile.pos[0])) << SUBPIXEL_BITS) + HALF_SUBPIXEL;
+    const ty0_fx: i32 = (@as(i32, @intCast(tile.pos[1])) << SUBPIXEL_BITS) + HALF_SUBPIXEL;
+
     const tile_size = tile.dimensions;
 
     // P: Edge values at tile origin, without fill-rule bias
-    const w0_origin: i32 = e0.eval(tx0, ty0);
-    const w1_origin: i32 = e1.eval(tx0, ty0);
-    const w2_origin: i32 = e2.eval(tx0, ty0);
+    const w0_origin: i32 = e0.eval(tx0_fx, ty0_fx);
+    const w1_origin: i32 = e1.eval(tx0_fx, ty0_fx);
+    const w2_origin: i32 = e2.eval(tx0_fx, ty0_fx);
 
     // P: Integer edge stepping FOR coverage
-    const right_inc = Vec3i{ e0.A, e1.A, e2.A };
-    const down_inc = Vec3i{ e0.B, e1.B, e2.B };
+    const px_step: i32 = 1 << SUBPIXEL_BITS; // 16
+    const right_inc = Vec3i{ e0.A * px_step, e1.A * px_step, e2.A * px_step };
+    const down_inc = Vec3i{ e0.B * px_step, e1.B * px_step, e2.B * px_step };
 
     var w_row = Vec3i{ w0_origin, w1_origin, w2_origin };
 
@@ -98,7 +110,7 @@ inline fn renderTriangleInTile(
 
     // P: Wireframe thickness
     const avg_rec_depth: Float = (q0 + q1 + q2) / 3.0;
-    const base_thickness: Float = 700.0;
+    const base_thickness: Float = @floatFromInt(10000 << SUBPIXEL_BITS);
     const thickness: i32 = @intFromFloat(base_thickness * avg_rec_depth);
 
     // P: Attribute values multiplied by reciprocal depth
@@ -134,14 +146,16 @@ inline fn renderTriangleInTile(
     const e1_b_f: Float = @floatFromInt(e1.B);
     const e2_b_f: Float = @floatFromInt(e2.B);
 
-    const den_dx: Float = e0_a_f * q0 + e1_a_f * q1 + e2_a_f * q2;
-    const den_dy: Float = e0_b_f * q0 + e1_b_f * q1 + e2_b_f * q2;
+    const px_step_f: Float = @floatFromInt(1 << SUBPIXEL_BITS);
 
-    const u_num_dx: Float = e0_a_f * uq0 + e1_a_f * uq1 + e2_a_f * uq2;
-    const u_num_dy: Float = e0_b_f * uq0 + e1_b_f * uq1 + e2_b_f * uq2;
+    const den_dx: Float = (e0_a_f * q0 + e1_a_f * q1 + e2_a_f * q2) * px_step_f;
+    const den_dy: Float = (e0_b_f * q0 + e1_b_f * q1 + e2_b_f * q2) * px_step_f;
 
-    const v_num_dx: Float = e0_a_f * vq0 + e1_a_f * vq1 + e2_a_f * vq2;
-    const v_num_dy: Float = e0_b_f * vq0 + e1_b_f * vq1 + e2_b_f * vq2;
+    const u_num_dx: Float = (e0_a_f * uq0 + e1_a_f * uq1 + e2_a_f * uq2) * px_step_f;
+    const u_num_dy: Float = (e0_b_f * uq0 + e1_b_f * uq1 + e2_b_f * uq2) * px_step_f;
+
+    const v_num_dx: Float = (e0_a_f * vq0 + e1_a_f * vq1 + e2_a_f * vq2) * px_step_f;
+    const v_num_dy: Float = (e0_b_f * vq0 + e1_b_f * vq1 + e2_b_f * vq2) * px_step_f;
 
     // Greedy meshing causes T-junctions cracks (float precision issue)
     // const crack_epsilon: i32 = 5;
@@ -262,17 +276,16 @@ inline fn triangleMayOverlapTile(tri: *const RasterTriangle, tile: *const Tile) 
     const e1 = tri.e1;
     const e2 = tri.e2;
 
-    const max_off: i32 = @intCast(tile.dimensions - 1);
+    const x0: i32 = @intCast(tile.pos[0] << SUBPIXEL_BITS);
+    const y0: i32 = @intCast(tile.pos[1] << SUBPIXEL_BITS);
+    const x1: i32 = @intCast((tile.pos[0] + tile.dimensions) << SUBPIXEL_BITS);
+    const y1: i32 = @intCast((tile.pos[1] + tile.dimensions) << SUBPIXEL_BITS);
 
-    const tl: Vec2i = .{
-        @as(i32, @intCast(tile.pos[0])),
-        @as(i32, @intCast(tile.pos[1])),
-    };
-    const tr = tl + Vec2i{ max_off, 0 };
-    const bl = tl + Vec2i{ 0, max_off };
-    const br = tl + Vec2i{ max_off, max_off };
+    const tl = Vec2i{ x0, y0 };
+    const tr = Vec2i{ x1, y0 };
+    const bl = Vec2i{ x0, y1 };
+    const br = Vec2i{ x1, y1 };
 
-    // TODO: Compute edge only once and use incremental stepping
     const e0_outside =
         e0.eval(tl[0], tl[1]) < 0 and
         e0.eval(tr[0], tr[1]) < 0 and

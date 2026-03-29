@@ -7,6 +7,11 @@ const ChunkCoord = @import("math/types.zig").ChunkCoord;
 const chunk_mesher = @import("world/chunk-mesher.zig");
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
+const t = @import("math/types.zig");
+const WorldCoord = t.WorldCoord;
+
+const Renderer = @import("Renderer.zig").Renderer;
+
 pub const World = struct {
     allocator: std.mem.Allocator,
     chunks: std.AutoHashMap(u64, *Chunk),
@@ -94,5 +99,59 @@ pub const World = struct {
             try chunk_mesher.generateMesh(chunk, self, allocator);
             chunk.dirty = false;
         }
+    }
+
+    pub fn meshChunksBudgeted(
+        self: *World,
+        allocator: std.mem.Allocator,
+        budget: usize,
+    ) !void {
+        var done: usize = 0;
+        var it = self.chunks.iterator();
+
+        while (it.next()) |entry| {
+            const chunk = entry.value_ptr.*;
+            if (!chunk.dirty) continue;
+
+            try chunk_mesher.generateMesh(chunk, self, allocator);
+            chunk.dirty = false;
+
+            done += 1;
+            if (done >= budget) break;
+        }
+    }
+
+    pub fn bootstrapInitialChunks(
+        self: *World,
+        allocator: std.mem.Allocator,
+        player_pos: WorldCoord,
+        view_distance: f32,
+        terrain_generator: TerrainGenerator,
+    ) !void {
+        const chunk_size_i: i32 = @intCast(self.chunk_size);
+        const player_chunk = Renderer.worldToChunkCoord(player_pos, chunk_size_i);
+
+        const chunk_view_radius: i32 = @intFromFloat(@ceil(
+            view_distance / @as(f32, @floatFromInt(self.chunk_size)),
+        ));
+
+        var cz = player_chunk[2] - chunk_view_radius;
+        while (cz <= player_chunk[2] + chunk_view_radius) : (cz += 1) {
+            var cy = player_chunk[1] - chunk_view_radius;
+            while (cy <= player_chunk[1] + chunk_view_radius) : (cy += 1) {
+                var cx = player_chunk[0] - chunk_view_radius;
+                while (cx <= player_chunk[0] + chunk_view_radius) : (cx += 1) {
+                    const dx: i64 = @intCast(cx - player_chunk[0]);
+                    const dy: i64 = @intCast(cy - player_chunk[1]);
+                    const dz: i64 = @intCast(cz - player_chunk[2]);
+
+                    if (dx * dx + dy * dy + dz * dz > chunk_view_radius * chunk_view_radius) continue;
+
+                    _ = try self.ensureChunk(.{ cx, cy, cz }, terrain_generator);
+                }
+            }
+        }
+
+        try self.meshChunks(allocator);
     }
 };

@@ -25,6 +25,10 @@ const Int = types.Int;
 const WorldCoord = types.WorldCoord;
 const ChunkCoord = types.ChunkCoord;
 
+const Vec2fx = types.Vec2fx;
+const SUBPIXEL_BITS = types.SUBPIXEL_BITS;
+const SUBPIXEL_SCALE = types.SUBPIXEL_SCALE;
+
 pub const Renderer = struct {
     triangles: std.ArrayList(RasterTriangle),
     chunk_entries: std.ArrayList(ChunkRenderEntry),
@@ -81,7 +85,6 @@ pub const Renderer = struct {
         if (v[0] > v[3]) code |= 1 << 1; // right
         if (v[1] < -v[3]) code |= 1 << 2; // bottom
         if (v[1] > v[3]) code |= 1 << 3; // top
-        // if (v[2] < 0) code |= 1 << 4; // near
         return code;
     }
 
@@ -94,7 +97,25 @@ pub const Renderer = struct {
     }
 
     inline fn nearInside(pos: Vec4f) bool {
-        return (pos[2] >= -pos[3]);
+        return (pos[2] >= 0);
+    }
+
+    fn ndcToScreenFixedPoint(
+        x_ndc: f32,
+        y_ndc: f32,
+        fb_width: usize,
+        fb_height: usize,
+    ) Vec2fx {
+        const fw: f32 = @floatFromInt(fb_width);
+        const fh: f32 = @floatFromInt(fb_height);
+
+        const sx = (x_ndc + 1.0) * 0.5 * fw;
+        const sy = (1.0 - (y_ndc + 1.0) * 0.5) * fh;
+
+        return .{
+            @intFromFloat(@floor(sx * SUBPIXEL_SCALE)),
+            @intFromFloat(@floor(sy * SUBPIXEL_SCALE)),
+        };
     }
 
     inline fn emitRasterTriangle(
@@ -124,25 +145,10 @@ pub const Renderer = struct {
         if (signed_area < 0) return;
 
         // Clip -> raster
-        const fw: Float = @floatFromInt(self.fb_width);
-        const fh: Float = @floatFromInt(self.fb_height);
-
-        // The clip -> raster conversion of Y flips the triangle's
-        // orientation (CCW -> CW)
-        const a = @Vector(2, Int){
-            @intFromFloat((p0[0] + 1.0) * 0.5 * fw),
-            @intFromFloat((1.0 - (p0[1] + 1.0) * 0.5) * fh),
-        };
-
-        const b = @Vector(2, Int){
-            @intFromFloat((p1[0] + 1.0) * 0.5 * fw),
-            @intFromFloat((1.0 - (p1[1] + 1.0) * 0.5) * fh),
-        };
-
-        const c = @Vector(2, Int){
-            @intFromFloat((p2[0] + 1.0) * 0.5 * fw),
-            @intFromFloat((1.0 - (p2[1] + 1.0) * 0.5) * fh),
-        };
+        // Conversion of Y flips the triangle's orientation (CCW -> CW)
+        const a = ndcToScreenFixedPoint(p0[0], p0[1], self.fb_width, self.fb_height);
+        const b = ndcToScreenFixedPoint(p1[0], p1[1], self.fb_width, self.fb_height);
+        const c = ndcToScreenFixedPoint(p2[0], p2[1], self.fb_width, self.fb_height);
 
         try self.triangles.append(allocator, .{
             .v0 = a,
@@ -162,8 +168,8 @@ pub const Renderer = struct {
     }
 
     inline fn intersectNear(a: WorldVertex, b: WorldVertex) WorldVertex {
-        const fa = a.pos[2] + a.pos[3];
-        const fb = b.pos[2] + b.pos[3];
+        const fa = a.pos[2];
+        const fb = b.pos[2];
         const t = -fa / (fb - fa);
         const t_uv_vec: @Vector(2, Float) = @splat(t);
 
@@ -307,7 +313,7 @@ pub const Renderer = struct {
         return true;
     }
 
-    fn worldToChunkCoord(coord: WorldCoord, chunk_size: i32) ChunkCoord {
+    pub fn worldToChunkCoord(coord: WorldCoord, chunk_size: i32) ChunkCoord {
         const x_i = @as(i32, @intFromFloat(@floor(coord[0])));
         const y_i = @as(i32, @intFromFloat(@floor(coord[1])));
         const z_i = @as(i32, @intFromFloat(@floor(coord[2])));
