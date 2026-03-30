@@ -26,7 +26,7 @@ pub const RasterTriangle = struct {
     e1: Edge = undefined,
     e2: Edge = undefined,
 
-    area: i32 = undefined,
+    area: i64 = undefined,
     inv_area: Float = undefined,
 
     q0: f32 = undefined,

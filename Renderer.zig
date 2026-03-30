@@ -85,6 +85,7 @@ pub const Renderer = struct {
         if (v[0] > v[3]) code |= 1 << 1; // right
         if (v[1] < -v[3]) code |= 1 << 2; // bottom
         if (v[1] > v[3]) code |= 1 << 3; // top
+        if (v[2] < 0) code |= 1 << 4;
         return code;
     }
 
@@ -185,61 +186,86 @@ pub const Renderer = struct {
         tri: ClipTriangle,
         quad: WorldQuad,
     ) !void {
-        const m = nearMask(tri);
+        const c0 = clipOutcode(tri.v0.pos);
+        const c1 = clipOutcode(tri.v1.pos);
+        const c2 = clipOutcode(tri.v2.pos);
 
-        switch (m) {
-            0b000 => return,
+        const or_code = c0 | c1 | c2;
+        const and_code = c0 & c1 & c2;
 
-            0b111 => {
-                try self.emitRasterTriangle(allocator, tri.v0, tri.v1, tri.v2, quad);
-            },
+        if (and_code != 0) return; // trivially outside
+        if (or_code != 0) return; // TEMP: drop partially clipped tris
 
-            // only v0 inside
-            0b001 => {
-                const isect01 = intersectNear(tri.v0, tri.v1);
-                const isect02 = intersectNear(tri.v0, tri.v2);
-                try self.emitRasterTriangle(allocator, tri.v0, isect01, isect02, quad);
-            },
-
-            // only v1 inside
-            0b010 => {
-                const isect10 = intersectNear(tri.v1, tri.v0);
-                const isect12 = intersectNear(tri.v1, tri.v2);
-                try self.emitRasterTriangle(allocator, tri.v1, isect12, isect10, quad);
-            },
-
-            // only v2 inside
-            0b100 => {
-                const isect20 = intersectNear(tri.v2, tri.v0);
-                const isect21 = intersectNear(tri.v2, tri.v1);
-                try self.emitRasterTriangle(allocator, tri.v2, isect20, isect21, quad);
-            },
-
-            // v0, v1 inside; v2 outside
-            0b011 => {
-                const isect12 = intersectNear(tri.v1, tri.v2);
-                const isect02 = intersectNear(tri.v0, tri.v2);
-                try self.emitRasterTriangle(allocator, tri.v0, tri.v1, isect12, quad);
-                try self.emitRasterTriangle(allocator, tri.v0, isect12, isect02, quad);
-            },
-
-            // v0, v2 inside; v1 outside
-            0b101 => {
-                const isect01 = intersectNear(tri.v0, tri.v1);
-                const isect21 = intersectNear(tri.v2, tri.v1);
-                try self.emitRasterTriangle(allocator, tri.v0, isect01, tri.v2, quad);
-                try self.emitRasterTriangle(allocator, isect01, isect21, tri.v2, quad);
-            },
-
-            // v1, v2 inside; v0 outside
-            0b110 => {
-                const isect10 = intersectNear(tri.v1, tri.v0);
-                const isect20 = intersectNear(tri.v2, tri.v0);
-                try self.emitRasterTriangle(allocator, tri.v1, tri.v2, isect20, quad);
-                try self.emitRasterTriangle(allocator, tri.v1, isect20, isect10, quad);
-            },
-        }
+        try self.emitRasterTriangle(allocator, tri.v0, tri.v1, tri.v2, quad);
     }
+
+    // inline fn emitClippedTriangle(
+    //     self: *Renderer,
+    //     allocator: std.mem.Allocator,
+    //     tri: ClipTriangle,
+    //     quad: WorldQuad,
+    // ) !void {
+    //     const m = nearMask(tri);
+    //
+    //     switch (m) {
+    //         // 0b000 => return,
+    //
+    //         0b111 => {
+    //             try self.emitRasterTriangle(allocator, tri.v0, tri.v1, tri.v2, quad);
+    //         },
+    //
+    //         else => return,
+    //
+    //         // 0b111 => {
+    //         //     try self.emitRasterTriangle(allocator, tri.v0, tri.v1, tri.v2, quad);
+    //         // },
+    //
+    //         // only v0 inside
+    //         // 0b001 => {
+    //         //     const isect01 = intersectNear(tri.v0, tri.v1);
+    //         //     const isect02 = intersectNear(tri.v0, tri.v2);
+    //         //     try self.emitRasterTriangle(allocator, tri.v0, isect01, isect02, quad);
+    //         // },
+    //         //
+    //         // // only v1 inside
+    //         // 0b010 => {
+    //         //     const isect10 = intersectNear(tri.v1, tri.v0);
+    //         //     const isect12 = intersectNear(tri.v1, tri.v2);
+    //         //     try self.emitRasterTriangle(allocator, tri.v1, isect12, isect10, quad);
+    //         // },
+    //         //
+    //         // // only v2 inside
+    //         // 0b100 => {
+    //         //     const isect20 = intersectNear(tri.v2, tri.v0);
+    //         //     const isect21 = intersectNear(tri.v2, tri.v1);
+    //         //     try self.emitRasterTriangle(allocator, tri.v2, isect20, isect21, quad);
+    //         // },
+    //         //
+    //         // // v0, v1 inside; v2 outside
+    //         // 0b011 => {
+    //         //     const isect12 = intersectNear(tri.v1, tri.v2);
+    //         //     const isect02 = intersectNear(tri.v0, tri.v2);
+    //         //     try self.emitRasterTriangle(allocator, tri.v0, tri.v1, isect12, quad);
+    //         //     try self.emitRasterTriangle(allocator, tri.v0, isect12, isect02, quad);
+    //         // },
+    //         //
+    //         // // v0, v2 inside; v1 outside
+    //         // 0b101 => {
+    //         //     const isect01 = intersectNear(tri.v0, tri.v1);
+    //         //     const isect21 = intersectNear(tri.v2, tri.v1);
+    //         //     try self.emitRasterTriangle(allocator, tri.v0, isect01, tri.v2, quad);
+    //         //     try self.emitRasterTriangle(allocator, isect01, isect21, tri.v2, quad);
+    //         // },
+    //         //
+    //         // // v1, v2 inside; v0 outside
+    //         // 0b110 => {
+    //         //     const isect10 = intersectNear(tri.v1, tri.v0);
+    //         //     const isect20 = intersectNear(tri.v2, tri.v0);
+    //         //     try self.emitRasterTriangle(allocator, tri.v1, tri.v2, isect20, quad);
+    //         //     try self.emitRasterTriangle(allocator, tri.v1, isect20, isect10, quad);
+    //         // },
+    //     }
+    // }
 
     inline fn genRasterTriangleFromWorldQuad(
         self: *Renderer,
@@ -292,7 +318,7 @@ pub const Renderer = struct {
             combined_mat.r[3] - combined_mat.r[0], // right
             combined_mat.r[3] + combined_mat.r[1], // bottom
             combined_mat.r[3] - combined_mat.r[1], // top
-            combined_mat.r[3] + combined_mat.r[2], // near
+            combined_mat.r[2], // near
         };
 
         const world_max: Vec3f = @floatFromInt(chunk.world_max);

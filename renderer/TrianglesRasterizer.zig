@@ -38,15 +38,15 @@ const F8 = @Vector(8, f32);
 // to be rendered properly, later change to i32 but consider origin at raster center
 pub const Edge = struct {
     // Edge function can be refactored: E(x,y) = Ax + By + C with A B C constants
-    A: i32,
-    B: i32,
-    C: i32, // WARN: Change to i64 if overflow
+    A: i64,
+    B: i64,
+    C: i64, // WARN: Change to i64 if overflow
 
     bias: i32,
 
     /// Evaluate the point (x, y) against the edge
-    inline fn eval(self: Edge, x: i32, y: i32) i32 {
-        return self.A * x + self.B * y + self.C;
+    inline fn eval(self: Edge, x: i32, y: i32) i64 {
+        return self.A * @as(i64, x) + self.B * @as(i64, y) + self.C;
     }
 };
 
@@ -92,16 +92,16 @@ inline fn renderTriangleInTile(
     const tile_size = tile.dimensions;
 
     // P: Edge values at tile origin, without fill-rule bias
-    const w0_origin: i32 = e0.eval(tx0_fx, ty0_fx);
-    const w1_origin: i32 = e1.eval(tx0_fx, ty0_fx);
-    const w2_origin: i32 = e2.eval(tx0_fx, ty0_fx);
+    const w0_origin: i64 = e0.eval(tx0_fx, ty0_fx);
+    const w1_origin: i64 = e1.eval(tx0_fx, ty0_fx);
+    const w2_origin: i64 = e2.eval(tx0_fx, ty0_fx);
 
     // P: Integer edge stepping FOR coverage
-    const px_step: i32 = 1 << SUBPIXEL_BITS; // 16
-    const right_inc = Vec3i{ e0.A * px_step, e1.A * px_step, e2.A * px_step };
-    const down_inc = Vec3i{ e0.B * px_step, e1.B * px_step, e2.B * px_step };
+    const px_step: i64 = 1 << SUBPIXEL_BITS; // 16
+    const right_inc = @Vector(3, i64){ e0.A * px_step, e1.A * px_step, e2.A * px_step };
+    const down_inc = @Vector(3, i64){ e0.B * px_step, e1.B * px_step, e2.B * px_step };
 
-    var w_row = Vec3i{ w0_origin, w1_origin, w2_origin };
+    var w_row = @Vector(3, i64){ w0_origin, w1_origin, w2_origin };
 
     // P: Reciprocal depth at vertices.
     const q0: Float = triangle.q0;
@@ -191,6 +191,8 @@ inline fn renderTriangleInTile(
 
             const inv_z: Float = den * inv_area;
             const idx: usize = row_base + x;
+
+            std.debug.assert(idx < tile.z_buf.len);
 
             if (inv_z <= tile.z_buf[idx]) continue;
             tile.z_buf[idx] = inv_z;

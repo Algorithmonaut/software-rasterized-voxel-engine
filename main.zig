@@ -24,7 +24,8 @@ const engine_config = EngineConfig{
         // .speed = 1015.0,
         .speed = 15.0,
         .sensivity = 0.0025,
-        .near = 0.25,
+        // .near = 0.25,
+        .near = 1,
     },
     .framebuffer_config = .{
         .width = 1920,
