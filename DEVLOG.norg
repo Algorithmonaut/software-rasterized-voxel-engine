@@ -59,6 +59,10 @@
   - UVs are now floats everywhere.
   - 28.4 subpixel precision in the rasterizer!
 
+* 31/03/2026
+  Implement 5 planes polygon clipping!! No more memory corruptions!
+  HEHE
+
 
   TODO: Make the mesher multithreaded.
   TODO: Make the near plane nearer.

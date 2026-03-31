@@ -154,7 +154,7 @@ pub const Renderer = struct {
             .len = 0,
         };
 
-        for (0..polygon.len - 1) |i| {
+        for (0..polygon.len) |i| {
             const v0 = polygon.verts[i];
             const v1 = polygon.verts[(i + 1) % polygon.len];
 
@@ -186,24 +186,24 @@ pub const Renderer = struct {
 
         var polygon = polygon_in;
 
-        // Backface culling (vertices are oriented CCW)
-        // Only need to check a single triangle
-        const v0 = polygon.verts[0].pos;
-        {
-            const v1 = polygon.verts[1].pos;
-            const v2 = polygon.verts[2].pos;
-            const signed_area =
-                (v1[0] - v0[0]) * (v2[1] - v0[1]) -
-                (v1[1] - v0[1]) * (v2[0] - v0[0]);
-            if (signed_area < 0) return;
-        }
-
         // Clip -> NDC
         var rec_ws: [9]f32 = undefined;
         for (0..polygon.len) |i| {
             const rec_w = 1.0 / polygon.verts[i].pos[3];
             rec_ws[i] = rec_w;
             polygon.verts[i].pos *= @as(Vec4f, @splat(rec_w));
+        }
+
+        // Backface culling (vertices are oriented CCW)
+        // Only need to check a single triangle
+        {
+            const v0 = polygon.verts[0].pos;
+            const v1 = polygon.verts[1].pos;
+            const v2 = polygon.verts[2].pos;
+            const signed_area =
+                (v1[0] - v0[0]) * (v2[1] - v0[1]) -
+                (v1[1] - v0[1]) * (v2[0] - v0[0]);
+            if (signed_area < 0) return;
         }
 
         // NDC -> raster
@@ -251,11 +251,6 @@ pub const Renderer = struct {
         // Only need to check a single triangle
         var v = [4]Vec4f{ quad.v0.pos, quad.v1.pos, quad.v2.pos, quad.v3.pos };
 
-        const signed_area =
-            (v[1][0] - v[0][0]) * (v[2][1] - v[0][1]) -
-            (v[1][1] - v[0][1]) * (v[2][0] - v[0][0]);
-        if (signed_area < 0) return;
-
         // Clip -> NDC
         var rec_ws: [4]f32 = undefined;
         for (0..v.len) |i| {
@@ -263,6 +258,12 @@ pub const Renderer = struct {
             rec_ws[i] = rec_w;
             v[i] *= @as(Vec4f, @splat(rec_w));
         }
+
+        // Backface culling
+        const signed_area =
+            (v[1][0] - v[0][0]) * (v[2][1] - v[0][1]) -
+            (v[1][1] - v[0][1]) * (v[2][0] - v[0][0]);
+        if (signed_area < 0) return;
 
         // NDC -> raster
         var raster_verts: [4]Vec2fx = undefined;
@@ -343,7 +344,7 @@ pub const Renderer = struct {
 
         if (and_code != 0) return; // quad trivially outside
         if (or_code == 0) { // quad trivially inside
-            try emitClippedQuad(self, allocator, quad);
+            try emitQuad(self, allocator, quad);
             return;
         }
         // if (or_code != 0) return; // TEMP: drop partially clipped tris
@@ -355,20 +356,30 @@ pub const Renderer = struct {
         clipped_polygon.verts[3] = quad.v3;
         clipped_polygon.len = 4;
 
-        if (or_code & @intFromEnum(Plane.LEFT) != 0)
+        if ((or_code & @intFromEnum(Plane.LEFT)) != 0) {
             clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.LEFT);
+            if (clipped_polygon.len < 3) return;
+        }
 
-        if (or_code & @intFromEnum(Plane.RIGHT) != 0)
+        if ((or_code & @intFromEnum(Plane.RIGHT)) != 0) {
             clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.RIGHT);
+            if (clipped_polygon.len < 3) return;
+        }
 
-        if (or_code & @intFromEnum(Plane.BOTTOM) != 0)
+        if ((or_code & @intFromEnum(Plane.BOTTOM)) != 0) {
             clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.BOTTOM);
+            if (clipped_polygon.len < 3) return;
+        }
 
-        if (or_code & @intFromEnum(Plane.TOP) != 0)
+        if ((or_code & @intFromEnum(Plane.TOP)) != 0) {
             clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.TOP);
+            if (clipped_polygon.len < 3) return;
+        }
 
-        if (or_code & @intFromEnum(Plane.NEAR) != 0)
+        if ((or_code & @intFromEnum(Plane.NEAR)) != 0) {
             clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.NEAR);
+            if (clipped_polygon.len < 3) return;
+        }
 
         try emitPolygonFan(self, allocator, clipped_polygon, quad);
     }
