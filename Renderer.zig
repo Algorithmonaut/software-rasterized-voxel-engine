@@ -78,7 +78,7 @@ pub const Renderer = struct {
     /// But to do that, at least one old vertex must be removed.
     /// We clip against 5 planes, and start with a quad: 4 + 5 = 9 vertices.
     const ClippedPolygon = struct {
-        verts: [9]WorldVertex = .{},
+        verts: [9]WorldVertex,
         len: usize = 0,
 
         inline fn add(self: *ClippedPolygon, vert: WorldVertex) void {
@@ -104,11 +104,11 @@ pub const Renderer = struct {
     }
 
     const Plane = enum(u8) {
-        LEFT,
-        RIGHT,
-        BOTTOM,
-        TOP,
-        NEAR,
+        LEFT = 1,
+        RIGHT = 2,
+        BOTTOM = 4,
+        TOP = 8,
+        NEAR = 16,
     };
 
     inline fn planeDistance(vert: WorldVertex, plane: Plane) f32 {
@@ -136,7 +136,7 @@ pub const Renderer = struct {
 
         return .{
             .pos = v0.pos + @as(Vec4f, @splat(t)) * (v1.pos - v0.pos),
-            .uv = v0.uv + @as(@Vector(2, f32), @splat(t)) * (v1.pos - v0.pos),
+            .uv = v0.uv + @as(@Vector(2, f32), @splat(t)) * (v1.uv - v0.uv),
         };
     }
 
@@ -144,9 +144,15 @@ pub const Renderer = struct {
         polygon: ClippedPolygon,
         plane: Plane,
     ) ClippedPolygon {
-        if (polygon.len == 0) return .{};
+        if (polygon.len == 0) return .{
+            .verts = undefined,
+            .len = 0,
+        };
 
-        var output_polygon = ClippedPolygon{};
+        var output_polygon = ClippedPolygon{
+            .verts = undefined,
+            .len = 0,
+        };
 
         for (0..polygon.len - 1) |i| {
             const v0 = polygon.verts[i];
@@ -173,17 +179,19 @@ pub const Renderer = struct {
     fn emitPolygonFan(
         self: *Renderer,
         allocator: std.mem.Allocator,
-        polygon: ClippedPolygon,
-        quad: *WorldQuad,
+        polygon_in: ClippedPolygon,
+        quad: WorldQuad,
     ) !void {
-        if (polygon.len < 3) return; // triangle is degenerate
+        if (polygon_in.len < 3) return; // triangle is degenerate
+
+        var polygon = polygon_in;
 
         // Backface culling (vertices are oriented CCW)
         // Only need to check a single triangle
-        const v0 = polygon.verts[0];
+        const v0 = polygon.verts[0].pos;
         {
-            const v1 = polygon.verts[1];
-            const v2 = polygon.verts[2];
+            const v1 = polygon.verts[1].pos;
+            const v2 = polygon.verts[2].pos;
             const signed_area =
                 (v1[0] - v0[0]) * (v2[1] - v0[1]) -
                 (v1[1] - v0[1]) * (v2[0] - v0[0]);
@@ -213,19 +221,16 @@ pub const Renderer = struct {
         // Using fan triangulation, emit the raster triangles
         var i: usize = 1;
         while (i + 1 < polygon.len) : (i += 1) {
-            const v1 = polygon.verts[i];
-            const v2 = polygon.verts[i + 1];
-
             try self.triangles.append(allocator, .{
-                .v0 = v0,
-                .v1 = v1,
-                .v2 = v2,
+                .v0 = raster_verts[0],
+                .v1 = raster_verts[i],
+                .v2 = raster_verts[i + 1],
                 .q0 = rec_ws[0],
                 .q1 = rec_ws[i],
                 .q2 = rec_ws[i + 1],
-                .uv0 = v0.uv,
-                .uv1 = v1.uv,
-                .uv2 = v2.uv,
+                .uv0 = polygon.verts[0].uv,
+                .uv1 = polygon.verts[i].uv,
+                .uv2 = polygon.verts[i + 1].uv,
 
                 .tex_u = quad.tex_u,
                 .tex_v = quad.tex_v,
@@ -337,9 +342,35 @@ pub const Renderer = struct {
         const and_code = c0 & c1 & c2 & c3;
 
         if (and_code != 0) return; // quad trivially outside
-        if (or_code != 0) return; // TEMP: drop partially clipped tris
+        if (or_code == 0) { // quad trivially inside
+            try emitClippedQuad(self, allocator, quad);
+            return;
+        }
+        // if (or_code != 0) return; // TEMP: drop partially clipped tris
 
-        try emitQuad(self, allocator, quad);
+        var clipped_polygon: ClippedPolygon = undefined;
+        clipped_polygon.verts[0] = quad.v0;
+        clipped_polygon.verts[1] = quad.v1;
+        clipped_polygon.verts[2] = quad.v2;
+        clipped_polygon.verts[3] = quad.v3;
+        clipped_polygon.len = 4;
+
+        if (or_code & @intFromEnum(Plane.LEFT) != 0)
+            clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.LEFT);
+
+        if (or_code & @intFromEnum(Plane.RIGHT) != 0)
+            clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.RIGHT);
+
+        if (or_code & @intFromEnum(Plane.BOTTOM) != 0)
+            clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.BOTTOM);
+
+        if (or_code & @intFromEnum(Plane.TOP) != 0)
+            clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.TOP);
+
+        if (or_code & @intFromEnum(Plane.NEAR) != 0)
+            clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.NEAR);
+
+        try emitPolygonFan(self, allocator, clipped_polygon, quad);
     }
 
     inline fn genRasterTriangleFromWorldQuad(
