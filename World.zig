@@ -135,6 +135,18 @@ pub const World = struct {
             view_distance / @as(f32, @floatFromInt(self.chunk_size)),
         ));
 
+        std.debug.assert(std.math.isFinite(player_pos[0]));
+        std.debug.assert(std.math.isFinite(player_pos[1]));
+        std.debug.assert(std.math.isFinite(player_pos[2]));
+
+        std.debug.assert(chunk_view_radius >= 0);
+        std.debug.assert(chunk_view_radius < 100000); // absurdity guard
+
+        std.debug.print(
+            "player_pos={any} player_chunk={any} radius={d}\n",
+            .{ player_pos, player_chunk, chunk_view_radius },
+        );
+
         var cz = player_chunk[2] - chunk_view_radius;
         while (cz <= player_chunk[2] + chunk_view_radius) : (cz += 1) {
             var cy = player_chunk[1] - chunk_view_radius;

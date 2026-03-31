@@ -73,32 +73,236 @@ pub const Renderer = struct {
 
     // QUAD RENDERING //////////////////////////////////////////////////////////
 
-    const ClipTriangle = struct {
-        v0: WorldVertex,
-        v1: WorldVertex,
-        v2: WorldVertex,
+    /// Sutherland Hodgman algorithm can intersect the convex polygon in at most
+    /// 2 places => at most 2 new vertices.
+    /// But to do that, at least one old vertex must be removed.
+    /// We clip against 5 planes, and start with a quad: 4 + 5 = 9 vertices.
+    const ClippedPolygon = struct {
+        verts: [9]WorldVertex = .{},
+        len: usize = 0,
+
+        inline fn add(self: *ClippedPolygon, vert: WorldVertex) void {
+            self.verts[self.len] = vert;
+            self.len += 1;
+        }
     };
 
-    inline fn clipOutcode(v: Vec4f) u8 {
+    // const ClipTriangle = struct {
+    //     v0: WorldVertex,
+    //     v1: WorldVertex,
+    //     v2: WorldVertex,
+    // };
+
+    inline fn clipCode(v: Vec4f) u8 {
         var code: u8 = 0; // bitfield
         if (v[0] < -v[3]) code |= 1 << 0; // left
         if (v[0] > v[3]) code |= 1 << 1; // right
         if (v[1] < -v[3]) code |= 1 << 2; // bottom
         if (v[1] > v[3]) code |= 1 << 3; // top
-        if (v[2] < 0) code |= 1 << 4;
+        if (v[2] < 0) code |= 1 << 4; // near
         return code;
     }
 
-    inline fn nearMask(tri: ClipTriangle) u3 {
-        var mask: u3 = 0;
-        if (nearInside(tri.v0.pos)) mask |= 1;
-        if (nearInside(tri.v1.pos)) mask |= 2;
-        if (nearInside(tri.v2.pos)) mask |= 4;
-        return mask;
+    const Plane = enum(u8) {
+        LEFT,
+        RIGHT,
+        BOTTOM,
+        TOP,
+        NEAR,
+    };
+
+    inline fn planeDistance(vert: WorldVertex, plane: Plane) f32 {
+        switch (plane) {
+            Plane.LEFT => return vert.pos[0] + vert.pos[3],
+            Plane.RIGHT => return -vert.pos[0] + vert.pos[3],
+            Plane.BOTTOM => return vert.pos[1] + vert.pos[3],
+            Plane.TOP => return -vert.pos[1] + vert.pos[3],
+            Plane.NEAR => return vert.pos[2],
+        }
     }
 
-    inline fn nearInside(pos: Vec4f) bool {
-        return (pos[2] >= 0);
+    inline fn isInside(vert: WorldVertex, plane: Plane) bool {
+        return planeDistance(vert, plane) >= 0;
+    }
+
+    inline fn intersectPlane(
+        v0: WorldVertex,
+        v1: WorldVertex,
+        plane: Plane,
+    ) WorldVertex {
+        const fa = planeDistance(v0, plane);
+        const fb = planeDistance(v1, plane);
+        const t = fa / (fa - fb);
+
+        return .{
+            .pos = v0.pos + @as(Vec4f, @splat(t)) * (v1.pos - v0.pos),
+            .uv = v0.uv + @as(@Vector(2, f32), @splat(t)) * (v1.pos - v0.pos),
+        };
+    }
+
+    fn clipPolygonAgainstPlane(
+        polygon: ClippedPolygon,
+        plane: Plane,
+    ) ClippedPolygon {
+        if (polygon.len == 0) return .{};
+
+        var output_polygon = ClippedPolygon{};
+
+        for (0..polygon.len - 1) |i| {
+            const v0 = polygon.verts[i];
+            const v1 = polygon.verts[(i + 1) % polygon.len];
+
+            if (isInside(v0, plane)) {
+                if (isInside(v1, plane))
+                    output_polygon.add(v1)
+                else
+                    output_polygon.add(intersectPlane(v0, v1, plane));
+            } else {
+                if (isInside(v1, plane)) {
+                    output_polygon.add(intersectPlane(v0, v1, plane));
+                    output_polygon.add(v1);
+                }
+            }
+        }
+
+        return output_polygon;
+    }
+
+    /// Use fan triangulation to emit triangles from the clipped convex polygon
+    /// in clip space
+    fn emitPolygonFan(
+        self: *Renderer,
+        allocator: std.mem.Allocator,
+        polygon: ClippedPolygon,
+        quad: *WorldQuad,
+    ) !void {
+        if (polygon.len < 3) return; // triangle is degenerate
+
+        // Backface culling (vertices are oriented CCW)
+        // Only need to check a single triangle
+        const v0 = polygon.verts[0];
+        {
+            const v1 = polygon.verts[1];
+            const v2 = polygon.verts[2];
+            const signed_area =
+                (v1[0] - v0[0]) * (v2[1] - v0[1]) -
+                (v1[1] - v0[1]) * (v2[0] - v0[0]);
+            if (signed_area < 0) return;
+        }
+
+        // Clip -> NDC
+        var rec_ws: [9]f32 = undefined;
+        for (0..polygon.len) |i| {
+            const rec_w = 1.0 / polygon.verts[i].pos[3];
+            rec_ws[i] = rec_w;
+            polygon.verts[i].pos *= @as(Vec4f, @splat(rec_w));
+        }
+
+        // NDC -> raster
+        var raster_verts: [9]Vec2fx = undefined;
+        for (0..polygon.len) |i| {
+            const vert_pos = polygon.verts[i].pos;
+            raster_verts[i] = ndcToScreenFixedPoint(
+                vert_pos[0],
+                vert_pos[1],
+                self.fb_width,
+                self.fb_height,
+            );
+        }
+
+        // Using fan triangulation, emit the raster triangles
+        var i: usize = 1;
+        while (i + 1 < polygon.len) : (i += 1) {
+            const v1 = polygon.verts[i];
+            const v2 = polygon.verts[i + 1];
+
+            try self.triangles.append(allocator, .{
+                .v0 = v0,
+                .v1 = v1,
+                .v2 = v2,
+                .q0 = rec_ws[0],
+                .q1 = rec_ws[i],
+                .q2 = rec_ws[i + 1],
+                .uv0 = v0.uv,
+                .uv1 = v1.uv,
+                .uv2 = v2.uv,
+
+                .tex_u = quad.tex_u,
+                .tex_v = quad.tex_v,
+                .tex_tile_size = quad.tex_tile_size,
+            });
+        }
+    }
+
+    // TODO: Maybe combine this function with the previous one
+
+    /// Use if the quad is trivially inside
+    fn emitQuad(
+        self: *Renderer,
+        allocator: std.mem.Allocator,
+        quad: WorldQuad,
+    ) !void {
+        // Backface culling (vertices are oriented CCW)
+        // Only need to check a single triangle
+        var v = [4]Vec4f{ quad.v0.pos, quad.v1.pos, quad.v2.pos, quad.v3.pos };
+
+        const signed_area =
+            (v[1][0] - v[0][0]) * (v[2][1] - v[0][1]) -
+            (v[1][1] - v[0][1]) * (v[2][0] - v[0][0]);
+        if (signed_area < 0) return;
+
+        // Clip -> NDC
+        var rec_ws: [4]f32 = undefined;
+        for (0..v.len) |i| {
+            const rec_w = 1.0 / v[i][3];
+            rec_ws[i] = rec_w;
+            v[i] *= @as(Vec4f, @splat(rec_w));
+        }
+
+        // NDC -> raster
+        var raster_verts: [4]Vec2fx = undefined;
+        for (0..v.len) |i| {
+            const vert_pos = v[i];
+            raster_verts[i] = ndcToScreenFixedPoint(
+                vert_pos[0],
+                vert_pos[1],
+                self.fb_width,
+                self.fb_height,
+            );
+        }
+
+        // Still using fan triangulation
+        try self.triangles.append(allocator, .{
+            .v0 = raster_verts[0],
+            .v1 = raster_verts[1],
+            .v2 = raster_verts[2],
+            .q0 = rec_ws[0],
+            .q1 = rec_ws[1],
+            .q2 = rec_ws[2],
+            .uv0 = quad.v0.uv,
+            .uv1 = quad.v1.uv,
+            .uv2 = quad.v2.uv,
+
+            .tex_u = quad.tex_u,
+            .tex_v = quad.tex_v,
+            .tex_tile_size = quad.tex_tile_size,
+        });
+
+        try self.triangles.append(allocator, .{
+            .v0 = raster_verts[0],
+            .v1 = raster_verts[2],
+            .v2 = raster_verts[3],
+            .q0 = rec_ws[0],
+            .q1 = rec_ws[2],
+            .q2 = rec_ws[3],
+            .uv0 = quad.v0.uv,
+            .uv1 = quad.v2.uv,
+            .uv2 = quad.v3.uv,
+
+            .tex_u = quad.tex_u,
+            .tex_v = quad.tex_v,
+            .tex_tile_size = quad.tex_tile_size,
+        });
     }
 
     fn ndcToScreenFixedPoint(
@@ -119,153 +323,24 @@ pub const Renderer = struct {
         };
     }
 
-    inline fn emitRasterTriangle(
+    fn emitClippedQuad(
         self: *Renderer,
         allocator: std.mem.Allocator,
-        v0: WorldVertex,
-        v1: WorldVertex,
-        v2: WorldVertex,
         quad: WorldQuad,
     ) !void {
-        var p0 = v0.pos;
-        var p1 = v1.pos;
-        var p2 = v2.pos;
+        const c0 = clipCode(quad.v0.pos);
+        const c1 = clipCode(quad.v1.pos);
+        const c2 = clipCode(quad.v2.pos);
+        const c3 = clipCode(quad.v3.pos);
 
-        const rec_w0 = 1.0 / p0[3];
-        const rec_w1 = 1.0 / p1[3];
-        const rec_w2 = 1.0 / p2[3];
+        const or_code = c0 | c1 | c2 | c3;
+        const and_code = c0 & c1 & c2 & c3;
 
-        p0 *= @as(Vec4f, @splat(rec_w0));
-        p1 *= @as(Vec4f, @splat(rec_w1));
-        p2 *= @as(Vec4f, @splat(rec_w2));
-
-        // Backface culling (vertices are oriented CCW)
-        const signed_area =
-            (p1[0] - p0[0]) * (p2[1] - p0[1]) -
-            (p1[1] - p0[1]) * (p2[0] - p0[0]);
-        if (signed_area < 0) return;
-
-        // Clip -> raster
-        // Conversion of Y flips the triangle's orientation (CCW -> CW)
-        const a = ndcToScreenFixedPoint(p0[0], p0[1], self.fb_width, self.fb_height);
-        const b = ndcToScreenFixedPoint(p1[0], p1[1], self.fb_width, self.fb_height);
-        const c = ndcToScreenFixedPoint(p2[0], p2[1], self.fb_width, self.fb_height);
-
-        try self.triangles.append(allocator, .{
-            .v0 = a,
-            .v1 = b,
-            .v2 = c,
-            .q0 = rec_w0,
-            .q1 = rec_w1,
-            .q2 = rec_w2,
-            .uv0 = v0.uv,
-            .uv1 = v1.uv,
-            .uv2 = v2.uv,
-
-            .tex_u = quad.tex_u,
-            .tex_v = quad.tex_v,
-            .tex_tile_size = quad.tex_tile_size,
-        });
-    }
-
-    inline fn intersectNear(a: WorldVertex, b: WorldVertex) WorldVertex {
-        const fa = a.pos[2];
-        const fb = b.pos[2];
-        const t = -fa / (fb - fa);
-        const t_uv_vec: @Vector(2, Float) = @splat(t);
-
-        return .{
-            .pos = a.pos + @as(Vec4f, @splat(t)) * (b.pos - a.pos),
-            .uv = a.uv + t_uv_vec * (b.uv - a.uv),
-        };
-    }
-
-    inline fn emitClippedTriangle(
-        self: *Renderer,
-        allocator: std.mem.Allocator,
-        tri: ClipTriangle,
-        quad: WorldQuad,
-    ) !void {
-        const c0 = clipOutcode(tri.v0.pos);
-        const c1 = clipOutcode(tri.v1.pos);
-        const c2 = clipOutcode(tri.v2.pos);
-
-        const or_code = c0 | c1 | c2;
-        const and_code = c0 & c1 & c2;
-
-        if (and_code != 0) return; // trivially outside
+        if (and_code != 0) return; // quad trivially outside
         if (or_code != 0) return; // TEMP: drop partially clipped tris
 
-        try self.emitRasterTriangle(allocator, tri.v0, tri.v1, tri.v2, quad);
+        try emitQuad(self, allocator, quad);
     }
-
-    // inline fn emitClippedTriangle(
-    //     self: *Renderer,
-    //     allocator: std.mem.Allocator,
-    //     tri: ClipTriangle,
-    //     quad: WorldQuad,
-    // ) !void {
-    //     const m = nearMask(tri);
-    //
-    //     switch (m) {
-    //         // 0b000 => return,
-    //
-    //         0b111 => {
-    //             try self.emitRasterTriangle(allocator, tri.v0, tri.v1, tri.v2, quad);
-    //         },
-    //
-    //         else => return,
-    //
-    //         // 0b111 => {
-    //         //     try self.emitRasterTriangle(allocator, tri.v0, tri.v1, tri.v2, quad);
-    //         // },
-    //
-    //         // only v0 inside
-    //         // 0b001 => {
-    //         //     const isect01 = intersectNear(tri.v0, tri.v1);
-    //         //     const isect02 = intersectNear(tri.v0, tri.v2);
-    //         //     try self.emitRasterTriangle(allocator, tri.v0, isect01, isect02, quad);
-    //         // },
-    //         //
-    //         // // only v1 inside
-    //         // 0b010 => {
-    //         //     const isect10 = intersectNear(tri.v1, tri.v0);
-    //         //     const isect12 = intersectNear(tri.v1, tri.v2);
-    //         //     try self.emitRasterTriangle(allocator, tri.v1, isect12, isect10, quad);
-    //         // },
-    //         //
-    //         // // only v2 inside
-    //         // 0b100 => {
-    //         //     const isect20 = intersectNear(tri.v2, tri.v0);
-    //         //     const isect21 = intersectNear(tri.v2, tri.v1);
-    //         //     try self.emitRasterTriangle(allocator, tri.v2, isect20, isect21, quad);
-    //         // },
-    //         //
-    //         // // v0, v1 inside; v2 outside
-    //         // 0b011 => {
-    //         //     const isect12 = intersectNear(tri.v1, tri.v2);
-    //         //     const isect02 = intersectNear(tri.v0, tri.v2);
-    //         //     try self.emitRasterTriangle(allocator, tri.v0, tri.v1, isect12, quad);
-    //         //     try self.emitRasterTriangle(allocator, tri.v0, isect12, isect02, quad);
-    //         // },
-    //         //
-    //         // // v0, v2 inside; v1 outside
-    //         // 0b101 => {
-    //         //     const isect01 = intersectNear(tri.v0, tri.v1);
-    //         //     const isect21 = intersectNear(tri.v2, tri.v1);
-    //         //     try self.emitRasterTriangle(allocator, tri.v0, isect01, tri.v2, quad);
-    //         //     try self.emitRasterTriangle(allocator, isect01, isect21, tri.v2, quad);
-    //         // },
-    //         //
-    //         // // v1, v2 inside; v0 outside
-    //         // 0b110 => {
-    //         //     const isect10 = intersectNear(tri.v1, tri.v0);
-    //         //     const isect20 = intersectNear(tri.v2, tri.v0);
-    //         //     try self.emitRasterTriangle(allocator, tri.v1, tri.v2, isect20, quad);
-    //         //     try self.emitRasterTriangle(allocator, tri.v1, isect20, isect10, quad);
-    //         // },
-    //     }
-    // }
 
     inline fn genRasterTriangleFromWorldQuad(
         self: *Renderer,
@@ -273,41 +348,17 @@ pub const Renderer = struct {
         quad: WorldQuad,
         combined_clip_transform: Mat4f,
     ) !void {
-        const cv0 = WorldVertex{
-            .pos = combined_clip_transform.mul_vec(quad.v0.pos),
-            .uv = quad.v0.uv,
-        };
-        const cv1 = WorldVertex{
-            .pos = combined_clip_transform.mul_vec(quad.v1.pos),
-            .uv = quad.v1.uv,
-        };
-        const cv2 = WorldVertex{
-            .pos = combined_clip_transform.mul_vec(quad.v2.pos),
-            .uv = quad.v2.uv,
-        };
-        const cv3 = WorldVertex{
-            .pos = combined_clip_transform.mul_vec(quad.v3.pos),
-            .uv = quad.v3.uv,
-        };
+        var projected_quad = quad;
+        projected_quad.v0.pos =
+            combined_clip_transform.mul_vec(projected_quad.v0.pos);
+        projected_quad.v1.pos =
+            combined_clip_transform.mul_vec(projected_quad.v1.pos);
+        projected_quad.v2.pos =
+            combined_clip_transform.mul_vec(projected_quad.v2.pos);
+        projected_quad.v3.pos =
+            combined_clip_transform.mul_vec(projected_quad.v3.pos);
 
-        // Trivial reject for the 5 planes (far plane excluded)
-        const code_0 = clipOutcode(cv0.pos);
-        const code_1 = clipOutcode(cv1.pos);
-        const code_2 = clipOutcode(cv2.pos);
-        const code_3 = clipOutcode(cv3.pos);
-        if ((code_0 & code_1 & code_2 & code_3) != 0) return;
-
-        try self.emitClippedTriangle(allocator, .{
-            .v0 = cv0,
-            .v1 = cv1,
-            .v2 = cv3,
-        }, quad);
-
-        try self.emitClippedTriangle(allocator, .{
-            .v0 = cv1,
-            .v1 = cv2,
-            .v2 = cv3,
-        }, quad);
+        try emitClippedQuad(self, allocator, projected_quad);
     }
 
     // CHUNK RENDERING /////////////////////////////////////////////////////////
