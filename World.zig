@@ -7,8 +7,10 @@ const ChunkCoord = @import("math/types.zig").ChunkCoord;
 const Mesher = @import("world/Mesher.zig").Mesher;
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
-const t = @import("math/types.zig");
-const WorldCoord = t.WorldCoord;
+const types = @import("math/types.zig");
+const WorldCoord = types.WorldCoord;
+const Vec3i = types.Vec3i;
+const BlockId = @import("world/Block.zig").BlockId;
 
 const Renderer = @import("Renderer.zig").Renderer;
 
@@ -49,6 +51,25 @@ pub const World = struct {
 
     pub fn getChunk(self: *World, coord: ChunkCoord) ?*Chunk {
         return self.chunks.get(chunkKey(coord));
+    }
+
+    pub fn getBlockIdFromWorldCoordinates(
+        self: *World,
+        coord: Vec3i,
+        chunk_size: i32,
+    ) BlockId {
+        const chunk_size_vec: Vec3i = @splat(chunk_size);
+        const chunk_size_u: usize = @intCast(chunk_size);
+
+        const chunk_pos: Vec3i = @divFloor(coord, chunk_size_vec);
+        const local_pos: @Vector(3, usize) = @intCast(@mod(coord, chunk_size_vec));
+
+        if (self.getChunk(chunk_pos)) |chunk| return chunk.voxels[
+            local_pos[0] + local_pos[1] * chunk_size_u +
+                local_pos[2] * chunk_size_u * chunk_size_u
+        ];
+
+        return BlockId.unknown;
     }
 
     pub fn ensureChunk(

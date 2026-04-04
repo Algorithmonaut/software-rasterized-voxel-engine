@@ -18,10 +18,11 @@ const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
         .view_distance = 300.0,
-        .from = .{ 0, 60, 0 },
+        .from = .{ 0, 43, 0 },
+        // .from = .{ 0, 60, 0 },
         .to = .{ 0, 40, -21 },
         // .speed = 100.0,
-        .speed = 15.0,
+        .speed = 5.0,
         .sensivity = 0.0025,
         .near = 0.1,
     },
@@ -94,7 +95,7 @@ pub fn main() !void {
             &engine.triangle_rasterizer,
         );
 
-        engine.player.update();
+        try engine.player.update(&engine.world);
 
         engine.player.camera.view_mat = mat.create_view(
             engine.player.camera.from,

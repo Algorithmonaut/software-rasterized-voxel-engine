@@ -3,8 +3,14 @@ const std = @import("std");
 const Camera = @import("Camera.zig").Camera;
 const CameraConfig = @import("EngineConfig.zig").EngineConfig.CameraConfig;
 
+const World = @import("World.zig").World;
+const Chunk = @import("Chunk.zig").Chunk;
+
+const BlockId = @import("world/Block.zig").BlockId;
+
 const types = @import("math/types.zig");
 const Vec3f = types.Vec3f;
+const Vec3i = types.Vec3i;
 
 const vec = @import("math/vector.zig");
 
@@ -46,10 +52,10 @@ pub const Player = struct {
 
     frame_inputs: FrameInputs,
 
-    ground_accel: f32 = 80,
+    ground_accel: f32 = 120,
     air_accel: f32 = 20,
 
-    ground_decel: f32 = 160,
+    ground_decel: f32 = 240,
     air_decel: f32 = 40,
 
     fn playerAABB(self: *Player) AABB {
@@ -81,26 +87,145 @@ pub const Player = struct {
             .camera = camera,
 
             .frame_inputs = .{},
+
+            .aabb = undefined,
         };
     }
 
-    fn approachVec(current: Vec3f, target: Vec3f, max_delta: f32) Vec3f {
-        const delta = target - current;
-        const dist = vec.length(delta);
-
-        if (dist <= max_delta or dist <= 0.000_001) return target;
-
-        // Normalized delta direction
-        const dir: Vec3f = delta / @as(Vec3f, @splat(dist));
-
-        return .{
-            current[0] + dir[0] * max_delta,
+    fn approachHorizontal(current: Vec3f, target: Vec3f, max_delta: f32) Vec3f {
+        const delta = Vec3f{
+            target[0] - current[0],
             0,
-            current[2] + dir[2] * max_delta,
+            target[2] - current[2],
+        };
+
+        const dist = @sqrt(delta[0] * delta[0] + delta[2] * delta[2]);
+
+        if (dist <= max_delta or dist <= 0.000001) {
+            return .{ target[0], current[1], target[2] };
+        }
+
+        const inv = 1.0 / dist;
+        return .{
+            current[0] + delta[0] * inv * max_delta,
+            current[1],
+            current[2] + delta[2] * inv * max_delta,
         };
     }
 
-    pub fn update(self: *Player) void {
+    //// RESOLVE MOVEMENT AND COLLISIONS FOR EACH AXIS //////////////////////////
+
+    inline fn getBlockAABB(x: i32, y: i32, z: i32) AABB {
+        return .{
+            .min = Vec3f{
+                @floatFromInt(x),
+                @floatFromInt(y),
+                @floatFromInt(z),
+            },
+            .max = Vec3f{
+                @floatFromInt(x + 1),
+                @floatFromInt(y + 1),
+                @floatFromInt(z + 1),
+            },
+        };
+    }
+
+    fn moveX(self: *Player, world: *World, dx: f32) !void {
+        if (dx == 0) return;
+
+        const eps: f32 = 0.001;
+        const chunk_size: i32 = 32;
+
+        self.position[0] += dx;
+
+        var box = self.playerAABB();
+
+        const min_x: i32 = @intFromFloat(@floor(box.min[0]));
+        const min_y: i32 = @intFromFloat(@floor(box.min[1]));
+        const min_z: i32 = @intFromFloat(@floor(box.min[2]));
+
+        const max_x: i32 = @intFromFloat(@floor(box.max[0] - eps));
+        const max_y: i32 = @intFromFloat(@floor(box.max[1] - eps));
+        const max_z: i32 = @intFromFloat(@floor(box.max[2] - eps));
+
+        var x: i32 = min_x;
+        while (x <= max_x) : (x += 1) {
+            var y: i32 = min_y;
+            while (y <= max_y) : (y += 1) {
+                var z: i32 = min_z;
+                while (z <= max_z) : (z += 1) {
+                    const block_id = world.getBlockIdFromWorldCoordinates(
+                        .{ x, y, z },
+                        chunk_size,
+                    );
+
+                    if (block_id == BlockId.air)
+                        continue;
+
+                    const block_aabb = getBlockAABB(x, y, z);
+
+                    if (box.overlaps(block_aabb)) {
+                        if (dx > 0)
+                            self.position[0] = @as(f32, @floatFromInt(x)) - self.half_size[0] - eps
+                        else
+                            self.position[0] = @as(f32, @floatFromInt(x + 1)) + self.half_size[0] + eps;
+
+                        self.velocity[0] = 0;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    fn moveZ(self: *Player, world: *World, dz: f32) !void {
+        if (dz == 0) return;
+
+        const eps: f32 = 0.001;
+        const chunk_size: i32 = 32;
+
+        self.position[2] += dz;
+
+        var box = self.playerAABB();
+
+        const min_x: i32 = @intFromFloat(@floor(box.min[0]));
+        const min_y: i32 = @intFromFloat(@floor(box.min[1]));
+        const min_z: i32 = @intFromFloat(@floor(box.min[2]));
+
+        const max_x: i32 = @intFromFloat(@floor(box.max[0] - eps));
+        const max_y: i32 = @intFromFloat(@floor(box.max[1] - eps));
+        const max_z: i32 = @intFromFloat(@floor(box.max[2] - eps));
+
+        var x: i32 = min_x;
+        while (x <= max_x) : (x += 1) {
+            var y: i32 = min_y;
+            while (y <= max_y) : (y += 1) {
+                var z: i32 = min_z;
+                while (z <= max_z) : (z += 1) {
+                    const block_id = world.getBlockIdFromWorldCoordinates(
+                        .{ x, y, z },
+                        chunk_size,
+                    );
+
+                    if (block_id == BlockId.air) continue;
+
+                    const block_aabb = getBlockAABB(x, y, z);
+
+                    if (box.overlaps(block_aabb)) {
+                        if (dz > 0)
+                            self.position[2] = @as(f32, @floatFromInt(z)) - self.half_size[2] - eps
+                        else
+                            self.position[2] = @as(f32, @floatFromInt(z + 1)) + self.half_size[2] + eps;
+
+                        self.velocity[2] = 0;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn update(self: *Player, world: *World) !void {
         self.camera.updateCameraTarget(
             self.frame_inputs.mouse_dx,
             self.frame_inputs.mouse_dy,
@@ -148,7 +273,7 @@ pub const Player = struct {
         const move_speed: f32 = self.camera.speed;
         const desired_velocity = wish * @as(Vec3f, @splat(move_speed));
 
-        const new_vel = approachVec(
+        const new_vel = approachHorizontal(
             self.velocity,
             desired_velocity,
             rate * self.frame_inputs.dt,
@@ -156,8 +281,15 @@ pub const Player = struct {
 
         self.velocity = new_vel;
 
-        self.position += new_vel * @as(Vec3f, @splat(self.frame_inputs.dt));
-        self.camera.from += new_vel * @as(Vec3f, @splat(self.frame_inputs.dt)); // set camera position
+        const delta = self.velocity * @as(Vec3f, @splat(self.frame_inputs.dt));
+
+        self.position[1] = 42.0;
+        try self.moveX(world, delta[0]);
+        try self.moveZ(world, delta[2]);
+
+        // self.position += new_vel * @as(Vec3f, @splat(self.frame_inputs.dt));
+        const camera_height = Vec3f{ 0, 1.8, 0 };
+        self.camera.from = self.position + camera_height; // set camera position
         self.camera.to = self.camera.from + forward; // set camera target
     }
 };

@@ -53,7 +53,8 @@ pub const WorldTriangle = struct {
 };
 
 pub const BlockId = enum(u8) {
-    air = 255,
+    air = 254,
+    unknown = 255,
     dirt = 0,
     stone = 1,
     grass = 2,
