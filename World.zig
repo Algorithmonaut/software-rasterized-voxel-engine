@@ -4,7 +4,7 @@ const WorldConfig = @import("EngineConfig.zig").EngineConfig.WorldConfig;
 
 const ChunkCoord = @import("math/types.zig").ChunkCoord;
 
-const chunk_mesher = @import("world/chunk-mesher.zig");
+const Mesher = @import("world/Mesher.zig").Mesher;
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
 const t = @import("math/types.zig");
@@ -17,11 +17,12 @@ pub const World = struct {
     chunks: std.AutoHashMap(u64, *Chunk),
     chunk_size: usize,
 
-    pub fn init(allocator: std.mem.Allocator, conf: WorldConfig) World {
+    pub fn init(allocator: std.mem.Allocator) World {
         return .{
             .allocator = allocator,
             .chunks = std.AutoHashMap(u64, *Chunk).init(allocator),
-            .chunk_size = conf.chunk_size,
+            // Remove magic number
+            .chunk_size = 32,
         };
     }
 
@@ -89,81 +90,24 @@ pub const World = struct {
         return false;
     }
 
-    pub fn meshChunks(self: *World, allocator: std.mem.Allocator) !void {
+    pub fn meshChunks(
+        self: *World,
+        allocator: std.mem.Allocator,
+        mesher: *Mesher,
+    ) !void {
+        _ = allocator;
         var it = self.chunks.iterator();
 
         while (it.next()) |entry| {
             const chunk = entry.value_ptr.*;
-            if (!chunk.dirty) continue;
+            if (!chunk.dirty or chunk.queued or chunk.meshing) continue;
 
-            try chunk_mesher.generateMesh(chunk, self, allocator);
-            chunk.dirty = false;
+            chunk.queued = true;
+
+            try mesher.enqueue(.{
+                .world = self,
+                .chunk = chunk,
+            });
         }
-    }
-
-    pub fn meshChunksBudgeted(
-        self: *World,
-        allocator: std.mem.Allocator,
-        budget: usize,
-    ) !void {
-        var done: usize = 0;
-        var it = self.chunks.iterator();
-
-        while (it.next()) |entry| {
-            const chunk = entry.value_ptr.*;
-            if (!chunk.dirty) continue;
-
-            try chunk_mesher.generateMesh(chunk, self, allocator);
-            chunk.dirty = false;
-
-            done += 1;
-            if (done >= budget) break;
-        }
-    }
-
-    pub fn bootstrapInitialChunks(
-        self: *World,
-        allocator: std.mem.Allocator,
-        player_pos: WorldCoord,
-        view_distance: f32,
-        terrain_generator: TerrainGenerator,
-    ) !void {
-        const chunk_size_i: i32 = @intCast(self.chunk_size);
-        const player_chunk = Renderer.worldToChunkCoord(player_pos, chunk_size_i);
-
-        const chunk_view_radius: i32 = @intFromFloat(@ceil(
-            view_distance / @as(f32, @floatFromInt(self.chunk_size)),
-        ));
-
-        std.debug.assert(std.math.isFinite(player_pos[0]));
-        std.debug.assert(std.math.isFinite(player_pos[1]));
-        std.debug.assert(std.math.isFinite(player_pos[2]));
-
-        std.debug.assert(chunk_view_radius >= 0);
-        std.debug.assert(chunk_view_radius < 100000); // absurdity guard
-
-        std.debug.print(
-            "player_pos={any} player_chunk={any} radius={d}\n",
-            .{ player_pos, player_chunk, chunk_view_radius },
-        );
-
-        var cz = player_chunk[2] - chunk_view_radius;
-        while (cz <= player_chunk[2] + chunk_view_radius) : (cz += 1) {
-            var cy = player_chunk[1] - chunk_view_radius;
-            while (cy <= player_chunk[1] + chunk_view_radius) : (cy += 1) {
-                var cx = player_chunk[0] - chunk_view_radius;
-                while (cx <= player_chunk[0] + chunk_view_radius) : (cx += 1) {
-                    const dx: i64 = @intCast(cx - player_chunk[0]);
-                    const dy: i64 = @intCast(cy - player_chunk[1]);
-                    const dz: i64 = @intCast(cz - player_chunk[2]);
-
-                    if (dx * dx + dy * dy + dz * dz > chunk_view_radius * chunk_view_radius) continue;
-
-                    _ = try self.ensureChunk(.{ cx, cy, cz }, terrain_generator);
-                }
-            }
-        }
-
-        try self.meshChunks(allocator);
     }
 };

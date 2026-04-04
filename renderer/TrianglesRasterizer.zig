@@ -1,9 +1,3 @@
-// NOTE: Possible refactor
-// binning.zig -> passes 1 and 2
-// workers (or keep them local)
-// triangle_in_tile (pixel loop only)
-// TriangleRasterizer.zig -> orchestrates everything
-
 const std = @import("std");
 
 const RasterTriangle = @import("../triangle.zig").RasterTriangle;
@@ -38,15 +32,16 @@ const F8 = @Vector(8, f32);
 // to be rendered properly, later change to i32 but consider origin at raster center
 pub const Edge = struct {
     // Edge function can be refactored: E(x,y) = Ax + By + C with A B C constants
-    A: i64,
-    B: i64,
-    C: i64, // WARN: Change to i64 if overflow
+    A: i32,
+    B: i32,
+    C: i32, // WARN: Change to i64 if overflow
 
-    bias: i32,
+    top_left_bias: i32,
+    cons_bias: i32, // conservative offset used to mitigate T-junctions cracks
 
     /// Evaluate the point (x, y) against the edge
-    inline fn eval(self: Edge, x: i32, y: i32) i64 {
-        return self.A * @as(i64, x) + self.B * @as(i64, y) + self.C;
+    inline fn eval(self: Edge, x: i32, y: i32) i32 {
+        return self.A * x + self.B * y + self.C;
     }
 };
 
@@ -60,12 +55,21 @@ inline fn makeEdge(a: @Vector(2, i32), b: @Vector(2, i32)) Edge {
 
     const is_top_left: bool = (dy > 0) or (dy == 0 and dx < 0);
 
+    const eA = y1 - y0;
+    const eB = x0 - x1;
+
+    // const px = 1;
+
+    const tx: i32 = if (eA >= 0) 1 else 0;
+    const ty: i32 = if (eB >= 0) 1 else 0;
+
     // E(x,y) = (y1 - y0)*x + (x0 - x1)*y + (y0*x1 - x0*y1)
     return .{
-        .A = y1 - y0,
-        .B = x0 - x1,
+        .A = eA,
+        .B = eB,
         .C = y0 * x1 - x0 * y1,
-        .bias = if (is_top_left) 0 else -1,
+        .top_left_bias = if (is_top_left) 0 else -1,
+        .cons_bias = eA * tx + eB * ty,
     };
 }
 
@@ -92,16 +96,16 @@ inline fn renderTriangleInTile(
     const tile_size = tile.dimensions;
 
     // P: Edge values at tile origin, without fill-rule bias
-    const w0_origin: i64 = e0.eval(tx0_fx, ty0_fx);
-    const w1_origin: i64 = e1.eval(tx0_fx, ty0_fx);
-    const w2_origin: i64 = e2.eval(tx0_fx, ty0_fx);
+    const w0_origin: i32 = e0.eval(tx0_fx, ty0_fx);
+    const w1_origin: i32 = e1.eval(tx0_fx, ty0_fx);
+    const w2_origin: i32 = e2.eval(tx0_fx, ty0_fx);
 
     // P: Integer edge stepping FOR coverage
-    const px_step: i64 = 1 << SUBPIXEL_BITS; // 16
-    const right_inc = @Vector(3, i64){ e0.A * px_step, e1.A * px_step, e2.A * px_step };
-    const down_inc = @Vector(3, i64){ e0.B * px_step, e1.B * px_step, e2.B * px_step };
+    const px_step: i32 = 1 << SUBPIXEL_BITS; // 16
+    const right_inc = Vec3i{ e0.A * px_step, e1.A * px_step, e2.A * px_step };
+    const down_inc = Vec3i{ e0.B * px_step, e1.B * px_step, e2.B * px_step };
 
-    var w_row = @Vector(3, i64){ w0_origin, w1_origin, w2_origin };
+    var w_row = Vec3i{ w0_origin, w1_origin, w2_origin };
 
     // P: Reciprocal depth at vertices.
     const q0: Float = triangle.q0;
@@ -110,7 +114,7 @@ inline fn renderTriangleInTile(
 
     // P: Wireframe thickness
     const avg_rec_depth: Float = (q0 + q1 + q2) / 3.0;
-    const base_thickness: Float = @floatFromInt(10000 << SUBPIXEL_BITS);
+    const base_thickness: Float = @floatFromInt(50000 << SUBPIXEL_BITS);
     const thickness: i32 = @intFromFloat(base_thickness * avg_rec_depth);
 
     // P: Attribute values multiplied by reciprocal depth
@@ -157,16 +161,17 @@ inline fn renderTriangleInTile(
     const v_num_dx: Float = (e0_a_f * vq0 + e1_a_f * vq1 + e2_a_f * vq2) * px_step_f;
     const v_num_dy: Float = (e0_b_f * vq0 + e1_b_f * vq1 + e2_b_f * vq2) * px_step_f;
 
-    // Greedy meshing causes T-junctions cracks (float precision issue)
-    // const crack_epsilon: i32 = 5;
-
     // P: Stepping
     var y: usize = 0;
     while (y < tile_size) : (y += 1) {
         const row_base: usize = y * tile_size;
 
         // Top-left rule and T-junction bias
-        var w = w_row + Vec3i{ e0.bias, e1.bias, e2.bias };
+        var w = w_row + Vec3i{
+            e0.top_left_bias + e0.cons_bias,
+            e1.top_left_bias + e1.cons_bias,
+            e2.top_left_bias + e2.cons_bias,
+        };
 
         var den: Float = den_row;
         var u_num: Float = u_num_row;
@@ -182,7 +187,6 @@ inline fn renderTriangleInTile(
             }
 
             if ((w[0] | w[1] | w[2]) < 0) continue;
-            // if (w[0] < -crack_epsilon or w[1] < -crack_epsilon or w[2] < -crack_epsilon) continue;
 
             if (render_wireframe) {
                 const w_thick = w - @as(Vec3i, @splat(thickness));
@@ -191,8 +195,6 @@ inline fn renderTriangleInTile(
 
             const inv_z: Float = den * inv_area;
             const idx: usize = row_base + x;
-
-            std.debug.assert(idx < tile.z_buf.len);
 
             if (inv_z <= tile.z_buf[idx]) continue;
             tile.z_buf[idx] = inv_z;
@@ -462,7 +464,7 @@ pub const TrianglesRasterizer = struct {
         // P: Third pass (render per tile and blit) - PARALLEL
         var next = AtomicUsize.init(0);
         var wg = std.Thread.WaitGroup{};
-        const worker_count = try std.Thread.getCpuCount();
+        const worker_count = (try std.Thread.getCpuCount()) - 1;
 
         for (0..worker_count) |_| {
             pool.spawnWg(&wg, tileWorker, .{

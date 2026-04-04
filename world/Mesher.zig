@@ -572,3 +572,86 @@ pub fn generateMesh(
     chunk.mesh.clearAndFree(allocator);
     chunk.mesh = mesh;
 }
+
+//// P: JOB ////////////////////////////////////////////////////////////////////
+
+pub const ChunkJob = struct {
+    chunk: *Chunk,
+    // TODO: Remove this and pass adjacent chunks directly
+    world: *World,
+};
+
+pub const Mesher = struct {
+    allocator: std.mem.Allocator,
+
+    mutex: std.Thread.Mutex = .{},
+    cond: std.Thread.Condition = .{},
+
+    jobs: std.ArrayList(ChunkJob),
+    shutting_down: bool = false,
+
+    thread: ?std.Thread = null,
+
+    pub fn init(allocator: std.mem.Allocator) !Mesher {
+        return .{
+            .allocator = allocator,
+            .jobs = try std.ArrayList(ChunkJob).initCapacity(allocator, 64),
+        };
+    }
+
+    pub fn deinit(self: *Mesher) void {
+        self.jobs.deinit(self.allocator);
+    }
+
+    pub fn start(self: *Mesher) !void {
+        self.thread = try std.Thread.spawn(.{}, workerMain, .{self});
+    }
+
+    pub fn stop(self: *Mesher) void {
+        self.mutex.lock();
+        self.shutting_down = true;
+        self.cond.signal();
+        self.mutex.unlock();
+
+        if (self.thread) |thread| {
+            thread.join();
+            self.thread = null;
+        }
+    }
+
+    pub fn enqueue(self: *Mesher, job: ChunkJob) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        try self.jobs.append(self.allocator, job);
+        self.cond.signal();
+    }
+
+    fn workerMain(self: *Mesher) void {
+        while (true) {
+            self.mutex.lock();
+
+            while (self.jobs.items.len == 0 and !self.shutting_down) {
+                self.cond.wait(&self.mutex);
+            }
+
+            if (self.shutting_down and self.jobs.items.len == 0) {
+                self.mutex.unlock();
+                return;
+            }
+
+            const job = self.jobs.pop() orelse unreachable;
+            self.mutex.unlock();
+
+            job.chunk.queued = false;
+            job.chunk.meshing = true;
+
+            generateMesh(job.chunk, job.world, self.allocator) catch |err| {
+                std.log.err("generateMesh failed: {}", .{err});
+            };
+
+            job.chunk.dirty = false;
+            job.chunk.meshing = false;
+        }
+    }
+};

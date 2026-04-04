@@ -27,17 +27,13 @@ pub const EngineConfig = struct {
         channels_rgb: usize,
     };
 
-    pub const WorldConfig = struct {
-        chunk_size: usize,
-    };
-
     pub const DebugConfig = struct {
         show_fps: bool,
         show_tex_atlas: bool,
         show_occupied_tiles: bool,
     };
 
-    pub const TerrainGeneratorConfig = struct {
+    pub const WorldConfig = struct {
         // Typical parameters:
         // octaves = 4..6
         // lacunarity = 2.0
@@ -65,5 +61,4 @@ pub const EngineConfig = struct {
     atlas_config: AtlasConfig,
     world_config: WorldConfig,
     debug_config: DebugConfig,
-    terrain_generator_config: TerrainGeneratorConfig,
 };

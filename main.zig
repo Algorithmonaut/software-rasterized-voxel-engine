@@ -13,19 +13,17 @@ const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Renderer = @import("Renderer.zig").Renderer;
 const Chunk = @import("Chunk.zig").Chunk;
 const Profiler = @import("Profiler.zig").Profiler;
-const chunk_mesher = @import("world/chunk-mesher.zig");
 
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 300.0,
+        .view_distance = 400.0,
         .from = .{ 0, 40, -20 },
         .to = .{ 0, 40, -21 },
-        // .speed = 1015.0,
-        .speed = 15.0,
+        .speed = 100.0,
+        // .speed = 15.0,
         .sensivity = 0.0025,
-        // .near = 0.25,
-        .near = 1,
+        .near = 0.1,
     },
     .framebuffer_config = .{
         .width = 1920,
@@ -41,15 +39,12 @@ const engine_config = EngineConfig{
         .pixel_type = u32,
         .channels_rgb = 3,
     },
-    .world_config = .{
-        .chunk_size = 32,
-    },
     .debug_config = .{
         .show_fps = true,
         .show_occupied_tiles = false,
         .show_tex_atlas = false,
     },
-    .terrain_generator_config = .{
+    .world_config = .{
         .seed = 12345,
         .gain = 0.5,
         .lacunarity = 2.0,
@@ -83,13 +78,6 @@ pub fn main() !void {
 
     var pool: std.Thread.Pool = undefined;
     try pool.init(.{ .allocator = allocator });
-
-    try engine.world.bootstrapInitialChunks(
-        allocator,
-        engine.camera.from,
-        engine.camera.view_distance,
-        engine.terrain_generator,
-    );
 
     var t: usize = 0;
 
@@ -133,7 +121,8 @@ pub fn main() !void {
 
         total_frame_ns += frame_timer.read();
 
-        try engine.world.meshChunksBudgeted(allocator, 10);
+        // try engine.world.meshChunksBudgeted(allocator, 10);
+        try engine.world.meshChunks(allocator, engine.mesher);
     }
 
     main_prof.printReport(total_frame_ns);

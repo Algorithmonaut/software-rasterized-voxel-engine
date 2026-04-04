@@ -6,7 +6,6 @@ const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferCo
 const Camera = @import("Camera.zig").Camera;
 const Chunk = @import("Chunk.zig").Chunk;
 const Atlas = @import("Atlas.zig").Atlas;
-const Mesher = @import("world/chunk-mesher.zig").Mesher;
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
 const Block = @import("world/Block.zig");
@@ -514,6 +513,7 @@ pub const Renderer = struct {
                     const chunk = try world.ensureChunk(coord, terrain_generator);
 
                     if (!isChunkInFrustum(chunk, camera.combined_mat)) continue;
+                    if (chunk.meshing or chunk.queued or chunk.dirty) continue;
 
                     try self.chunk_entries.append(
                         allocator,

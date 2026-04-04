@@ -37,7 +37,8 @@ pub const Chunk = struct {
     voxels: []BlockId,
 
     dirty: bool = true,
-    meshed: bool = false,
+    queued: bool = false,
+    meshing: bool = false,
 
     mesh: std.ArrayList(Quad),
 

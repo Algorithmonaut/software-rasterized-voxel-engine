@@ -13,6 +13,7 @@ const TilePool = @import("tile.zig").TilePool;
 const World = @import("World.zig").World;
 const TriangleRasterizer = @import("renderer/TrianglesRasterizer.zig").TrianglesRasterizer;
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
+const Mesher = @import("world/Mesher.zig").Mesher;
 
 const Vec3f = @import("math/types.zig").Vec3f;
 
@@ -28,15 +29,21 @@ pub const Engine = struct {
     world: World,
     triangle_rasterizer: TriangleRasterizer,
     terrain_generator: TerrainGenerator,
+    mesher: *Mesher,
 
     pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
         const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
         const platform = SdlPlatform.init();
         const graphics = try SdlGraphics.init(conf.framebuffer_config);
         const atlas = try Atlas.init(allocator, conf.atlas_config);
-        const world = World.init(allocator, conf.world_config);
+        const world = World.init(allocator);
         const triangle_rasterizer = try TriangleRasterizer.init(allocator, tile_pool.count);
-        const terrain_generator = TerrainGenerator.init(conf.terrain_generator_config);
+
+        const mesher = try allocator.create(Mesher);
+        mesher.* = try Mesher.init(allocator);
+        try mesher.start();
+
+        const terrain_generator = TerrainGenerator.init(conf.world_config);
         const camera = Camera.init(
             conf.camera_config,
             conf.framebuffer_config.width,
@@ -48,7 +55,7 @@ pub const Engine = struct {
             conf.camera_config.view_distance,
         );
 
-        return .{
+        return Engine{
             .allocator = allocator,
             .camera = camera,
             .renderer = renderer,
@@ -59,10 +66,15 @@ pub const Engine = struct {
             .world = world,
             .triangle_rasterizer = triangle_rasterizer,
             .terrain_generator = terrain_generator,
+            .mesher = mesher,
         };
     }
 
     pub fn deinit(self: *Engine) void {
+        self.mesher.stop();
+        self.mesher.deinit();
+        self.world.deinit();
+
         self.camera.deinit();
         self.renderer.deinit(self.allocator);
         self.platform.deinit();

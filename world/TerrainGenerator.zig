@@ -3,7 +3,7 @@ const std = @import("std");
 const Block = @import("Block.zig");
 const BlockId = Block.BlockId;
 
-const TerrainGeneratorConfig = @import("../EngineConfig.zig").EngineConfig.TerrainGeneratorConfig;
+const WorldConfig = @import("../EngineConfig.zig").EngineConfig.WorldConfig;
 
 //// DETERMINISTIC HASHING ////
 
@@ -100,7 +100,7 @@ pub const TerrainGenerator = struct {
     mountain_gain: f32,
     mountain_scale: f32,
 
-    pub fn init(conf: TerrainGeneratorConfig) TerrainGenerator {
+    pub fn init(conf: WorldConfig) TerrainGenerator {
         return .{
             .seed = conf.seed,
             .octaves = conf.octaves,
