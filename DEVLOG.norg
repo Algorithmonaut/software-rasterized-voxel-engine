@@ -65,6 +65,10 @@
 
   Also, the near plane is nearer than ever.
 
+* 04/04/26
+  Implemented XZ collisions + target velocity resolution. 
+  Implement Y collisions and gravity + jump (+ Y target velocity resolution as well).
+
 
   TODO: OPTIMIZE!!!!
   TODO: Proper player physics.

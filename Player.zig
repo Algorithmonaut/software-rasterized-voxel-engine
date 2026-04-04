@@ -225,6 +225,57 @@ pub const Player = struct {
         }
     }
 
+    fn moveY(self: *Player, world: *World, dy: f32) !void {
+        if (dy == 0) return;
+
+        const eps: f32 = 0.001;
+        const chunk_size: i32 = 32;
+
+        self.position[1] += dy;
+
+        var box = self.playerAABB();
+
+        const min_x: i32 = @intFromFloat(@floor(box.min[0]));
+        const min_y: i32 = @intFromFloat(@floor(box.min[1]));
+        const min_z: i32 = @intFromFloat(@floor(box.min[2]));
+
+        const max_x: i32 = @intFromFloat(@floor(box.max[0] - eps));
+        const max_y: i32 = @intFromFloat(@floor(box.max[1] - eps));
+        const max_z: i32 = @intFromFloat(@floor(box.max[2] - eps));
+
+        var x: i32 = min_x;
+        while (x <= max_x) : (x += 1) {
+            var y: i32 = min_y;
+            while (y <= max_y) : (y += 1) {
+                var z: i32 = min_z;
+                while (z <= max_z) : (z += 1) {
+                    const block_id = world.getBlockIdFromWorldCoordinates(
+                        .{ x, y, z },
+                        chunk_size,
+                    );
+
+                    if (block_id == BlockId.air) {
+                        continue;
+                    }
+
+                    const block_aabb = getBlockAABB(x, y, z);
+
+                    if (box.overlaps(block_aabb)) {
+                        if (dy > 0)
+                            self.position[1] = @as(f32, @floatFromInt(y)) - self.half_size[1] * 2 - eps
+                        else {
+                            self.position[1] = @as(f32, @floatFromInt(y + 1)) + eps;
+                            self.grounded = true;
+                        }
+
+                        self.velocity[1] = 0;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     pub fn update(self: *Player, world: *World) !void {
         self.camera.updateCameraTarget(
             self.frame_inputs.mouse_dx,
@@ -254,8 +305,8 @@ pub const Player = struct {
         if (self.frame_inputs.back) wish -= fwd_move;
         if (self.frame_inputs.right) wish += right;
         if (self.frame_inputs.left) wish -= right;
-        if (self.frame_inputs.up) wish += world_up;
-        if (self.frame_inputs.down) wish -= world_up;
+        // if (self.frame_inputs.up) wish += world_up;
+        // if (self.frame_inputs.down) wish -= world_up;
 
         // Normalize wish so diagonals aren't faster
         const wish_len2 = vec.dot_product(wish, wish);
@@ -273,18 +324,29 @@ pub const Player = struct {
         const move_speed: f32 = self.camera.speed;
         const desired_velocity = wish * @as(Vec3f, @splat(move_speed));
 
-        const new_vel = approachHorizontal(
+        var new_vel = approachHorizontal(
             self.velocity,
             desired_velocity,
             rate * self.frame_inputs.dt,
         );
 
+        const gravity = 40;
+        const jump_speed = 10;
+
+        new_vel[1] -= gravity * self.frame_inputs.dt;
+
+        if (self.grounded and self.frame_inputs.up) {
+            new_vel[1] = jump_speed;
+            self.grounded = false;
+        }
+
         self.velocity = new_vel;
 
         const delta = self.velocity * @as(Vec3f, @splat(self.frame_inputs.dt));
 
-        self.position[1] = 42.0;
+        self.grounded = false;
         try self.moveX(world, delta[0]);
+        try self.moveY(world, delta[1]);
         try self.moveZ(world, delta[2]);
 
         // self.position += new_vel * @as(Vec3f, @splat(self.frame_inputs.dt));

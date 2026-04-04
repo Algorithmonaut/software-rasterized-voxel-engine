@@ -22,7 +22,7 @@ const engine_config = EngineConfig{
         // .from = .{ 0, 60, 0 },
         .to = .{ 0, 40, -21 },
         // .speed = 100.0,
-        .speed = 5.0,
+        .speed = 8.0,
         .sensivity = 0.0025,
         .near = 0.1,
     },
