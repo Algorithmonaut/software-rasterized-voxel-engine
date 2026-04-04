@@ -17,11 +17,11 @@ const Profiler = @import("Profiler.zig").Profiler;
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 400.0,
-        .from = .{ 0, 40, -20 },
+        .view_distance = 300.0,
+        .from = .{ 0, 60, 0 },
         .to = .{ 0, 40, -21 },
-        .speed = 100.0,
-        // .speed = 15.0,
+        // .speed = 100.0,
+        .speed = 15.0,
         .sensivity = 0.0025,
         .near = 0.1,
     },
@@ -87,16 +87,30 @@ pub fn main() !void {
         var frame = try engine.beginFrame();
         defer engine.endFrame(&frame);
 
-        engine.camera.view_mat = mat.create_view(engine.camera.from, engine.camera.to);
-        engine.camera.combined_mat = engine.camera.proj_mat.mul(engine.camera.view_mat);
+        engine.platform.process_inputs(
+            frame.dt,
+            &engine.player,
+            &engine.graphics,
+            &engine.triangle_rasterizer,
+        );
+
+        engine.player.update();
+
+        engine.player.camera.view_mat = mat.create_view(
+            engine.player.camera.from,
+            engine.player.camera.to,
+        );
+        engine.player.camera.combined_mat = engine.player.camera.proj_mat.mul(
+            engine.player.camera.view_mat,
+        );
 
         var prof_scope = try main_prof.begin(.triangle_setup);
         try engine.renderer.renderWorld(
             allocator,
-            engine.camera.from,
+            engine.player.camera.from,
             engine.world.chunk_size,
             &engine.world,
-            &engine.camera,
+            &engine.player.camera,
             engine.terrain_generator,
         );
         prof_scope.end();
@@ -116,8 +130,6 @@ pub fn main() !void {
         if (engine_config.debug_config.show_occupied_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);
 
         if (engine_config.debug_config.show_fps) engine.platform.fps_counter_update();
-
-        engine.platform.process_inputs(frame.dt, &engine.camera, &engine.graphics, &engine.triangle_rasterizer);
 
         total_frame_ns += frame_timer.read();
 

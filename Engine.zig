@@ -2,7 +2,7 @@
 
 const std = @import("std");
 
-const Camera = @import("Camera.zig").Camera;
+const Player = @import("Player.zig").Player;
 const Renderer = @import("Renderer.zig").Renderer;
 const FrameContext = @import("FrameContext.zig").FrameContext;
 const SdlPlatform = @import("platform/SdlPlatform.zig").SdlPlatform;
@@ -20,7 +20,6 @@ const Vec3f = @import("math/types.zig").Vec3f;
 /// Owns global state
 pub const Engine = struct {
     allocator: std.mem.Allocator,
-    camera: Camera,
     renderer: Renderer,
     platform: SdlPlatform,
     graphics: SdlGraphics,
@@ -30,6 +29,7 @@ pub const Engine = struct {
     triangle_rasterizer: TriangleRasterizer,
     terrain_generator: TerrainGenerator,
     mesher: *Mesher,
+    player: Player,
 
     pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
         const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
@@ -44,7 +44,7 @@ pub const Engine = struct {
         try mesher.start();
 
         const terrain_generator = TerrainGenerator.init(conf.world_config);
-        const camera = Camera.init(
+        const player = Player.init(
             conf.camera_config,
             conf.framebuffer_config.width,
             conf.framebuffer_config.height,
@@ -57,7 +57,7 @@ pub const Engine = struct {
 
         return Engine{
             .allocator = allocator,
-            .camera = camera,
+            .player = player,
             .renderer = renderer,
             .platform = platform,
             .graphics = graphics,

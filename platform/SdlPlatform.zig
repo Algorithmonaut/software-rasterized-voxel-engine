@@ -6,8 +6,8 @@ const c = @cImport({
     @cInclude("SDL2/SDL.h");
 });
 const vec = @import("../math/vector.zig");
-const Camera = @import("../Camera.zig").Camera;
 const SdlGraphics = @import("SdlGraphics.zig").SdlGraphics;
+const Player = @import("../Player.zig").Player;
 
 const Vec3f = @import("../math/types.zig").Vec3f;
 
@@ -75,7 +75,7 @@ pub const SdlPlatform = struct {
     pub fn process_inputs(
         self: *SdlPlatform,
         dt: f32,
-        camera: *Camera,
+        player: *Player,
         sdl_gfx: *SdlGraphics,
         triangle_rasterizer: *TrianglesRasterizer,
     ) void {
@@ -127,16 +127,20 @@ pub const SdlPlatform = struct {
             }
 
             const keys = c.SDL_GetKeyboardState(null);
-            const mov_keys = Camera.MoveKeys{
+
+            player.frame_inputs = .{
                 .forward = keys[c.SDL_SCANCODE_W] != 0,
                 .back = keys[c.SDL_SCANCODE_S] != 0,
                 .right = keys[c.SDL_SCANCODE_D] != 0,
                 .left = keys[c.SDL_SCANCODE_A] != 0,
                 .up = keys[c.SDL_SCANCODE_SPACE] != 0,
                 .down = keys[c.SDL_SCANCODE_E] != 0,
-            };
 
-            camera.update(dx, dy, mov_keys, dt);
+                .mouse_dx = dx,
+                .mouse_dy = dy,
+
+                .dt = dt,
+            };
         }
     }
 };
