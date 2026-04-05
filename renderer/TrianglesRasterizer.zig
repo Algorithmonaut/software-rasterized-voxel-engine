@@ -81,9 +81,16 @@ inline fn renderTriangleInTile(
     atlas: *Atlas,
     render_wireframe: bool,
 ) void {
+    _ = render_wireframe;
     const e0 = triangle.e0;
     const e1 = triangle.e1;
     const e2 = triangle.e2;
+
+    const coverage_bias = Vec3i{
+        e0.top_left_bias + e0.cons_bias,
+        e1.top_left_bias + e1.cons_bias,
+        e2.top_left_bias + e2.cons_bias,
+    };
 
     const area = triangle.area;
     if (area == 0) return; // triangle is degenerate
@@ -112,14 +119,14 @@ inline fn renderTriangleInTile(
     const q1: Float = triangle.q1;
     const q2: Float = triangle.q2;
 
-    const avg_rec_depth: Float = (q0 + q1 + q2) / 3.0;
+    // const avg_rec_depth: Float = (q0 + q1 + q2) / 3.0;
 
     const tex_u = triangle.tex_u;
     var tex_v = triangle.tex_v;
 
     // P: Wireframe thickness
-    const base_thickness: Float = @floatFromInt(50000 << SUBPIXEL_BITS);
-    const thickness: i32 = @intFromFloat(base_thickness * avg_rec_depth);
+    // const base_thickness: Float = @floatFromInt(50000 << SUBPIXEL_BITS);
+    // const thickness: i32 = @intFromFloat(base_thickness * avg_rec_depth);
 
     // P: Attribute values multiplied by reciprocal depth
     const uv0: Uvf = triangle.uv0;
@@ -146,7 +153,7 @@ inline fn renderTriangleInTile(
     var u_num_row: Float = w0_origin_f * uq0 + w1_origin_f * uq1 + w2_origin_f * uq2;
     var v_num_row: Float = w0_origin_f * vq0 + w1_origin_f * vq1 + w2_origin_f * vq2;
 
-    // P: Incremental values (constant x/y derivatives) FOR depth/uv
+    // P: Incremental values (constant x/y derivatives) (for depth/uv + mip level)
     const e0_a_f: Float = @floatFromInt(e0.A);
     const e1_a_f: Float = @floatFromInt(e1.A);
     const e2_a_f: Float = @floatFromInt(e2.A);
@@ -165,7 +172,7 @@ inline fn renderTriangleInTile(
     const v_num_dx: Float = (e0_a_f * vq0 + e1_a_f * vq1 + e2_a_f * vq2) * px_step_f;
     const v_num_dy: Float = (e0_b_f * vq0 + e1_b_f * vq1 + e2_b_f * vq2) * px_step_f;
 
-    // P: Select mip level
+    // P: Mip level selection
     const du_over_dx = (u_num_dx * den_row - u_num_row * den_dx) /
         (den_row * den_row);
     const du_over_dy = (u_num_dy * den_row - u_num_row * den_dy) /
@@ -180,74 +187,68 @@ inline fn renderTriangleInTile(
     const rho = std.math.sqrt(@max(rho_x_2, rho_y_2));
     const mip = mipFromRho(rho, 4);
 
+    // TODO: REMOVE MAGIC NUMBER
     tex_v += mip * 16 * 3;
+
+    const color_buf = tile.buf;
+    const z_buf = tile.z_buf;
+    const texels = atlas.atlas;
+    const atlas_width = atlas.width;
 
     // P: Stepping
     var y: usize = 0;
-    while (y < tile_size) : (y += 1) {
+    while (y < tile_size) : ({
+        y += 1;
+        w_row += down_inc;
+        den_row += den_dy;
+        u_num_row += u_num_dy;
+        v_num_row += v_num_dy;
+    }) {
         const row_base: usize = y * tile_size;
 
         // Top-left rule and T-junction bias
-        var w = w_row + Vec3i{
-            e0.top_left_bias + e0.cons_bias,
-            e1.top_left_bias + e1.cons_bias,
-            e2.top_left_bias + e2.cons_bias,
-        };
-
+        var w = w_row + coverage_bias;
         var den: Float = den_row;
         var u_num: Float = u_num_row;
         var v_num: Float = v_num_row;
 
         var x: usize = 0;
-        while (x < tile_size) : (x += 1) {
-            defer {
-                w += right_inc;
-                den += den_dx;
-                u_num += u_num_dx;
-                v_num += v_num_dx;
-            }
-
+        while (x < tile_size) : ({
+            x += 1;
+            w += right_inc;
+            den += den_dx;
+            u_num += u_num_dx;
+            v_num += v_num_dx;
+        }) {
             if ((w[0] | w[1] | w[2]) < 0) continue;
-
-            if (render_wireframe) {
-                const w_thick = w - @as(Vec3i, @splat(thickness));
-                if ((w_thick[0] | w_thick[1] | w_thick[2]) >= 0) continue;
-            }
 
             const inv_z: Float = den * inv_area;
             const idx: usize = row_base + x;
 
-            if (inv_z <= tile.z_buf[idx]) continue;
-            tile.z_buf[idx] = inv_z;
+            if (inv_z <= z_buf[idx]) continue;
+            z_buf[idx] = inv_z;
 
             const rcp_den: Float = 1.0 / den;
 
-            const size_f: Float = @floatFromInt(triangle.tex_tile_size);
-            const u_wrap = @mod(u_num * rcp_den, size_f);
-            const v_wrap = @mod(v_num * rcp_den, size_f);
+            // const size_f: Float = @floatFromInt(triangle.tex_tile_size);
+            // const u_wrap = @mod(u_num * rcp_den, size_f);
+            // const v_wrap = @mod(v_num * rcp_den, size_f);
 
-            const u_tile = std.math.clamp(
-                @as(usize, @intFromFloat(u_wrap)),
-                0,
-                triangle.tex_tile_size - 1,
-            );
-            const v_tile = std.math.clamp(
-                @as(usize, @intFromFloat(v_wrap)),
-                0,
-                triangle.tex_tile_size - 1,
-            );
+            const mask: usize = triangle.tex_tile_size - 1;
+
+            // coord mod N == coord & (N - 1)
+            const u_texel: usize = @intFromFloat(u_num * rcp_den);
+            const v_texel: usize = @intFromFloat(v_num * rcp_den);
+
+            const u_tile: usize = u_texel & mask;
+            const v_tile: usize = v_texel & mask;
 
             const u: usize = tex_u + u_tile;
             const v: usize = tex_v + v_tile;
 
-            const tex_idx: usize = u + v * atlas.width;
-            tile.buf[idx] = atlas.atlas[tex_idx];
+            const tex_idx: usize = u + v * atlas_width;
+            color_buf[idx] = texels[tex_idx];
         }
-
-        w_row += down_inc;
-        den_row += den_dy;
-        u_num_row += u_num_dy;
-        v_num_row += v_num_dy;
     }
 }
 

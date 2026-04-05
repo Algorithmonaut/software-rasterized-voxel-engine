@@ -74,6 +74,7 @@
   seems hard.
   Implemented correct selection of mipmaps level.
 
+  TODO: Find out why  coord mod N   ==   coord & (N - 1)
   TODO: Understand mipFromRho
   TODO: Start using texture arrays instead.
   TODO: OPTIMIZE!!!!

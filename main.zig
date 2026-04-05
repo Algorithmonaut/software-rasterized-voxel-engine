@@ -17,7 +17,7 @@ const Profiler = @import("Profiler.zig").Profiler;
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 110.0,
-        .view_distance = 300.0,
+        .view_distance = 200.0,
         .sensitivity = 0.0025,
         .near = 0.1,
     },
