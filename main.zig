@@ -16,21 +16,32 @@ const Profiler = @import("Profiler.zig").Profiler;
 
 const engine_config = EngineConfig{
     .camera_config = .{
-        .fov = 90.0,
+        .fov = 110.0,
         .view_distance = 300.0,
-        .from = .{ 0, 43, 0 },
-        // .from = .{ 0, 60, 0 },
-        .to = .{ 0, 40, -21 },
-        // .speed = 100.0,
-        .speed = 8.0,
-        .sensivity = 0.0025,
+        .sensitivity = 0.0025,
         .near = 0.1,
     },
+    .player_config = .{
+        .initial_position = .{ 0.0, 60.0, 0.0 },
+        .half_size = .{ 0.3, 0.9, 0.3 },
+        .speed = 8.0,
+
+        .air_accel = 20,
+        .air_decel = 40,
+        .ground_accel = 120,
+        .ground_decel = 240,
+
+        .gravity = 40,
+        .jump_speed = 10,
+    },
+
     .framebuffer_config = .{
-        .width = 1920,
-        .height = 1080,
-        .scale = 1,
-        .tile_dimensions = 16,
+        // .width = 1920,
+        // .height = 1080,
+        .width = 1720,
+        .height = 720,
+        .scale = 2,
+        .tile_dimensions = 8,
     },
     .atlas_config = .{
         .width = 96,

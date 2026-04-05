@@ -45,6 +45,7 @@ pub const Engine = struct {
 
         const terrain_generator = TerrainGenerator.init(conf.world_config);
         const player = Player.init(
+            conf.player_config,
             conf.camera_config,
             conf.framebuffer_config.width,
             conf.framebuffer_config.height,

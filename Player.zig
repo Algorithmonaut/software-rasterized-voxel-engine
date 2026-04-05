@@ -1,16 +1,13 @@
-const std = @import("std");
-
 const Camera = @import("Camera.zig").Camera;
 const CameraConfig = @import("EngineConfig.zig").EngineConfig.CameraConfig;
+const PlayerConfig = @import("EngineConfig.zig").EngineConfig.PlayerConfig;
 
 const World = @import("World.zig").World;
-const Chunk = @import("Chunk.zig").Chunk;
 
 const BlockId = @import("world/Block.zig").BlockId;
 
 const types = @import("math/types.zig");
 const Vec3f = types.Vec3f;
-const Vec3i = types.Vec3i;
 
 const vec = @import("math/vector.zig");
 
@@ -41,22 +38,25 @@ pub const FrameInputs = struct {
 
 pub const Player = struct {
     /// Feet position
-    position: Vec3f,
     velocity: Vec3f = .{ 0.0, 0.0, 0.0 },
-    half_size: Vec3f,
     grounded: bool = true,
-
-    aabb: AABB,
 
     camera: Camera,
 
     frame_inputs: FrameInputs,
 
-    ground_accel: f32 = 120,
-    air_accel: f32 = 20,
+    position: Vec3f,
+    half_size: Vec3f,
 
-    ground_decel: f32 = 240,
-    air_decel: f32 = 40,
+    speed: f32,
+
+    ground_accel: f32,
+    ground_decel: f32,
+    air_accel: f32,
+    air_decel: f32,
+
+    gravity: f32,
+    jump_speed: f32,
 
     fn playerAABB(self: *Player) AABB {
         const position = self.position;
@@ -77,18 +77,29 @@ pub const Player = struct {
         };
     }
 
-    pub fn init(conf: CameraConfig, fb_width: usize, fb_height: usize) Player {
-        const camera = Camera.create(conf, fb_width, fb_height);
+    pub fn init(
+        conf: PlayerConfig,
+        cam_conf: CameraConfig,
+        fb_width: usize,
+        fb_height: usize,
+    ) Player {
+        const camera = Camera.create(cam_conf, fb_width, fb_height);
 
         return .{
-            .position = .{ 0.0, 60.0 - 1.8, 0.0 },
-            .half_size = .{ 0.3, 0.9, 0.3 },
-
             .camera = camera,
-
             .frame_inputs = .{},
 
-            .aabb = undefined,
+            .position = conf.initial_position,
+            .half_size = conf.half_size,
+            .speed = conf.speed,
+
+            .air_accel = conf.air_accel,
+            .air_decel = conf.air_decel,
+            .ground_accel = conf.ground_accel,
+            .ground_decel = conf.ground_decel,
+
+            .gravity = conf.gravity,
+            .jump_speed = conf.jump_speed,
         };
     }
 
@@ -265,7 +276,7 @@ pub const Player = struct {
                             self.position[1] = @as(f32, @floatFromInt(y)) - self.half_size[1] * 2 - eps
                         else {
                             self.position[1] = @as(f32, @floatFromInt(y + 1)) + eps;
-                            self.grounded = true;
+                            self.grounded = false;
                         }
 
                         self.velocity[1] = 0;
@@ -321,8 +332,7 @@ pub const Player = struct {
             (if (self.grounded) self.ground_decel else self.air_decel);
 
         // desired_velocity is a velocity in units per second
-        const move_speed: f32 = self.camera.speed;
-        const desired_velocity = wish * @as(Vec3f, @splat(move_speed));
+        const desired_velocity = wish * @as(Vec3f, @splat(self.speed));
 
         var new_vel = approachHorizontal(
             self.velocity,
@@ -330,13 +340,10 @@ pub const Player = struct {
             rate * self.frame_inputs.dt,
         );
 
-        const gravity = 40;
-        const jump_speed = 10;
-
-        new_vel[1] -= gravity * self.frame_inputs.dt;
+        new_vel[1] -= self.gravity * self.frame_inputs.dt;
 
         if (self.grounded and self.frame_inputs.up) {
-            new_vel[1] = jump_speed;
+            new_vel[1] = self.jump_speed;
             self.grounded = false;
         }
 

@@ -3,12 +3,24 @@ const WorldCoord = @import("math/types.zig").WorldCoord;
 pub const EngineConfig = struct {
     pub const CameraConfig = struct {
         fov: f32,
-        from: WorldCoord,
-        to: WorldCoord,
         view_distance: f32,
         near: f32,
+        sensitivity: f32,
+    };
+
+    pub const PlayerConfig = struct {
+        half_size: WorldCoord,
+        initial_position: WorldCoord,
+
+        ground_accel: f32,
+        air_accel: f32,
+        ground_decel: f32,
+        air_decel: f32,
+
+        gravity: f32,
+        jump_speed: f32,
+
         speed: f32,
-        sensivity: f32,
     };
 
     pub const FramebufferConfig = struct {
@@ -57,6 +69,7 @@ pub const EngineConfig = struct {
     };
 
     camera_config: CameraConfig,
+    player_config: PlayerConfig,
     framebuffer_config: FramebufferConfig,
     atlas_config: AtlasConfig,
     world_config: WorldConfig,

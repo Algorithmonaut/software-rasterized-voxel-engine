@@ -13,8 +13,7 @@ pub const Camera = struct {
     view_distance: f32,
     near: f32,
     fov: f32,
-    speed: f32,
-    sensivity: f32,
+    sensitivity: f32,
 
     view_mat: mat.Mat4f,
     proj_mat: mat.Mat4f,
@@ -34,13 +33,10 @@ pub const Camera = struct {
 
     pub fn create(conf: CameraConfig, fb_width: usize, fb_height: usize) Camera {
         return .{
-            .from = conf.from,
-            .to = conf.to,
             .view_distance = conf.view_distance,
             .near = conf.near,
             .fov = conf.fov,
-            .speed = conf.speed,
-            .sensivity = conf.sensivity,
+            .sensitivity = conf.sensitivity,
             .proj_mat = mat.create_projection_matrix(
                 conf.fov,
                 conf.view_distance,
@@ -49,6 +45,8 @@ pub const Camera = struct {
                 conf.near,
             ),
 
+            .from = .{ 0, 0, 0 },
+            .to = .{ 0, 0, 1 },
             .yaw = 0.0,
             .pitch = 0.0,
             .view_mat = undefined,
@@ -62,7 +60,7 @@ pub const Camera = struct {
         mouse_dy: i32,
     ) void {
         // P: Update camera target
-        const sens = self.sensivity;
+        const sens = self.sensitivity;
         var yaw = self.yaw;
         var pitch = self.pitch;
 
