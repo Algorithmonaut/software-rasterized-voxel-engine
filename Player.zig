@@ -39,7 +39,7 @@ pub const FrameInputs = struct {
 pub const Player = struct {
     /// Feet position
     velocity: Vec3f = .{ 0.0, 0.0, 0.0 },
-    grounded: bool = true,
+    grounded: bool = false,
 
     camera: Camera,
 
@@ -276,7 +276,7 @@ pub const Player = struct {
                             self.position[1] = @as(f32, @floatFromInt(y)) - self.half_size[1] * 2 - eps
                         else {
                             self.position[1] = @as(f32, @floatFromInt(y + 1)) + eps;
-                            self.grounded = false;
+                            self.grounded = true;
                         }
 
                         self.velocity[1] = 0;

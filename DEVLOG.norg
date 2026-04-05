@@ -70,9 +70,8 @@
   Implement Y collisions and gravity + jump (+ Y target velocity resolution as well).
 
 
+  TODO: Start using texture arrays instead.
   TODO: OPTIMIZE!!!!
-  TODO: Proper player physics.
-  TODO: Make the mesher multithreaded.
   TODO: Lod & mipmapping.
   TODO: More advanced terrain generation.
   TODO: Generate seed from time.

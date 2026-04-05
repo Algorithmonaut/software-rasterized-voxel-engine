@@ -45,16 +45,14 @@ const engine_config = EngineConfig{
     },
     .atlas_config = .{
         .width = 96,
-        .height = 48,
+        .height = 48 * 5,
         .tex_w = 16,
         .tex_h = 16,
-        .pixel_type = u32,
-        .channels_rgb = 3,
     },
     .debug_config = .{
         .show_fps = true,
         .show_occupied_tiles = false,
-        .show_tex_atlas = false,
+        .show_tex_atlas = true,
     },
     .world_config = .{
         .seed = 12345,

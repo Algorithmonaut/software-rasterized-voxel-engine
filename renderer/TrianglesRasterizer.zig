@@ -112,8 +112,18 @@ inline fn renderTriangleInTile(
     const q1: Float = triangle.q1;
     const q2: Float = triangle.q2;
 
-    // P: Wireframe thickness
     const avg_rec_depth: Float = (q0 + q1 + q2) / 3.0;
+
+    const tex_u = triangle.tex_u;
+    const tex_v = triangle.tex_v;
+
+    // const d = avg_rec_depth;
+    // const mip: usize =
+    //     if (d >= 0.90) 0 else if (d >= 0.50) 1 else if (d >= 0.22) 2 else if (d >= 0.10) 3 else 4;
+    //
+    // tex_v += 3 * 16 * mip;
+
+    // P: Wireframe thickness
     const base_thickness: Float = @floatFromInt(50000 << SUBPIXEL_BITS);
     const thickness: i32 = @intFromFloat(base_thickness * avg_rec_depth);
 
@@ -219,8 +229,8 @@ inline fn renderTriangleInTile(
                 triangle.tex_tile_size - 1,
             );
 
-            const u: usize = triangle.tex_u + u_tile;
-            const v: usize = triangle.tex_v + v_tile;
+            const u: usize = tex_u + u_tile;
+            const v: usize = tex_v + v_tile;
 
             const tex_idx: usize = u + v * atlas.width;
             tile.buf[idx] = atlas.atlas[tex_idx];

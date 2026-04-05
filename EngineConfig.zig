@@ -35,8 +35,6 @@ pub const EngineConfig = struct {
         height: usize,
         tex_w: usize,
         tex_h: usize,
-        pixel_type: type,
-        channels_rgb: usize,
     };
 
     pub const DebugConfig = struct {

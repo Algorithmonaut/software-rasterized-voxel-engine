@@ -4,10 +4,15 @@ const std = @import("std");
 const rgb_tex_bytes = (16 * 16) * 3;
 const xrgb_tex_bytes = (16 * 16) * 4;
 
-const blocks_count = 3;
-const atlas_bytes = blocks_count * 6 * xrgb_tex_bytes;
+const tex_dimensions: usize = 16;
 
-fn get_xrgb_from_file(filename: []const u8) ![xrgb_tex_bytes]u8 {
+const blocks_count = 3;
+const mips_level = 5;
+
+const atlas_bytes = blocks_count * 6 * xrgb_tex_bytes;
+const mip_atlas_bytes = atlas_bytes * mips_level;
+
+fn getXrgbFromFile(filename: []const u8) ![xrgb_tex_bytes]u8 {
     var file = try std.fs.cwd().openFile(filename, .{ .mode = .read_only });
     defer file.close();
 
@@ -36,7 +41,7 @@ fn get_xrgb_from_file(filename: []const u8) ![xrgb_tex_bytes]u8 {
     return tex;
 }
 
-fn write_atlas_to_file(atlas: [atlas_bytes]u8, filename: []const u8) !void {
+fn writeAtlasToFile(atlas: [mip_atlas_bytes]u8, filename: []const u8) !void {
     const cwd = std.fs.cwd();
 
     var file = try cwd.createFile(filename, .{ .truncate = true });
@@ -50,7 +55,7 @@ fn write_atlas_to_file(atlas: [atlas_bytes]u8, filename: []const u8) !void {
     try writer.flush();
 }
 
-fn blit_tile(
+fn blitTile(
     atlas: []u8,
     texture: *const [xrgb_tex_bytes]u8,
     col: usize,
@@ -64,8 +69,6 @@ fn blit_tile(
         const src_start = y * texture_stride;
         const src_end = src_start + texture_stride;
 
-        // FIX: using .* and not using it does not yields the same type,
-        // check for this in the rest of the code
         const src = texture.*[src_start..src_end];
 
         const dst_x = col * texture_stride;
@@ -78,27 +81,112 @@ fn blit_tile(
     }
 }
 
+fn getPixel(tex: []const u8, x: usize, y: usize) u32 {
+    const i = (y * tex_dimensions + x) * 4;
+    const b = @as(u32, tex[i + 0]);
+    const g = @as(u32, tex[i + 1]);
+    const r = @as(u32, tex[i + 2]);
+    const a = @as(u32, tex[i + 3]);
+    return (a << 24) | (r << 16) | (g << 8) | b;
+}
+
+fn setPixel(tex: []u8, x: usize, y: usize, pixel: u32) void {
+    const i = (y * tex_dimensions + x) * 4;
+    tex[i + 0] = @intCast(pixel & 0xFF);
+    tex[i + 1] = @intCast((pixel >> 8) & 0xFF);
+    tex[i + 2] = @intCast((pixel >> 16) & 0xFF);
+    tex[i + 3] = @intCast((pixel >> 24) & 0xFF);
+}
+
+// Looking only the first pixel is enough
+fn getLogicalPixel(tex: []const u8, level: usize, lx: usize, ly: usize) u32 {
+    const block_size = @as(usize, 1) << @as(u6, @intCast(level)); // 1, 2, 4, 8, 16
+    return getPixel(tex, lx * block_size, ly * block_size);
+}
+
+fn setLogicalPixelReplicated(
+    tex: []u8,
+    level: usize,
+    lx: usize,
+    ly: usize,
+    pixel: u32,
+) void {
+    const block_size = @as(usize, 1) << @as(u6, @intCast(level)); // 1, 2, 4, 8, 16
+
+    const start_x = lx * block_size;
+    const start_y = ly * block_size;
+
+    for (0..block_size) |dy|
+        for (0..block_size) |dx|
+            setPixel(tex, start_x + dx, start_y + dy, pixel);
+}
+
+fn average4(p0: u32, p1: u32, p2: u32, p3: u32) u32 {
+    const r = (((p0 >> 16) & 0xFF) + ((p1 >> 16) & 0xFF) +
+        ((p2 >> 16) & 0xFF) + ((p3 >> 16) & 0xFF) + 2) >> 2;
+    const g = (((p0 >> 8) & 0xFF) + ((p1 >> 8) & 0xFF) +
+        ((p2 >> 8) & 0xFF) + ((p3 >> 8) & 0xFF) + 2) >> 2;
+    const b = (((p0 >> 0) & 0xFF) + ((p1 >> 0) & 0xFF) +
+        ((p2 >> 0) & 0xFF) + ((p3 >> 0) & 0xFF) + 2) >> 2;
+
+    return (0xFF << 24) | (r << 16) | (g << 8) | b;
+}
+
+fn generateNextMip(
+    prev: []const u8,
+    next: []u8,
+    next_level: usize,
+) void {
+    @memset(next, 0);
+
+    const next_logical_size = tex_dimensions >> @as(u6, @intCast(next_level));
+
+    for (0..next_logical_size) |y| {
+        for (0..next_logical_size) |x| {
+            const p0 = getLogicalPixel(prev, next_level - 1, x * 2 + 0, y * 2 + 0);
+            const p1 = getLogicalPixel(prev, next_level - 1, x * 2 + 1, y * 2 + 0);
+            const p2 = getLogicalPixel(prev, next_level - 1, x * 2 + 0, y * 2 + 1);
+            const p3 = getLogicalPixel(prev, next_level - 1, x * 2 + 1, y * 2 + 1);
+
+            const avg = average4(p0, p1, p2, p3);
+            setLogicalPixelReplicated(next, next_level, x, y, avg);
+        }
+    }
+}
+
+fn generateBlockTexture(filename: []const u8) ![mips_level][xrgb_tex_bytes]u8 {
+    var result: [mips_level][xrgb_tex_bytes]u8 = undefined;
+
+    result[0] = try getXrgbFromFile(filename);
+
+    for (1..mips_level) |level|
+        generateNextMip(result[level - 1][0..], result[level][0..], level);
+
+    return result;
+}
+
 pub fn main() !void {
-    const dirt = try get_xrgb_from_file("dirt.rgb");
-    const stone = try get_xrgb_from_file("stone.rgb");
-    const grass_side = try get_xrgb_from_file("grass-side.rgb");
-    const grass_top = try get_xrgb_from_file("grass-top.rgb");
+    const dirt = try generateBlockTexture("dirt.rgb");
+    const stone = try generateBlockTexture("stone.rgb");
+    const grass_side = try generateBlockTexture("grass-side.rgb");
+    const grass_top = try generateBlockTexture("grass-top.rgb");
 
     // back front left right bottom top
-    const BlockFaces = [6]*const [xrgb_tex_bytes]u8;
+    const BlockFaces = [6]*const [mips_level][xrgb_tex_bytes]u8;
     const dirt_block: BlockFaces = .{ &dirt, &dirt, &dirt, &dirt, &dirt, &dirt };
     const stone_block: BlockFaces = .{ &stone, &stone, &stone, &stone, &stone, &stone };
     const grass_block: BlockFaces = .{ &grass_side, &grass_side, &grass_side, &grass_side, &dirt, &grass_top };
 
     const blocks: [blocks_count]*const BlockFaces = .{ &dirt_block, &stone_block, &grass_block };
 
-    var atlas: [atlas_bytes]u8 = undefined;
+    var atlas: [mip_atlas_bytes]u8 = undefined;
 
-    for (blocks, 0..) |block, block_row| {
-        for (block.*, 0..) |face, face_col| {
-            blit_tile(atlas[0..], face, face_col, block_row);
-        }
-    }
+    for (blocks, 0..) |block, block_row|
+        for (block.*, 0..) |face, face_col|
+            for (face.*, 0..) |mip, mip_row|
+                blitTile(atlas[0..], &mip, face_col, mip_row * blocks_count + block_row);
 
-    try write_atlas_to_file(atlas, "atlas.argb");
+    try writeAtlasToFile(atlas, "atlas.argb");
+
+    try writeAtlasToFile(atlas, "atlas.argb");
 }
