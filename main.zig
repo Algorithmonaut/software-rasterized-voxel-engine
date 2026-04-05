@@ -38,9 +38,11 @@ const engine_config = EngineConfig{
     .framebuffer_config = .{
         // .width = 1920,
         // .height = 1080,
-        .width = 1720,
-        .height = 720,
-        .scale = 2,
+        // .width = 1720,
+        // .height = 720,
+        .width = 3440,
+        .height = 1440,
+        .scale = 1,
         .tile_dimensions = 8,
     },
     .atlas_config = .{

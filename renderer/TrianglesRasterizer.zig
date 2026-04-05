@@ -28,18 +28,14 @@ const step_y_size = 1;
 const I8 = @Vector(8, i32);
 const F8 = @Vector(8, f32);
 
-// FIX: TEMPORARY FIX use i64 for triangles that intersect the near plane
-// to be rendered properly, later change to i32 but consider origin at raster center
 pub const Edge = struct {
-    // Edge function can be refactored: E(x,y) = Ax + By + C with A B C constants
     A: i32,
     B: i32,
-    C: i32, // WARN: Change to i64 if overflow
+    C: i32,
 
     top_left_bias: i32,
     cons_bias: i32, // conservative offset used to mitigate T-junctions cracks
 
-    /// Evaluate the point (x, y) against the edge
     inline fn eval(self: Edge, x: i32, y: i32) i32 {
         return self.A * x + self.B * y + self.C;
     }
@@ -58,12 +54,9 @@ inline fn makeEdge(a: @Vector(2, i32), b: @Vector(2, i32)) Edge {
     const eA = y1 - y0;
     const eB = x0 - x1;
 
-    // const px = 1;
-
     const tx: i32 = if (eA >= 0) 1 else 0;
     const ty: i32 = if (eB >= 0) 1 else 0;
 
-    // E(x,y) = (y1 - y0)*x + (x0 - x1)*y + (y0*x1 - x0*y1)
     return .{
         .A = eA,
         .B = eB,
@@ -71,6 +64,15 @@ inline fn makeEdge(a: @Vector(2, i32), b: @Vector(2, i32)) Edge {
         .top_left_bias = if (is_top_left) 0 else -1,
         .cons_bias = eA * tx + eB * ty,
     };
+}
+
+// Effectively mip = floor(log2(rho))
+inline fn mipFromRho(rho_in: f32, max_mip: u32) u32 {
+    const rho = @max(rho_in, 1.0);
+    const bits: u32 = @bitCast(rho);
+    const exp: i32 = @as(i32, @intCast((bits >> 23) & 0xff)) - 127;
+    const mip: i32 = @max(exp, 0);
+    return @min(@as(u32, @intCast(mip)), max_mip);
 }
 
 inline fn renderTriangleInTile(
@@ -88,8 +90,6 @@ inline fn renderTriangleInTile(
 
     const inv_area = triangle.inv_area;
 
-    // const tx0: i32 = @intCast(tile.pos[0]);
-    // const ty0: i32 = @intCast(tile.pos[1]);
     const tx0_fx: i32 = (@as(i32, @intCast(tile.pos[0])) << SUBPIXEL_BITS) + HALF_SUBPIXEL;
     const ty0_fx: i32 = (@as(i32, @intCast(tile.pos[1])) << SUBPIXEL_BITS) + HALF_SUBPIXEL;
 
@@ -115,13 +115,7 @@ inline fn renderTriangleInTile(
     const avg_rec_depth: Float = (q0 + q1 + q2) / 3.0;
 
     const tex_u = triangle.tex_u;
-    const tex_v = triangle.tex_v;
-
-    // const d = avg_rec_depth;
-    // const mip: usize =
-    //     if (d >= 0.90) 0 else if (d >= 0.50) 1 else if (d >= 0.22) 2 else if (d >= 0.10) 3 else 4;
-    //
-    // tex_v += 3 * 16 * mip;
+    var tex_v = triangle.tex_v;
 
     // P: Wireframe thickness
     const base_thickness: Float = @floatFromInt(50000 << SUBPIXEL_BITS);
@@ -171,6 +165,23 @@ inline fn renderTriangleInTile(
     const v_num_dx: Float = (e0_a_f * vq0 + e1_a_f * vq1 + e2_a_f * vq2) * px_step_f;
     const v_num_dy: Float = (e0_b_f * vq0 + e1_b_f * vq1 + e2_b_f * vq2) * px_step_f;
 
+    // P: Select mip level
+    const du_over_dx = (u_num_dx * den_row - u_num_row * den_dx) /
+        (den_row * den_row);
+    const du_over_dy = (u_num_dy * den_row - u_num_row * den_dy) /
+        (den_row * den_row);
+    const dv_over_dx = (v_num_dx * den_row - v_num_row * den_dx) /
+        (den_row * den_row);
+    const dv_over_dy = (v_num_dy * den_row - v_num_row * den_dy) /
+        (den_row * den_row);
+
+    const rho_x_2 = du_over_dx * du_over_dx + dv_over_dx * dv_over_dx;
+    const rho_y_2 = du_over_dy * du_over_dy + dv_over_dy * dv_over_dy;
+    const rho = std.math.sqrt(@max(rho_x_2, rho_y_2));
+    const mip = mipFromRho(rho, 4);
+
+    tex_v += mip * 16 * 3;
+
     // P: Stepping
     var y: usize = 0;
     while (y < tile_size) : (y += 1) {
@@ -210,9 +221,6 @@ inline fn renderTriangleInTile(
             tile.z_buf[idx] = inv_z;
 
             const rcp_den: Float = 1.0 / den;
-
-            // const u_f = std.math.clamp(u_num * rcp_den, 0.0, max_u_f);
-            // const v_f = std.math.clamp(v_num * rcp_den, 0.0, max_v_f);
 
             const size_f: Float = @floatFromInt(triangle.tex_tile_size);
             const u_wrap = @mod(u_num * rcp_den, size_f);

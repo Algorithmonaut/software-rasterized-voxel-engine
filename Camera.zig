@@ -59,7 +59,6 @@ pub const Camera = struct {
         mouse_dx: i32,
         mouse_dy: i32,
     ) void {
-        // P: Update camera target
         const sens = self.sensitivity;
         var yaw = self.yaw;
         var pitch = self.pitch;

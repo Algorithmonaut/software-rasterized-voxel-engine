@@ -69,7 +69,12 @@
   Implemented XZ collisions + target velocity resolution. 
   Implement Y collisions and gravity + jump (+ Y target velocity resolution as well).
 
+* 05/04/26
+  Implemented mipmaps generation in atlas, but the implementation in the engine
+  seems hard.
+  Implemented correct selection of mipmaps level.
 
+  TODO: Understand mipFromRho
   TODO: Start using texture arrays instead.
   TODO: OPTIMIZE!!!!
   TODO: Lod & mipmapping.
