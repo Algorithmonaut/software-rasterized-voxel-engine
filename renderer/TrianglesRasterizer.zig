@@ -5,6 +5,7 @@ const Tile = @import("../tile.zig").Tile;
 const Atlas = @import("../Atlas.zig").Atlas;
 const TilePool = @import("../tile.zig").TilePool;
 const Framebuffer = @import("../Framebuffer.zig").Framebuffer;
+const Fog = @import("Fog.zig").Fog;
 
 const Float = @import("../math/types.zig").Float;
 const Vec3i = @import("../math/types.zig").Vec3i;
@@ -19,6 +20,8 @@ const HALF_SUBPIXEL = types.HALF_SUBPIXEL;
 
 const Uvf = @Vector(2, Float);
 const Vec2i = @Vector(2, i32);
+
+const fog_struct = Fog{};
 
 /////// NEW IMPL
 
@@ -80,6 +83,7 @@ inline fn renderTriangleInTile(
     tile: *Tile,
     atlas: *Atlas,
     render_wireframe: bool,
+    fog: Fog,
 ) void {
     _ = render_wireframe;
     const e0 = triangle.e0;
@@ -228,6 +232,14 @@ inline fn renderTriangleInTile(
             if (inv_z <= z_buf[idx]) continue;
             z_buf[idx] = inv_z;
 
+            const fog_z: Float = 1.0 / inv_z;
+            const f: Float = fog.fogFactor(fog_z);
+
+            if (f <= 0.0) {
+                color_buf[idx] = fog.color;
+                continue;
+            }
+
             const u_f = u_num / den;
             const v_f = v_num / den;
 
@@ -241,9 +253,14 @@ inline fn renderTriangleInTile(
             const u: usize = tex_u + u_tile;
             const v: usize = tex_v + v_tile;
 
-            const tex_idx: usize = std.math.clamp(u + v * atlas_width, 0, atlas_width * atlas_height);
+            const tex_idx: usize = std.math.clamp(
+                u + v * atlas_width,
+                0,
+                atlas_width * atlas_height,
+            );
 
-            color_buf[idx] = texels[tex_idx];
+            const texel = texels[tex_idx];
+            color_buf[idx] = if (f >= 1.0) texel else fog.blendFogARGB8(texel, f);
         }
     }
 }
@@ -280,7 +297,7 @@ fn tileWorker(
 
             for (tile_refs[start..end]) |tri_i_u| {
                 const tri_i: usize = @intCast(tri_i_u);
-                renderTriangleInTile(&triangles[tri_i], t, atlas, render_wireframe);
+                renderTriangleInTile(&triangles[tri_i], t, atlas, render_wireframe, fog_struct);
             }
 
             t.write_to_fb(buf);
