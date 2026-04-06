@@ -187,13 +187,13 @@ inline fn renderTriangleInTile(
     const rho = std.math.sqrt(@max(rho_x_2, rho_y_2));
     const mip = mipFromRho(rho, 4);
 
-    // TODO: REMOVE MAGIC NUMBER
-    tex_v += mip * 16 * 3;
+    tex_v += mip * atlas.tex_h * atlas.block_count;
 
     const color_buf = tile.buf;
     const z_buf = tile.z_buf;
     const texels = atlas.atlas;
     const atlas_width = atlas.width;
+    const atlas_height = atlas.height;
 
     // P: Stepping
     var y: usize = 0;
@@ -228,25 +228,21 @@ inline fn renderTriangleInTile(
             if (inv_z <= z_buf[idx]) continue;
             z_buf[idx] = inv_z;
 
-            const rcp_den: Float = 1.0 / den;
+            const u_f = u_num / den;
+            const v_f = v_num / den;
 
-            // const size_f: Float = @floatFromInt(triangle.tex_tile_size);
-            // const u_wrap = @mod(u_num * rcp_den, size_f);
-            // const v_wrap = @mod(v_num * rcp_den, size_f);
+            const u_i: i32 = @intFromFloat(@floor(u_f));
+            const v_i: i32 = @intFromFloat(@floor(v_f));
 
-            const mask: usize = triangle.tex_tile_size - 1;
-
-            // coord mod N == coord & (N - 1)
-            const u_texel: usize = @intFromFloat(u_num * rcp_den);
-            const v_texel: usize = @intFromFloat(v_num * rcp_den);
-
-            const u_tile: usize = u_texel & mask;
-            const v_tile: usize = v_texel & mask;
+            const mask_i: i32 = @intCast(triangle.tex_tile_size - 1);
+            const u_tile: usize = @intCast(u_i & mask_i);
+            const v_tile: usize = @intCast(v_i & mask_i);
 
             const u: usize = tex_u + u_tile;
             const v: usize = tex_v + v_tile;
 
-            const tex_idx: usize = u + v * atlas_width;
+            const tex_idx: usize = std.math.clamp(u + v * atlas_width, 0, atlas_width * atlas_height);
+
             color_buf[idx] = texels[tex_idx];
         }
     }

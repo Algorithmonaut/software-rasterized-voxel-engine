@@ -29,6 +29,8 @@ pub const Atlas = struct {
     tex_h: usize,
     size: usize,
 
+    block_count: usize,
+
     pub fn init(allocator: std.mem.Allocator, conf: AtlasConfig) !Atlas {
         const atlas_size = conf.width * conf.height;
         const atlas_size_rgb = conf.width * conf.height * 4;
@@ -61,6 +63,7 @@ pub const Atlas = struct {
             .tex_w = conf.tex_w,
             .tex_h = conf.tex_h,
             .size = atlas_size,
+            .block_count = 3,
         };
     }
 

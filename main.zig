@@ -36,12 +36,12 @@ const engine_config = EngineConfig{
     },
 
     .framebuffer_config = .{
-        // .width = 1920,
-        // .height = 1080,
+        .width = 1920,
+        .height = 1080,
         // .width = 1720,
         // .height = 720,
-        .width = 3440,
-        .height = 1440,
+        // .width = 3440,
+        // .height = 1440,
         .scale = 1,
         .tile_dimensions = 8,
     },
@@ -123,7 +123,7 @@ pub fn main() !void {
             engine.world.chunk_size,
             &engine.world,
             &engine.player.camera,
-            engine.terrain_generator,
+            &engine.terrain_generator,
         );
         prof_scope.end();
 

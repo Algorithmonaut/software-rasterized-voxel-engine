@@ -64,7 +64,7 @@ pub const World = struct {
         const chunk_pos: Vec3i = @divFloor(coord, chunk_size_vec);
         const local_pos: @Vector(3, usize) = @intCast(@mod(coord, chunk_size_vec));
 
-        if (self.getChunk(chunk_pos)) |chunk| return chunk.voxels[
+        if (self.getChunk(chunk_pos)) |chunk| return chunk.lods.lod0[
             local_pos[0] + local_pos[1] * chunk_size_u +
                 local_pos[2] * chunk_size_u * chunk_size_u
         ];
@@ -75,7 +75,7 @@ pub const World = struct {
     pub fn ensureChunk(
         self: *World,
         coord: ChunkCoord,
-        terrain_generator: TerrainGenerator,
+        terrain_generator: *TerrainGenerator,
     ) !*Chunk {
         const key = chunkKey(coord);
 
@@ -93,7 +93,6 @@ pub const World = struct {
             self,
             terrain_generator,
         );
-        errdefer chunk_ptr.deinit(self.allocator);
 
         try self.chunks.put(key, chunk_ptr);
         return chunk_ptr;

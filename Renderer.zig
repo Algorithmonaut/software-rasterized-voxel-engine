@@ -488,7 +488,7 @@ pub const Renderer = struct {
         chunk_size: usize,
         world: *World,
         camera: *Camera,
-        terrain_generator: TerrainGenerator,
+        terrain_generator: *TerrainGenerator,
     ) !void {
         const chunk_size_i: i32 = @intCast(chunk_size);
         const player_chunk = worldToChunkCoord(player_pos, chunk_size_i);

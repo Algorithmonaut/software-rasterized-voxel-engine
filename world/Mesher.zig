@@ -561,12 +561,12 @@ pub fn generateMesh(
     buildZPlanes(chunk, world, &pos_z_planes, &neg_z_planes);
 
     for (0..size) |i| {
-        try greedyMergePlane(&mesh, allocator, chunk.voxels, size, .pos_x, i, pos_x_planes[i]);
-        try greedyMergePlane(&mesh, allocator, chunk.voxels, size, .neg_x, i, neg_x_planes[i]);
-        try greedyMergePlane(&mesh, allocator, chunk.voxels, size, .pos_y, i, pos_y_planes[i]);
-        try greedyMergePlane(&mesh, allocator, chunk.voxels, size, .neg_y, i, neg_y_planes[i]);
-        try greedyMergePlane(&mesh, allocator, chunk.voxels, size, .pos_z, i, pos_z_planes[i]);
-        try greedyMergePlane(&mesh, allocator, chunk.voxels, size, .neg_z, i, neg_z_planes[i]);
+        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .pos_x, i, pos_x_planes[i]);
+        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .neg_x, i, neg_x_planes[i]);
+        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .pos_y, i, pos_y_planes[i]);
+        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .neg_y, i, neg_y_planes[i]);
+        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .pos_z, i, pos_z_planes[i]);
+        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .neg_z, i, neg_z_planes[i]);
     }
 
     chunk.mesh.clearAndFree(allocator);
