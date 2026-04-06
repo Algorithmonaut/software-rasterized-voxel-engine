@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Chunk = @import("../Chunk.zig").Chunk;
+const BitfieldViews = @import("../Chunk.zig").BitfieldViews;
 const Atlas = @import("../Atlas.zig").Atlas;
 const World = @import("../World.zig").World;
 
@@ -15,6 +16,8 @@ const Vec3i = types.Vec3i;
 const PosVec = @Vector(3, usize);
 
 const PlaneSet = [32][32]u32;
+
+const CHUNK_SIZE = @import("../Chunk.zig").CHUNK_SIZE;
 
 const FaceTemplate = struct {
     p0: Vec3i,
@@ -48,7 +51,7 @@ fn generateAtlasTileLocalUVs(tex_w: usize, tex_h: usize) UvCoord {
     };
 }
 
-// P: BINARY CULLED MESHER | GENERATE PLANES ///////////////////////////////////
+// BINARY CULLED MESHER | GENERATE PLANES //////////////////////////////////////
 
 inline fn voxelIndex(size: usize, x: usize, y: usize, z: usize) usize {
     return x + y * size + z * size * size;
@@ -89,39 +92,25 @@ fn scatterMaskX(
 }
 
 fn buildXPlanes(
-    chunk: *const Chunk,
-    world: *World,
+    solid_x: *[32][32]u32,
+    pos_x_neighbor_solid_x: ?*[32][32]u32,
+    neg_x_neightbor_solid_x: ?*[32][32]u32,
     pos_x_planes: *PlaneSet,
     neg_x_planes: *PlaneSet,
 ) void {
-    const size = chunk.dimensions;
-
-    const pos_neighbor = world.getChunk(.{
-        chunk.coord[0] + 1,
-        chunk.coord[1],
-        chunk.coord[2],
-    });
-
-    const neg_neighbor = world.getChunk(.{
-        chunk.coord[0] - 1,
-        chunk.coord[1],
-        chunk.coord[2],
-    });
-
-    // if (pos_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
-    // if (neg_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
+    const size = CHUNK_SIZE;
 
     for (0..size) |y| {
         for (0..size) |z| {
-            const row = chunk.bitfields.solid_x[y][z];
+            const row = solid_x[y][z];
 
-            const pos_mask = if (pos_neighbor) |adjacent|
-                visiblePosWithNeighbor(row, adjacent.bitfields.solid_x[y][z] & @as(u32, 1))
+            const pos_mask = if (pos_x_neighbor_solid_x) |adjacent|
+                visiblePosWithNeighbor(row, adjacent[y][z] & @as(u32, 1))
             else
                 visiblePos(row);
 
-            const neg_mask = if (neg_neighbor) |adjacent|
-                visibleNegWithNeighbor(row, (adjacent.bitfields.solid_x[y][z] >> 31) & @as(u32, 1))
+            const neg_mask = if (neg_x_neightbor_solid_x) |adjacent|
+                visibleNegWithNeighbor(row, (adjacent[y][z] >> 31) & @as(u32, 1))
             else
                 visibleNeg(row);
 
@@ -148,39 +137,25 @@ fn scatterMaskY(
 }
 
 fn buildYPlanes(
-    chunk: *const Chunk,
-    world: *World,
+    solid_y: *[32][32]u32,
+    pos_y_neighbor_solid_y: ?*[32][32]u32,
+    neg_y_neightbor_solid_y: ?*[32][32]u32,
     pos_y_planes: *PlaneSet,
     neg_y_planes: *PlaneSet,
 ) void {
-    const size = chunk.dimensions;
-
-    const pos_neighbor = world.getChunk(.{
-        chunk.coord[0],
-        chunk.coord[1] + 1,
-        chunk.coord[2],
-    });
-
-    const neg_neighbor = world.getChunk(.{
-        chunk.coord[0],
-        chunk.coord[1] - 1,
-        chunk.coord[2],
-    });
-
-    // if (pos_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
-    // if (neg_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
+    const size = CHUNK_SIZE;
 
     for (0..size) |x| {
         for (0..size) |z| {
-            const row = chunk.bitfields.solid_y[x][z];
+            const row = solid_y[x][z];
 
-            const pos_mask = if (pos_neighbor) |adjacent|
-                visiblePosWithNeighbor(row, adjacent.bitfields.solid_y[x][z] & @as(u32, 1))
+            const pos_mask = if (pos_y_neighbor_solid_y) |adjacent|
+                visiblePosWithNeighbor(row, adjacent[x][z] & @as(u32, 1))
             else
                 visiblePos(row);
 
-            const neg_mask = if (neg_neighbor) |adjacent|
-                visibleNegWithNeighbor(row, (adjacent.bitfields.solid_y[x][z] >> 31) & @as(u32, 1))
+            const neg_mask = if (neg_y_neightbor_solid_y) |adjacent|
+                visibleNegWithNeighbor(row, (adjacent[x][z] >> 31) & @as(u32, 1))
             else
                 visibleNeg(row);
 
@@ -207,39 +182,25 @@ fn scatterMaskZ(
 }
 
 fn buildZPlanes(
-    chunk: *const Chunk,
-    world: *World,
+    solid_z: *[32][32]u32,
+    pos_z_neighbor_solid_z: ?*[32][32]u32,
+    neg_z_neighbor_solid_z: ?*[32][32]u32,
     pos_z_planes: *PlaneSet,
     neg_z_planes: *PlaneSet,
 ) void {
-    const size = chunk.dimensions;
-
-    const pos_neighbor = world.getChunk(.{
-        chunk.coord[0],
-        chunk.coord[1],
-        chunk.coord[2] + 1,
-    });
-
-    const neg_neighbor = world.getChunk(.{
-        chunk.coord[0],
-        chunk.coord[1],
-        chunk.coord[2] - 1,
-    });
-
-    // if (pos_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
-    // if (neg_neighbor) |adjacent| std.debug.assert(!adjacent.dirty);
+    const size = CHUNK_SIZE;
 
     for (0..size) |x| {
         for (0..size) |y| {
-            const row = chunk.bitfields.solid_z[x][y];
+            const row = solid_z[x][y];
 
-            const pos_mask = if (pos_neighbor) |adjacent|
-                visiblePosWithNeighbor(row, adjacent.bitfields.solid_z[x][y] & @as(u32, 1))
+            const pos_mask = if (pos_z_neighbor_solid_z) |adjacent|
+                visiblePosWithNeighbor(row, adjacent[x][y] & @as(u32, 1))
             else
                 visiblePos(row);
 
-            const neg_mask = if (neg_neighbor) |adjacent|
-                visibleNegWithNeighbor(row, (adjacent.bitfields.solid_z[x][y] >> 31) & @as(u32, 1))
+            const neg_mask = if (neg_z_neighbor_solid_z) |adjacent|
+                visibleNegWithNeighbor(row, (adjacent[x][y] >> 31) & @as(u32, 1))
             else
                 visibleNeg(row);
 
@@ -249,7 +210,7 @@ fn buildZPlanes(
     }
 }
 
-//// P: GREEDY MESHER //////////////////////////////////////////////////////////
+//// GREEDY MESHER /////////////////////////////////////////////////////////////
 
 const QuadLocalUv = struct {
     uv0: UV,
@@ -536,44 +497,85 @@ fn greedyMergePlane(
     }
 }
 
-//// P: MAIN ///////////////////////////////////////////////////////////////////
+//// MAIN //////////////////////////////////////////////////////////////////////
+
+pub fn generateLodMesh(
+    world: *World,
+    voxels: []const BlockId, // always 32^3 for now
+    bitfields: *BitfieldViews,
+    coord: Vec3i,
+    allocator: std.mem.Allocator,
+    mesh: *std.ArrayList(Quad),
+) !void {
+    const size = CHUNK_SIZE;
+
+    var pos_x_planes = std.mem.zeroes(PlaneSet);
+    var neg_x_planes = std.mem.zeroes(PlaneSet);
+    var pos_y_planes = std.mem.zeroes(PlaneSet);
+    var neg_y_planes = std.mem.zeroes(PlaneSet);
+    var pos_z_planes = std.mem.zeroes(PlaneSet);
+    var neg_z_planes = std.mem.zeroes(PlaneSet);
+
+    mesh.clearRetainingCapacity();
+
+    //// X AXIS ////
+
+    const pos_x_neighbor = world.getChunk(.{ coord[0] + 1, coord[1], coord[2] });
+    const neg_x_neighbor = world.getChunk(.{ coord[0] - 1, coord[1], coord[2] });
+
+    buildXPlanes(
+        &bitfields.solid_x,
+        if (pos_x_neighbor) |adj| &adj.bitfields.solid_x else null,
+        if (neg_x_neighbor) |adj| &adj.bitfields.solid_x else null,
+        &pos_x_planes,
+        &neg_x_planes,
+    );
+
+    //// Y AXIS ////
+
+    const pos_y_neighbor = world.getChunk(.{ coord[0], coord[1] + 1, coord[2] });
+    const neg_y_neighbor = world.getChunk(.{ coord[0], coord[1] - 1, coord[2] });
+
+    buildYPlanes(
+        &bitfields.solid_y,
+        if (pos_y_neighbor) |adj| &adj.bitfields.solid_y else null,
+        if (neg_y_neighbor) |adj| &adj.bitfields.solid_y else null,
+        &pos_y_planes,
+        &neg_y_planes,
+    );
+
+    //// Z AXIS ////
+
+    const pos_z_neighbor = world.getChunk(.{ coord[0], coord[1], coord[2] + 1 });
+    const neg_z_neighbor = world.getChunk(.{ coord[0], coord[1], coord[2] - 1 });
+
+    buildZPlanes(
+        &bitfields.solid_z,
+        if (pos_z_neighbor) |adj| &adj.bitfields.solid_z else null,
+        if (neg_z_neighbor) |adj| &adj.bitfields.solid_z else null,
+        &pos_z_planes,
+        &neg_z_planes,
+    );
+
+    for (0..size) |i| {
+        try greedyMergePlane(mesh, allocator, voxels, size, .pos_x, i, pos_x_planes[i]);
+        try greedyMergePlane(mesh, allocator, voxels, size, .neg_x, i, neg_x_planes[i]);
+        try greedyMergePlane(mesh, allocator, voxels, size, .pos_y, i, pos_y_planes[i]);
+        try greedyMergePlane(mesh, allocator, voxels, size, .neg_y, i, neg_y_planes[i]);
+        try greedyMergePlane(mesh, allocator, voxels, size, .pos_z, i, pos_z_planes[i]);
+        try greedyMergePlane(mesh, allocator, voxels, size, .neg_z, i, neg_z_planes[i]);
+    }
+}
 
 pub fn generateMesh(
     chunk: *Chunk,
     world: *World,
     allocator: std.mem.Allocator,
 ) !void {
-    var pos_x_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
-    var neg_x_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
-
-    var pos_y_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
-    var neg_y_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
-
-    var pos_z_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
-    var neg_z_planes: PlaneSet = [_][32]u32{[_]u32{0} ** 32} ** 32;
-
-    const size = chunk.dimensions;
-
-    var mesh = try std.ArrayList(Quad).initCapacity(allocator, size);
-
-    buildXPlanes(chunk, world, &pos_x_planes, &neg_x_planes);
-    buildYPlanes(chunk, world, &pos_y_planes, &neg_y_planes);
-    buildZPlanes(chunk, world, &pos_z_planes, &neg_z_planes);
-
-    for (0..size) |i| {
-        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .pos_x, i, pos_x_planes[i]);
-        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .neg_x, i, neg_x_planes[i]);
-        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .pos_y, i, pos_y_planes[i]);
-        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .neg_y, i, neg_y_planes[i]);
-        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .pos_z, i, pos_z_planes[i]);
-        try greedyMergePlane(&mesh, allocator, chunk.lods.lod0[0..], size, .neg_z, i, neg_z_planes[i]);
-    }
-
-    chunk.mesh.clearAndFree(allocator);
-    chunk.mesh = mesh;
+    try generateLodMesh(world, &chunk.lods.lod0, &chunk.bitfields, chunk.coord, allocator, &chunk.meshes.lod0);
 }
 
-//// P: JOB ////////////////////////////////////////////////////////////////////
+//// JOB ///////////////////////////////////////////////////////////////////////
 
 pub const ChunkJob = struct {
     chunk: *Chunk,
@@ -654,4 +656,12 @@ pub const Mesher = struct {
             job.chunk.meshing = false;
         }
     }
+};
+
+//// MESHING INPUT /////////////////////////////////////////////////////////////
+
+const MeshingInput = struct {
+    voxels: []const BlockId, // always 32^3 for now
+    bitfields: BitfieldViews,
+    coord: Vec3i,
 };

@@ -534,7 +534,7 @@ pub const Renderer = struct {
         }.lessThan);
 
         for (self.chunk_entries.items) |chunk| {
-            for (chunk.chunk.mesh.items) |quad| {
+            for (chunk.chunk.meshes.lod0.items) |quad| {
                 const world_quad = WorldQuad{
                     .v0 = worldVertexFromChunkVertex(quad.v0, chunk.chunk.coord, chunk.chunk.dimensions),
                     .v1 = worldVertexFromChunkVertex(quad.v1, chunk.chunk.coord, chunk.chunk.dimensions),

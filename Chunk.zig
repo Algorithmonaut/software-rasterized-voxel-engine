@@ -164,25 +164,48 @@ pub fn createBitfields(voxels: []BlockId) BitfieldViews {
     return bitfields_out;
 }
 
+//// MESH DATA /////////////////////////////////////////////////////////////////
+
+const ChunkMeshes = struct {
+    lod0: std.ArrayList(Quad),
+    lod1: std.ArrayList(Quad),
+    lod2: std.ArrayList(Quad),
+    lod3: std.ArrayList(Quad),
+    lod4: std.ArrayList(Quad),
+
+    fn init(allocator: std.mem.Allocator) !ChunkMeshes {
+        return .{
+            .lod0 = try std.ArrayList(Quad).initCapacity(allocator, CHUNK_SIZE),
+            .lod1 = try std.ArrayList(Quad).initCapacity(allocator, LOD1_CHUNK_SIZE),
+            .lod2 = try std.ArrayList(Quad).initCapacity(allocator, LOD2_CHUNK_SIZE),
+            .lod3 = try std.ArrayList(Quad).initCapacity(allocator, LOD3_CHUNK_SIZE),
+            .lod4 = try std.ArrayList(Quad).initCapacity(allocator, LOD4_CHUNK_SIZE),
+        };
+    }
+
+    fn deinit(self: *ChunkMeshes, allocator: std.mem.Allocator) void {
+        self.lod0.deinit(allocator);
+        self.lod1.deinit(allocator);
+        self.lod2.deinit(allocator);
+        self.lod3.deinit(allocator);
+        self.lod4.deinit(allocator);
+    }
+};
+
 //// MAIN //////////////////////////////////////////////////////////////////////
 
 pub const Chunk = struct {
     coord: ChunkCoord,
-
     dimensions: usize,
 
     lods: ChunkLods,
+    meshes: ChunkMeshes,
 
     dirty: bool = true,
     queued: bool = false,
     meshing: bool = false,
 
-    mesh: std.ArrayList(Quad),
-
-    // output of meshing
-    face_count: usize = 0,
-
-    // Only for LOD 0
+    // Only for LOD0
     bitfields: BitfieldViews,
 
     // aabb for culling
@@ -212,7 +235,6 @@ pub const Chunk = struct {
         const world_max = world_min + size_vec;
 
         var lods = generateVoxels(coord, size, terrain_generator);
-
         const bitfields = createBitfields(lods.lod0[0..]);
 
         const chunk = Chunk{
@@ -222,7 +244,7 @@ pub const Chunk = struct {
             .world_min = world_min,
             .world_max = world_max,
             .dimensions = size,
-            .mesh = try std.ArrayList(Quad).initCapacity(allocator, 0),
+            .meshes = try ChunkMeshes.init(allocator),
 
             .bitfields = bitfields,
         };
