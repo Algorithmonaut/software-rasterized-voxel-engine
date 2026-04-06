@@ -534,21 +534,23 @@ pub const Renderer = struct {
         }.lessThan);
 
         for (self.chunk_entries.items) |chunk| {
-            const selected_mesh = blk: {
-                if (chunk.dist2 <= 200.0 * 200.0) {
-                    break :blk &chunk.chunk.meshes.lod0;
-                } else if (chunk.dist2 <= 400.0 * 400.0) {
-                    break :blk &chunk.chunk.meshes.lod1;
-                } else if (chunk.dist2 <= 600.0 * 600.0) {
-                    break :blk &chunk.chunk.meshes.lod2;
-                } else if (chunk.dist2 <= 800.0 * 800.0) {
-                    break :blk &chunk.chunk.meshes.lod3;
-                } else {
-                    break :blk &chunk.chunk.meshes.lod4;
-                }
-            };
+            // WARN: Part of LOD implementation, do not remove
 
-            for (selected_mesh.items) |quad| {
+            // const selected_mesh = blk: {
+            //     if (chunk.dist2 <= 200.0 * 200.0) {
+            //         break :blk &chunk.chunk.meshes.lod0;
+            //     } else if (chunk.dist2 <= 400.0 * 400.0) {
+            //         break :blk &chunk.chunk.meshes.lod1;
+            //     } else if (chunk.dist2 <= 600.0 * 600.0) {
+            //         break :blk &chunk.chunk.meshes.lod2;
+            //     } else if (chunk.dist2 <= 800.0 * 800.0) {
+            //         break :blk &chunk.chunk.meshes.lod3;
+            //     } else {
+            //         break :blk &chunk.chunk.meshes.lod4;
+            //     }
+            // };
+
+            for (chunk.chunk.meshes.lod0.items) |quad| {
                 const world_quad = WorldQuad{
                     .v0 = worldVertexFromChunkVertex(quad.v0, chunk.chunk.coord, chunk.chunk.dimensions),
                     .v1 = worldVertexFromChunkVertex(quad.v1, chunk.chunk.coord, chunk.chunk.dimensions),

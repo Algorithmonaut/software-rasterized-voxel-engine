@@ -17,7 +17,7 @@ const Profiler = @import("Profiler.zig").Profiler;
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 110.0,
-        .view_distance = 600.0,
+        .view_distance = 300.0,
         .sensitivity = 0.0025,
         .near = 0.1,
     },
@@ -93,13 +93,13 @@ pub fn main() !void {
 
     var t: usize = 0;
 
-    try engine.world.bootstrapInitialChunks(
-        allocator,
-        .{ 0, -100, 0 },
-        engine.player.camera.view_distance,
-        &engine.terrain_generator,
-        &engine.world,
-    );
+    // try engine.world.bootstrapInitialChunks(
+    //     allocator,
+    //     .{ 0, -100, 0 },
+    //     engine.player.camera.view_distance,
+    //     &engine.terrain_generator,
+    //     &engine.world,
+    // );
 
     while (engine.platform.running) : (t += 1) {
         var frame_timer = try std.time.Timer.start();
