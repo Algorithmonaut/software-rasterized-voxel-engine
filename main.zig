@@ -17,12 +17,12 @@ const Profiler = @import("Profiler.zig").Profiler;
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 110.0,
-        .view_distance = 200.0,
+        .view_distance = 600.0,
         .sensitivity = 0.0025,
         .near = 0.1,
     },
     .player_config = .{
-        .initial_position = .{ 0.0, 60.0, 0.0 },
+        .initial_position = .{ 0.0, 100.0, 0.0 },
         .half_size = .{ 0.3, 0.9, 0.3 },
         .speed = 8.0,
 
@@ -78,6 +78,8 @@ var main_prof = Profiler{};
 var total_frame_ns: u64 = 0;
 
 pub fn main() !void {
+    @setFloatMode(.optimized);
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
@@ -86,12 +88,18 @@ pub fn main() !void {
         engine_config,
     );
 
-    @setFloatMode(.optimized);
-
     var pool: std.Thread.Pool = undefined;
     try pool.init(.{ .allocator = allocator });
 
     var t: usize = 0;
+
+    try engine.world.bootstrapInitialChunks(
+        allocator,
+        .{ 0, -100, 0 },
+        engine.player.camera.view_distance,
+        &engine.terrain_generator,
+        &engine.world,
+    );
 
     while (engine.platform.running) : (t += 1) {
         var frame_timer = try std.time.Timer.start();
@@ -145,7 +153,6 @@ pub fn main() !void {
 
         total_frame_ns += frame_timer.read();
 
-        // try engine.world.meshChunksBudgeted(allocator, 10);
         try engine.world.meshChunks(allocator, engine.mesher);
     }
 

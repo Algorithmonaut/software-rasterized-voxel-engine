@@ -572,7 +572,66 @@ pub fn generateMesh(
     world: *World,
     allocator: std.mem.Allocator,
 ) !void {
-    try generateLodMesh(world, &chunk.lods.lod0, &chunk.bitfields, chunk.coord, allocator, &chunk.meshes.lod0);
+    try generateLodMesh(
+        world,
+        &chunk.lods.lod0,
+        &chunk.bitfields,
+        chunk.coord,
+        allocator,
+        &chunk.meshes.lod0,
+    );
+
+    var data_lod1 = Chunk.getResizedVoxelDataAndBitfield(
+        &chunk.lods.lod1,
+        CHUNK_SIZE / 2,
+    );
+    try generateLodMesh(
+        world,
+        &data_lod1.voxels,
+        &data_lod1.bitfields,
+        chunk.coord,
+        allocator,
+        &chunk.meshes.lod1,
+    );
+
+    var data_lod2 = Chunk.getResizedVoxelDataAndBitfield(
+        &chunk.lods.lod2,
+        CHUNK_SIZE / 4,
+    );
+    try generateLodMesh(
+        world,
+        &data_lod2.voxels,
+        &data_lod2.bitfields,
+        chunk.coord,
+        allocator,
+        &chunk.meshes.lod2,
+    );
+
+    var data_lod3 = Chunk.getResizedVoxelDataAndBitfield(
+        &chunk.lods.lod3,
+        CHUNK_SIZE / 8,
+    );
+    try generateLodMesh(
+        world,
+        &data_lod3.voxels,
+        &data_lod3.bitfields,
+        chunk.coord,
+        allocator,
+        &chunk.meshes.lod3,
+    );
+
+    var data_lod4 = Chunk.getResizedVoxelDataAndBitfield(
+        &chunk.lods.lod4,
+        CHUNK_SIZE / 16,
+    );
+    try generateLodMesh(
+        world,
+        &data_lod4.voxels,
+        &data_lod4.bitfields,
+        chunk.coord,
+        allocator,
+        &chunk.meshes.lod4,
+    );
 }
 
 //// JOB ///////////////////////////////////////////////////////////////////////

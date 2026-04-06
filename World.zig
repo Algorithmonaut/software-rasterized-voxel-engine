@@ -5,6 +5,7 @@ const WorldConfig = @import("EngineConfig.zig").EngineConfig.WorldConfig;
 const ChunkCoord = @import("math/types.zig").ChunkCoord;
 
 const Mesher = @import("world/Mesher.zig").Mesher;
+const MesherFile = @import("world/Mesher.zig");
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
 const types = @import("math/types.zig");
@@ -128,6 +129,58 @@ pub const World = struct {
                 .world = self,
                 .chunk = chunk,
             });
+        }
+    }
+
+    pub fn bootstrapInitialChunks(
+        self: *World,
+        allocator: std.mem.Allocator,
+        player_pos: WorldCoord,
+        view_distance: f32,
+        terrain_generator: *TerrainGenerator,
+        world: *World,
+    ) !void {
+        _ = player_pos;
+        // const chunk_size_i: i32 = @intCast(self.chunk_size);
+
+        var prepared: usize = 0;
+
+        const horizontal_radius: i32 = @intFromFloat(@ceil(
+            view_distance / @as(f32, @floatFromInt(self.chunk_size)),
+        ));
+
+        const VERTICAL_MIN: i32 = -2;
+        const VERTICAL_MAX: i32 = 0;
+
+        var cz = -horizontal_radius;
+        while (cz <= horizontal_radius) : (cz += 1) {
+            var cy = VERTICAL_MIN;
+            while (cy <= VERTICAL_MAX) : (cy += 1) {
+                var cx = -horizontal_radius;
+                while (cx <= horizontal_radius) : (cx += 1) {
+                    const dx: i64 = @intCast(cx);
+                    const dz: i64 = @intCast(cz);
+
+                    if (dx * dx + dz * dz > horizontal_radius * horizontal_radius) continue;
+
+                    prepared += 1;
+                    if (prepared % 10 == 0) std.debug.print("PREPARED: {}\n", .{prepared});
+
+                    _ = try self.ensureChunk(.{ cx, cy, cz }, terrain_generator);
+                }
+            }
+        }
+
+        var it = self.chunks.iterator();
+        var counter: usize = 0;
+
+        while (it.next()) |entry| {
+            const chunk = entry.value_ptr.*;
+            if (!chunk.dirty) continue;
+            try MesherFile.generateMesh(chunk, world, allocator);
+            if (self.chunks.get(entry.key_ptr.*)) |c| c.dirty = false;
+            counter += 1;
+            if (counter % 10 == 0) std.debug.print("REMAINING TO BE MESHED: {}\n", .{prepared - counter});
         }
     }
 };

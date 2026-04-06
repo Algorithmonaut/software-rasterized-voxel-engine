@@ -221,6 +221,19 @@ pub const Chunk = struct {
         if (world.getChunk(.{ c[0], c[1], c[2] - 1 })) |a| a.dirty = true;
     }
 
+    pub fn getResizedVoxelDataAndBitfield(
+        src: []const BlockId,
+        src_size: usize,
+    ) struct {
+        bitfields: BitfieldViews,
+        voxels: [CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE]BlockId,
+    } {
+        var voxels: [CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE]BlockId = undefined;
+        expandTo32(voxels[0..], src, src_size);
+
+        return .{ .voxels = voxels, .bitfields = createBitfields(voxels[0..]) };
+    }
+
     pub fn generate(
         allocator: std.mem.Allocator,
         coord: ChunkCoord,
