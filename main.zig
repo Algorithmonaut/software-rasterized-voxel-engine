@@ -61,7 +61,7 @@ const engine_config = EngineConfig{
         .gain = 0.5,
         .lacunarity = 2.0,
         .octaves = 5,
-        .scale = 0.005,
+        .scale = 0.003,
 
         .mountain_seed = 54321,
         .mountain_gain = 0.5,

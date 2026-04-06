@@ -1,102 +1,67 @@
-* ( ) Implement chunk meshing (mesh chunk once, reuse)
+- ( ) Recompute frustum planes once per frame instead of reconstructing them per 
+      chunk in `isChunkInFrustum`.
+- ( ) Replace `renderer.init` chunk entry estimate (`view_distance / 2` cubed 
+      is the wrong scale); use chunks in radius.
+- ( ) Replace chunk booleans with an enum:
+      `const ChunkState = enum {generating, needs_mesh, queued_for_mesh, meshing, ready };`
+- ( ) Remove hardcoded 32s from collision, centralize chunk size in `Chunk.zig`.
+- ( ) Use lookup tables for block properties and face textures rather than scattered logic.
+- ( ) `RenderWorld` is doing too much (chunk discovery, chunk creation, frustum test, sort
+      mesh-to-world conversion, quad clipping, triangle emission)
+- ( ) Make "missing chunk collision policy" explicit (cf `unknow` is treated as solid).
+- ( ) Limit vertical chunk range.
+- ( ) Cache triangle-to-tile overlap results instead of calling `triangleMayOverlapTile`
+      twice.
+- ( ) Use barycentric linearity in `triangleMayOverlapTile`.
+- ( ) Replace repeated array copies with `@memcpy` where appropriate.
+- ( ) Implement texture arrays rather than a texture atlas, and re-implement mipmapping
+      correctly.
+- ( ) Review and prepare the rasterization hot loop.
+- ( ) Use 2x2 (or 4x1) quad stepping.
+- ( ) Hierarchical tile reject.
+- ( ) Coarse depth / Hi-Z.
+- ( ) Specialized paths for axis-aligned voxel faces.
+- ( ) Wireframe mode, and other debug modes.
+- ( ) When a chunk is fully empty, do not allocate its data and mark it as empty.
 
-** ( ) Replace BlockTypes with this: 
-   @code zig
-    pub const BlockId = enum(u8) {
-        air,
-        dirt,
-        stone,
-        grass,
-    };
+* ( ) Precompute visible chunk offsets
+  For a fixed chunk view radius, precompute all relative chunk offset once, 
+  sorted by distance. Then each frame just add player chunk coord and iterate.
+  This removes: triple nested loops, repeated sphere checks, some sorting preasure.
 
-    pub const Face = enum(u3) {
-        back,
-        front,
-        left,
-        right,
-        bottom,
-        top,
-    };
+* ( ) Store render-ready mesh data closer to final use
+  Right now every frame chunk-local quads vertices are converted into world-space 
+  vertices before clipping. That costs a lot. Instead:
+  - Store chunk mesh in world space, or
+  - Store compact local vertices plus chunk origin separately and apply origin in 
+    a tighter path, or 
+  - Store a render-ready quad format.
 
-    pub const BlockDef = struct {
-        solid: bool,
-        opaque: bool,
-        face_tiles: [6]u16,
-    };
-    pub const block_defs = [_]BlockDef{
-        // air
-        .{
-            .solid = false,
-            .opaque = false,
-            .face_tiles = .{0,0,0,0,0,0},
-        },
-        // dirt
-        .{
-            .solid = true,
-            .opaque = true,
-            .face_tiles = .{ dirt_tile, dirt_tile, dirt_tile, dirt_tile, dirt_tile, dirt_tile },
-        },
-        // stone
-   @end
+* ( ) Split the project into systems
+  - `world/` - chunk storage, streaming, terrain generation
+  - `mesh/` - face-mask generation, greedy meshing, mesh format
+  - `render/`- visibility, triangle setup, triangle binning, rasterizer
+  - `platform/` - SDL only
+  - `game/` - player, collision, input mapping
 
-** ( ) Use quads in the chunk mesh
-   @code zig
-    pub const MeshQuad = struct {
-        positions: [4]@Vector(3, f32), // or integer local voxel corners
-        uvs: [4]@Vector(2, u16),
-        tile_id: u16, // optional alternative to explicit uvs
-        normal_face: Face,
-    };
+* ( ) Introduce a real chunk lifecycle
+  - *Streaming system* decides desired chunks
+  - *Generation queue* creates voxel data
+  - *Meshing queue* creates render mesh
+  - *Renderer* consumes only ready meshes
 
-    pub const ChunkMesh = struct {
-        quads: []MeshQuad,
-        quad_count: usize,
-    };
-   @end
+  How to unload chunks? Should I save them to disk?
 
+  - Make mesh ownership immutable during render:
+  -- Worker builds a new mesh object.
+  -- When done, swap it into the chunk in a controlled way.
+  -- Renderer only reads stable mesh pointers for the whole frame.
 
-** ( ) Implement basic hidden face removal (two touching quads should not be rendered)
-** ( ) Implement world wise hidden face removal (such that hidden face removal also works for cubes in chunk's border)
+  _Question_:
+  How to efficiently implement and multithread chunk lifecycle?
 
-* ( ) Implement wireframe mode
-* ( ) Integrate the profiler in the code
-
-* ( ) Refactor code structure (also clean main)
-  @code 
-    engine/
-      Engine.zig
-      EngineConfig.zig
-      FrameContext.zig
-
-    platform/
-      SdlPlatform.zig
-      SdlGraphics.zig
-
-    world/
-      World.zig
-      Chunk.zig
-      Block.zig
-      ChunkMesher.zig
-
-    render/
-      Visibility.zig
-      Mesh.zig
-      TriangleSetup.zig
-      TriangleBinner.zig
-      TrianglesRasterizer.zig
-      Atlas.zig
-      Framebuffer.zig
-
-    math/
-      matrix.zig
-      vector.zig
-      types.zig
-  @end
-
-* ( ) Optimize the triangle's rasterization
-
-* ( ) Print average quads per chunk after main loop 
-
-* ( ) Binary greedy meshing
-
-* ( ) Create a basic UI
+* *More advanced*
+  - Light.
+  - Better terrain generation.
+  - LOD.
+  - CRT/bloom shader effect.

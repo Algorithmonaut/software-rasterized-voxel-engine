@@ -496,7 +496,7 @@ pub const TrianglesRasterizer = struct {
         // P: Third pass (render per tile and blit) - PARALLEL
         var next = AtomicUsize.init(0);
         var wg = std.Thread.WaitGroup{};
-        const worker_count = (try std.Thread.getCpuCount()) - 1;
+        const worker_count = (try std.Thread.getCpuCount());
 
         for (0..worker_count) |_| {
             pool.spawnWg(&wg, tileWorker, .{
