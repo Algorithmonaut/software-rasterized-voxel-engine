@@ -1,14 +1,14 @@
 const std = @import("std");
-const Float = @import("math/types.zig").Float;
-const BlockType = @import("Atlas.zig").BlockTypes;
+const Float = @import("../math/types.zig").Float;
+const BlockType = @import("../Atlas.zig").BlockTypes;
 
-const ChunkCoord = @import("math/types.zig").ChunkCoord;
+const ChunkCoord = @import("../math/types.zig").ChunkCoord;
 const World = @import("World.zig").World;
 
-const Block = @import("world/Block.zig");
+const Block = @import("Block.zig");
 const Quad = Block.Quad;
 const BlockId = Block.BlockId;
-const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
+const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
 
 pub const CHUNK_SIZE = 32;
 const LOD1_CHUNK_SIZE = CHUNK_SIZE / 2;

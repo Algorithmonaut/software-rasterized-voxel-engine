@@ -4,7 +4,7 @@
 const std = @import("std");
 const ctx = @import("../context.zig");
 const vec = @import("vector.zig");
-const Camera = @import("../Camera.zig").Camera;
+const Camera = @import("../game/Camera.zig").Camera;
 
 const Float = @import("types.zig").Float;
 const Vec4f = @import("types.zig").Vec4f;

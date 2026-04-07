@@ -7,18 +7,17 @@ const mat = @import("math/matrix.zig");
 
 const Engine = @import("Engine.zig").Engine;
 const Atlas = @import("Atlas.zig").Atlas;
-const Camera = @import("Camera.zig").Camera;
+const Camera = @import("game/Camera.zig").Camera;
 const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Renderer = @import("Renderer.zig").Renderer;
-const Chunk = @import("Chunk.zig").Chunk;
-const Profiler = @import("Profiler.zig").Profiler;
+const Chunk = @import("world/Chunk.zig").Chunk;
 
 const engine_config = EngineConfig{
     .camera_config = .{
-        .fov = 110.0,
-        .view_distance = 300.0,
-        .sensitivity = 0.0025,
+        .fov = 90.0,
+        .view_distance = 200.0,
+        .sensitivity = 0.0010,
         .near = 0.1,
     },
     .player_config = .{
@@ -73,8 +72,6 @@ const engine_config = EngineConfig{
 
 var engine: Engine = undefined;
 
-var main_prof = Profiler{};
-
 var total_frame_ns: u64 = 0;
 
 pub fn main() !void {
@@ -84,7 +81,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     engine = try Engine.init(
-        allocator, // Allocator
+        allocator,
         engine_config,
     );
 
@@ -92,14 +89,6 @@ pub fn main() !void {
     try pool.init(.{ .allocator = allocator });
 
     var t: usize = 0;
-
-    // try engine.world.bootstrapInitialChunks(
-    //     allocator,
-    //     .{ 0, -100, 0 },
-    //     engine.player.camera.view_distance,
-    //     &engine.terrain_generator,
-    //     &engine.world,
-    // );
 
     while (engine.platform.running) : (t += 1) {
         var frame_timer = try std.time.Timer.start();
@@ -114,6 +103,8 @@ pub fn main() !void {
             &engine.triangle_rasterizer,
         );
 
+        engine.renderer.computeFrustumPlanes(engine.player.camera.combined_mat);
+
         try engine.player.update(&engine.world);
 
         engine.player.camera.view_mat = mat.create_view(
@@ -124,7 +115,6 @@ pub fn main() !void {
             engine.player.camera.view_mat,
         );
 
-        var prof_scope = try main_prof.begin(.triangle_setup);
         try engine.renderer.renderWorld(
             allocator,
             engine.player.camera.from,
@@ -133,9 +123,7 @@ pub fn main() !void {
             &engine.player.camera,
             &engine.terrain_generator,
         );
-        prof_scope.end();
 
-        prof_scope = try main_prof.begin(.tile_raster);
         try engine.triangle_rasterizer.render(
             allocator,
             &pool,
@@ -144,7 +132,6 @@ pub fn main() !void {
             frame.framebuffer,
             &engine.atlas,
         );
-        prof_scope.end();
 
         if (engine_config.debug_config.show_tex_atlas) engine.atlas.debug_show_atlas(&frame.framebuffer);
         if (engine_config.debug_config.show_occupied_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);
@@ -155,6 +142,4 @@ pub fn main() !void {
 
         try engine.world.meshChunks(allocator, engine.mesher);
     }
-
-    main_prof.printReport(total_frame_ns);
 }

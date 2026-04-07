@@ -1,10 +1,10 @@
 const std = @import("std");
 
 const RasterTriangle = @import("triangle.zig").RasterTriangle;
-const World = @import("World.zig").World;
+const World = @import("world/World.zig").World;
 const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
-const Camera = @import("Camera.zig").Camera;
-const Chunk = @import("Chunk.zig").Chunk;
+const Camera = @import("game/Camera.zig").Camera;
+const Chunk = @import("world/Chunk.zig").Chunk;
 const Atlas = @import("Atlas.zig").Atlas;
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
@@ -35,6 +35,8 @@ pub const Renderer = struct {
     fb_width: usize,
     fb_height: usize,
     tile_dimensions: usize,
+
+    planes: [5]Vec4f = undefined, // left right bottom top near
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -404,19 +406,21 @@ pub const Renderer = struct {
 
     // CHUNK RENDERING /////////////////////////////////////////////////////////
 
-    fn isChunkInFrustum(chunk: *Chunk, combined_mat: Mat4f) bool {
-        const planes = [5]Vec4f{
+    pub fn computeFrustumPlanes(self: *Renderer, combined_mat: Mat4f) void {
+        self.planes = .{
             combined_mat.r[3] + combined_mat.r[0], // left
             combined_mat.r[3] - combined_mat.r[0], // right
             combined_mat.r[3] + combined_mat.r[1], // bottom
             combined_mat.r[3] - combined_mat.r[1], // top
             combined_mat.r[2], // near
         };
+    }
 
+    fn isChunkInFrustum(self: *Renderer, chunk: *Chunk) bool {
         const world_max: Vec3f = @floatFromInt(chunk.world_max);
         const world_min: Vec3f = @floatFromInt(chunk.world_min);
 
-        for (planes) |plane| {
+        for (self.planes) |plane| {
             const point = Vec4f{
                 if (plane[0] >= 0) world_max[0] else world_min[0],
                 if (plane[1] >= 0) world_max[1] else world_min[1],
@@ -512,7 +516,7 @@ pub const Renderer = struct {
                     const coord = ChunkCoord{ cx, cy, cz };
                     const chunk = try world.ensureChunk(coord, terrain_generator);
 
-                    if (!isChunkInFrustum(chunk, camera.combined_mat)) continue;
+                    if (!self.isChunkInFrustum(chunk)) continue;
                     if (chunk.meshing or chunk.queued or chunk.dirty) continue;
 
                     try self.chunk_entries.append(

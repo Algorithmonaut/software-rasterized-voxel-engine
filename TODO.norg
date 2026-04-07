@@ -1,4 +1,4 @@
-- ( ) Recompute frustum planes once per frame instead of reconstructing them per 
+- (x) Recompute frustum planes once per frame instead of reconstructing them per 
       chunk in `isChunkInFrustum`.
 - ( ) Replace `renderer.init` chunk entry estimate (`view_distance / 2` cubed 
       is the wrong scale); use chunks in radius.
@@ -23,6 +23,10 @@
 - ( ) Specialized paths for axis-aligned voxel faces.
 - ( ) Wireframe mode, and other debug modes.
 - ( ) When a chunk is fully empty, do not allocate its data and mark it as empty.
+- ( ) LookAt matrix + basic block placement (fully remesh chunk for now).
+- ( ) Implement a basic UI for block selection.
+- ( ) Try to not fully remesh chunk when placing a block.
+- ( ) Reviews player physics.
 
 * ( ) Precompute visible chunk offsets
   For a fixed chunk view radius, precompute all relative chunk offset once, 

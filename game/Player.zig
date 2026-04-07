@@ -1,15 +1,15 @@
 const Camera = @import("Camera.zig").Camera;
-const CameraConfig = @import("EngineConfig.zig").EngineConfig.CameraConfig;
-const PlayerConfig = @import("EngineConfig.zig").EngineConfig.PlayerConfig;
+const CameraConfig = @import("../EngineConfig.zig").EngineConfig.CameraConfig;
+const PlayerConfig = @import("../EngineConfig.zig").EngineConfig.PlayerConfig;
 
-const World = @import("World.zig").World;
+const World = @import("../world/World.zig").World;
 
-const BlockId = @import("world/Block.zig").BlockId;
+const BlockId = @import("../world/Block.zig").BlockId;
 
-const types = @import("math/types.zig");
+const types = @import("../math/types.zig");
 const Vec3f = types.Vec3f;
 
-const vec = @import("math/vector.zig");
+const vec = @import("../math/vector.zig");
 
 const AABB = struct {
     min: Vec3f,

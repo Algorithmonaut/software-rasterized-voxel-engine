@@ -7,7 +7,7 @@ const c = @cImport({
 });
 const vec = @import("../math/vector.zig");
 const SdlGraphics = @import("SdlGraphics.zig").SdlGraphics;
-const Player = @import("../Player.zig").Player;
+const Player = @import("../game/Player.zig").Player;
 
 const Vec3f = @import("../math/types.zig").Vec3f;
 

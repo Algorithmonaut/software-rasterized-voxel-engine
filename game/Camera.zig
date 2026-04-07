@@ -1,11 +1,11 @@
-const CameraConfig = @import("EngineConfig.zig").EngineConfig.CameraConfig;
+const CameraConfig = @import("../EngineConfig.zig").EngineConfig.CameraConfig;
 const Player = @import("Player.zig").Player;
 const FrameInput = @import("Player.zig").FrameInputs;
 
 const std = @import("std");
-const mat = @import("math/matrix.zig");
-const vec = @import("math/vector.zig");
-const Vec3f = @import("math/types.zig").Vec3f;
+const mat = @import("../math/matrix.zig");
+const vec = @import("../math/vector.zig");
+const Vec3f = @import("../math/types.zig").Vec3f;
 
 pub const Camera = struct {
     from: Vec3f,

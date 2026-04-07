@@ -1,19 +1,19 @@
 const std = @import("std");
 const Chunk = @import("Chunk.zig").Chunk;
-const WorldConfig = @import("EngineConfig.zig").EngineConfig.WorldConfig;
+const WorldConfig = @import("../EngineConfig.zig").EngineConfig.WorldConfig;
 
-const ChunkCoord = @import("math/types.zig").ChunkCoord;
+const ChunkCoord = @import("../math/types.zig").ChunkCoord;
 
-const Mesher = @import("world/Mesher.zig").Mesher;
-const MesherFile = @import("world/Mesher.zig");
-const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
+const Mesher = @import("../mesh/Mesher.zig").Mesher;
+const MesherFile = @import("../mesh/Mesher.zig");
+const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
 
-const types = @import("math/types.zig");
+const types = @import("../math/types.zig");
 const WorldCoord = types.WorldCoord;
 const Vec3i = types.Vec3i;
-const BlockId = @import("world/Block.zig").BlockId;
+const BlockId = @import("../world/Block.zig").BlockId;
 
-const Renderer = @import("Renderer.zig").Renderer;
+const Renderer = @import("../Renderer.zig").Renderer;
 
 pub const World = struct {
     allocator: std.mem.Allocator,

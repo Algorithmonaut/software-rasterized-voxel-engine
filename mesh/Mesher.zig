@@ -1,11 +1,11 @@
 const std = @import("std");
 
-const Chunk = @import("../Chunk.zig").Chunk;
-const BitfieldViews = @import("../Chunk.zig").BitfieldViews;
+const Chunk = @import("../world/Chunk.zig").Chunk;
+const BitfieldViews = @import("../world/Chunk.zig").BitfieldViews;
 const Atlas = @import("../Atlas.zig").Atlas;
-const World = @import("../World.zig").World;
+const World = @import("../world/World.zig").World;
 
-const Block = @import("Block.zig");
+const Block = @import("../world/Block.zig");
 const Quad = Block.Quad;
 const BlockId = Block.BlockId;
 const Face = Block.Face;
@@ -17,7 +17,7 @@ const PosVec = @Vector(3, usize);
 
 const PlaneSet = [32][32]u32;
 
-const CHUNK_SIZE = @import("../Chunk.zig").CHUNK_SIZE;
+const CHUNK_SIZE = @import("../world/Chunk.zig").CHUNK_SIZE;
 
 const FaceTemplate = struct {
     p0: Vec3i,

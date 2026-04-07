@@ -2,7 +2,7 @@
 
 const std = @import("std");
 
-const Player = @import("Player.zig").Player;
+const Player = @import("game/Player.zig").Player;
 const Renderer = @import("Renderer.zig").Renderer;
 const FrameContext = @import("FrameContext.zig").FrameContext;
 const SdlPlatform = @import("platform/SdlPlatform.zig").SdlPlatform;
@@ -10,10 +10,10 @@ const SdlGraphics = @import("platform/SdlGraphics.zig").SdlGraphics;
 const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const Atlas = @import("Atlas.zig").Atlas;
 const TilePool = @import("tile.zig").TilePool;
-const World = @import("World.zig").World;
+const World = @import("world/World.zig").World;
 const TriangleRasterizer = @import("renderer/TrianglesRasterizer.zig").TrianglesRasterizer;
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
-const Mesher = @import("world/Mesher.zig").Mesher;
+const Mesher = @import("mesh/Mesher.zig").Mesher;
 
 const Vec3f = @import("math/types.zig").Vec3f;
 
@@ -76,7 +76,6 @@ pub const Engine = struct {
         self.mesher.deinit();
         self.world.deinit();
 
-        self.camera.deinit();
         self.renderer.deinit(self.allocator);
         self.platform.deinit();
         self.graphics.deinit();
