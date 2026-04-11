@@ -6,7 +6,7 @@ const Block = @import("world/Block.zig");
 const Face = Block.Face;
 const BlockId = Block.BlockId;
 
-const TEX_SIZE = 16;
+pub const TEX_SIZE = 16;
 
 pub const BlockTypes = enum(u8) {
     dirt = 0,

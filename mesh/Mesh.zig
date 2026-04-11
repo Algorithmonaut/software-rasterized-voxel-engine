@@ -1,7 +1,15 @@
 const std = @import("std");
 const BlockId = @import("../world/Block.zig").BlockId;
 
-pub const PlaneKind = enum(u8) { pos_x, neg_x, pos_y, neg_y, pos_z, neg_z };
+/// Ordered by vertical index in the texture atlas
+pub const PlaneKind = enum(u8) {
+    neg_z = 0,
+    pos_z = 1,
+    neg_x = 2,
+    pos_x = 3,
+    neg_y = 4,
+    pos_y = 5,
+};
 
 pub const RenderQuad = struct {
     fixed: u8, // fixed coordinate on the normal axis

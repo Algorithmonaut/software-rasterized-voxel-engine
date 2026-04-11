@@ -52,6 +52,7 @@ pub const WorldTriangle = struct {
     tex_tile_size: usize,
 };
 
+/// Ordered by horizontal index in the texture atlas
 pub const BlockId = enum(u8) {
     air = 254,
     unknown = 255,
