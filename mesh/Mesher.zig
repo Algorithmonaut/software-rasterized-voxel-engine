@@ -280,11 +280,12 @@ fn greedyMergePlane(
 
             try mesh.appendRenderQuad(allocator, kind, .{
                 .block_id = id0,
-                .col = col,
-                .row = row,
-                .fixed = plane_index,
-                .width = width,
-                .height = height,
+                // TODO: Maybe remove type casting
+                .col = @intCast(col),
+                .row = @intCast(row),
+                .fixed = @intCast(plane_index),
+                .width = @intCast(width),
+                .height = @intCast(height),
             });
 
             var r = row;
@@ -303,7 +304,7 @@ pub fn generateLodMesh(
     bitfields: *BitfieldViews,
     coord: Vec3i,
     allocator: std.mem.Allocator,
-    mesh: Mesh,
+    mesh: *Mesh,
 ) !void {
     const size = CHUNK_SIZE;
 
@@ -376,7 +377,7 @@ pub fn generateMesh(
         &chunk.bitfields,
         chunk.coord,
         allocator,
-        &chunk.meshes.lod0,
+        &chunk.mesh,
     );
 
     // WARN: Part of LOD implementation, do not remove

@@ -88,7 +88,6 @@ pub const World = struct {
         errdefer self.allocator.destroy(chunk_ptr);
 
         chunk_ptr.* = try Chunk.generate(
-            self.allocator,
             coord,
             self.chunk_size,
             self,

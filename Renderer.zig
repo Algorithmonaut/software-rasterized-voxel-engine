@@ -361,21 +361,7 @@ pub const Renderer = struct {
 
         for (self.chunk_entries.items) |chunk| {
             // WARN: Part of LOD implementation, do not remove
-
-            for (chunk.chunk.meshes.lod0.items) |quad| {
-                const world_quad = WorldQuad{
-                    .v0 = worldVertexFromChunkVertex(quad.v0, chunk.chunk.coord, chunk.chunk.dimensions),
-                    .v1 = worldVertexFromChunkVertex(quad.v1, chunk.chunk.coord, chunk.chunk.dimensions),
-                    .v2 = worldVertexFromChunkVertex(quad.v2, chunk.chunk.coord, chunk.chunk.dimensions),
-                    .v3 = worldVertexFromChunkVertex(quad.v3, chunk.chunk.coord, chunk.chunk.dimensions),
-
-                    .tex_tile_size = quad.atlas_tile_size,
-                    .tex_u = quad.u,
-                    .tex_v = quad.v,
-                };
-
-                try self.genRasterTriangleFromWorldQuad(allocator, world_quad, camera.combined_mat);
-            }
+            try generatePrimitivesFromChunk(chunk.chunk, camera.from, camera.combined_mat, allocator, self);
         }
     }
 };
@@ -484,7 +470,7 @@ fn emitRenderQuad(
     combined_mat: Mat4f,
     allocator: std.mem.Allocator,
     renderer: *Renderer,
-) WorldQuad {
+) !void {
     const fx = chunk_min[0];
     const fy = chunk_min[1];
     const fz = chunk_min[2];
@@ -503,44 +489,44 @@ fn emitRenderQuad(
     var verts_coord: [4]F4 = switch (kind) {
         // x = const, y=row, z=col
         .pos_x => .{
-            .{ fx + fixed + 1.0, fy + row0, fz + col0, 0 },
-            .{ fx + fixed + 1.0, fy + row0 + h, fz + col0, 0 },
-            .{ fx + fixed + 1.0, fy + row0 + h, fz + col0 + w, 0 },
-            .{ fx + fixed + 1.0, fy + row0, fz + col0 + w, 0 },
+            .{ fx + fixed + 1.0, fy + row0, fz + col0, 1.0 },
+            .{ fx + fixed + 1.0, fy + row0 + h, fz + col0, 1.0 },
+            .{ fx + fixed + 1.0, fy + row0 + h, fz + col0 + w, 1.0 },
+            .{ fx + fixed + 1.0, fy + row0, fz + col0 + w, 1.0 },
         },
         .neg_x => .{
-            .{ fx + fixed, fy + row0, fz + col0, 0 },
-            .{ fx + fixed, fy + row0, fz + col0 + w, 0 },
-            .{ fx + fixed, fy + row0 + h, fz + col0 + w, 0 },
-            .{ fx + fixed, fy + row0 + h, fz + col0, 0 },
+            .{ fx + fixed, fy + row0, fz + col0, 1.0 },
+            .{ fx + fixed, fy + row0, fz + col0 + w, 1.0 },
+            .{ fx + fixed, fy + row0 + h, fz + col0 + w, 1.0 },
+            .{ fx + fixed, fy + row0 + h, fz + col0, 1.0 },
         },
 
         // y = const, x=row, z=col
         .pos_y => .{
-            .{ fx + row0, fy + fixed + 1.0, fz + col0, 0 },
-            .{ fx + row0, fy + fixed + 1.0, fz + col0 + w, 0 },
-            .{ fx + row0 + h, fy + fixed + 1.0, fz + col0 + w, 0 },
-            .{ fx + row0 + h, fy + fixed + 1.0, fz + col0, 0 },
+            .{ fx + row0, fy + fixed + 1.0, fz + col0, 1.0 },
+            .{ fx + row0, fy + fixed + 1.0, fz + col0 + w, 1.0 },
+            .{ fx + row0 + h, fy + fixed + 1.0, fz + col0 + w, 1.0 },
+            .{ fx + row0 + h, fy + fixed + 1.0, fz + col0, 1.0 },
         },
         .neg_y => .{
-            .{ fx + row0, fy + fixed, fz + col0, 0 },
-            .{ fx + row0 + h, fy + fixed, fz + col0, 0 },
-            .{ fx + row0 + h, fy + fixed, fz + col0 + w, 0 },
-            .{ fx + row0, fy + fixed, fz + col0 + w, 0 },
+            .{ fx + row0, fy + fixed, fz + col0, 1.0 },
+            .{ fx + row0 + h, fy + fixed, fz + col0, 1.0 },
+            .{ fx + row0 + h, fy + fixed, fz + col0 + w, 1.0 },
+            .{ fx + row0, fy + fixed, fz + col0 + w, 1.0 },
         },
 
         // z = const, x=row, y=col
         .pos_z => .{
-            .{ fx + row0, fy + col0, fz + fixed + 1.0, 0 },
-            .{ fx + row0 + h, fy + col0, fz + fixed + 1.0, 0 },
-            .{ fx + row0 + h, fy + col0 + w, fz + fixed + 1.0, 0 },
-            .{ fx + row0, fy + col0 + w, fz + fixed + 1.0, 0 },
+            .{ fx + row0, fy + col0, fz + fixed + 1.0, 1.0 },
+            .{ fx + row0 + h, fy + col0, fz + fixed + 1.0, 1.0 },
+            .{ fx + row0 + h, fy + col0 + w, fz + fixed + 1.0, 1.0 },
+            .{ fx + row0, fy + col0 + w, fz + fixed + 1.0, 1.0 },
         },
         .neg_z => .{
-            .{ fx + row0, fy + col0, fz + fixed, 0 },
-            .{ fx + row0, fy + col0 + w, fz + fixed, 0 },
-            .{ fx + row0 + h, fy + col0 + w, fz + fixed, 0 },
-            .{ fx + row0 + h, fy + col0, fz + fixed, 0 },
+            .{ fx + row0, fy + col0, fz + fixed, 1.0 },
+            .{ fx + row0, fy + col0 + w, fz + fixed, 1.0 },
+            .{ fx + row0 + h, fy + col0 + w, fz + fixed, 1.0 },
+            .{ fx + row0 + h, fy + col0, fz + fixed, 1.0 },
         },
     };
 
@@ -561,12 +547,12 @@ fn emitRenderQuad(
     if (and_code != 0) return; // quad trivially outside
 
     const verts_uv: [4]UV = switch (kind) {
-        .pos_x => .{ .{ u_0, v_0 }, .{ u_0, v_1 }, .{ u_1, v_1 }, .{ u_1, v_0 } },
-        .neg_x => .{ .{ u_0, v_0 }, .{ u_1, v_0 }, .{ u_1, v_1 }, .{ u_0, v_1 } },
-        .pos_y => .{ .{ u_0, v_0 }, .{ u_1, v_0 }, .{ u_1, v_1 }, .{ u_0, v_1 } },
-        .neg_y => .{ .{ u_0, v_0 }, .{ u_1, v_0 }, .{ u_1, v_1 }, .{ u_0, v_1 } },
-        .pos_z => .{ .{ u_0, v_0 }, .{ u_1, v_0 }, .{ u_1, v_1 }, .{ u_0, v_1 } },
-        .neg_z => .{ .{ u_0, v_0 }, .{ u_1, v_0 }, .{ u_1, v_1 }, .{ u_0, v_1 } },
+        .pos_z => .{ .{ v_0, u_1 }, .{ v_1, u_1 }, .{ v_1, u_0 }, .{ v_0, u_0 } },
+        .pos_x => .{ .{ u_1, v_1 }, .{ u_1, v_0 }, .{ u_0, v_0 }, .{ u_0, v_1 } },
+        .neg_z => .{ .{ v_1, u_1 }, .{ v_1, u_0 }, .{ v_0, u_0 }, .{ v_0, u_1 } },
+        .neg_x => .{ .{ u_0, v_1 }, .{ u_1, v_1 }, .{ u_1, v_0 }, .{ u_0, v_0 } },
+        .pos_y => .{ .{ v_0, u_1 }, .{ v_0, u_0 }, .{ v_1, u_0 }, .{ v_1, u_1 } },
+        .neg_y => .{ .{ v_0, u_0 }, .{ v_1, u_0 }, .{ v_1, u_1 }, .{ v_0, u_1 } },
     };
 
     // HACK: Rewrite cleanly after rewritting the RasterTriangle array
@@ -574,8 +560,8 @@ fn emitRenderQuad(
 
     const quad = WorldQuad{
         .tex_tile_size = 16,
-        .tex_u = @floatFromInt(@intFromEnum(kind) + TEX_SIZE),
-        .tex_v = @floatFromInt(@intFromEnum(rq.block_id) + TEX_SIZE),
+        .tex_u = @intFromEnum(kind) * TEX_SIZE,
+        .tex_v = @intFromEnum(rq.block_id) * TEX_SIZE,
         .v0 = .{ .uv = verts_uv[0], .pos = verts_coord[0] },
         .v1 = .{ .uv = verts_uv[1], .pos = verts_coord[1] },
         .v2 = .{ .uv = verts_uv[2], .pos = verts_coord[2] },
@@ -632,10 +618,11 @@ fn emitBucket(
     cam_axis: f32,
     slab_min: f32,
     slab_max: f32,
+    chunk_min: F3,
     combined_mat: Mat4f,
-    allocator: std.mem.Allocator,
     renderer: *Renderer,
-) void {
+    allocator: std.mem.Allocator,
+) !void {
 
     // POSITIVE AXIS (box is chunk)
     //             ┌───┐
@@ -658,7 +645,14 @@ fn emitBucket(
         .pos_x, .pos_y, .pos_z => cam_axis > slab_max,
         .neg_x, .neg_y, .neg_z => cam_axis < slab_min,
     }) {
-        for (quads) |quad| emitRenderQuad(quad, combined_mat, allocator, renderer);
+        for (quads) |quad| try emitRenderQuad(
+            kind,
+            quad,
+            chunk_min,
+            combined_mat,
+            allocator,
+            renderer,
+        );
 
         return;
     }
@@ -682,15 +676,19 @@ fn emitBucket(
         };
 
         if (positive) {
-            if (cam_axis > axis_world_coord + eps) emitRenderQuad(
+            if (cam_axis > axis_world_coord + eps) try emitRenderQuad(
+                kind,
                 quad,
+                chunk_min,
                 combined_mat,
                 allocator,
                 renderer,
             );
         } else {
-            if (cam_axis < axis_world_coord - eps) emitRenderQuad(
+            if (cam_axis < axis_world_coord - eps) try emitRenderQuad(
+                kind,
                 quad,
+                chunk_min,
                 combined_mat,
                 allocator,
                 renderer,
@@ -705,15 +703,15 @@ pub fn generatePrimitivesFromChunk(
     combined_mat: Mat4f,
     allocator: std.mem.Allocator,
     renderer: *Renderer,
-) void {
+) !void {
     const min: F3 = @floatFromInt(chunk.world_min);
     const max: F3 = @floatFromInt(chunk.world_max);
     const pos = camera_pos;
 
-    emitBucket(.pos_x, chunk.mesh.pos_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer, allocator);
-    emitBucket(.pos_y, chunk.mesh.pos_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer, allocator);
-    emitBucket(.pos_z, chunk.mesh.pos_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer, allocator);
-    emitBucket(.neg_x, chunk.mesh.neg_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer, allocator);
-    emitBucket(.neg_y, chunk.mesh.neg_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer, allocator);
-    emitBucket(.neg_z, chunk.mesh.neg_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer, allocator);
+    try emitBucket(.pos_x, chunk.mesh.pos_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer, allocator);
+    try emitBucket(.pos_y, chunk.mesh.pos_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer, allocator);
+    try emitBucket(.pos_z, chunk.mesh.pos_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer, allocator);
+    try emitBucket(.neg_x, chunk.mesh.neg_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer, allocator);
+    try emitBucket(.neg_y, chunk.mesh.neg_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer, allocator);
+    try emitBucket(.neg_z, chunk.mesh.neg_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer, allocator);
 }
