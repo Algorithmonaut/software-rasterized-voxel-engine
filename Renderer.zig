@@ -39,12 +39,15 @@ const UV = @Vector(2, f32);
 const eps: f32 = 0.0001;
 
 pub const Renderer = struct {
-    const ChunkRenderEntry = struct {
-        chunk: *Chunk,
-        dist2: f32,
-    };
+    const ChunkRenderEntry = struct { chunk: *Chunk, dist2: f32 };
+    const ProjectedVertex = struct { xy: Vec2fx, q: f32, uv: UV };
+    const MaterialRef = struct { tex_u: u16, tex_v: u16 };
+    const PrimitiveRef = struct { base_vertex: u32, vertex_count: u8 };
 
-    triangles: std.ArrayList(RasterTriangle),
+    frame_primitives: std.ArrayList(PrimitiveRef),
+    frame_materials: std.ArrayList(MaterialRef),
+    frame_vertices: std.ArrayList(ProjectedVertex),
+
     chunk_entries: std.ArrayList(ChunkRenderEntry),
 
     fb_width: usize,
@@ -60,8 +63,25 @@ pub const Renderer = struct {
     ) !Renderer {
         _ = view_distance;
 
+        std.debug.print("ProjectedVertex: size={}, align={}\n", .{
+            @sizeOf(ProjectedVertex),
+            @alignOf(ProjectedVertex),
+        });
+        std.debug.print("MaterialRef: size={}, align={}\n", .{
+            @sizeOf(MaterialRef),
+            @alignOf(MaterialRef),
+        });
+        std.debug.print("PrimitiveRef: size={}, align={}\n", .{
+            @sizeOf(PrimitiveRef),
+            @alignOf(PrimitiveRef),
+        });
+
         return .{
-            .triangles = try std.ArrayList(RasterTriangle).initCapacity(allocator, 1_000),
+            // TODO: I presume that these are good estimates, but please investigate
+            .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 70_000),
+            .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 70_000),
+            .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 140_000),
+
             .chunk_entries = try std.ArrayList(ChunkRenderEntry).initCapacity(allocator, 100),
             .fb_width = conf.width,
             .fb_height = conf.height,
@@ -78,7 +98,7 @@ pub const Renderer = struct {
         self.triangles.clearRetainingCapacity();
     }
 
-    fn ndcToScreenFixedPoint(
+    inline fn ndcToScreenFixedPoint(
         x_ndc: f32,
         y_ndc: f32,
         fb_width: usize,
@@ -96,139 +116,78 @@ pub const Renderer = struct {
         };
     }
 
-    /// Use if the quad is trivially inside
-    fn emitQuad(
+    /// No need to do backface culling anymore
+    inline fn emitQuad(
         self: *Renderer,
-        allocator: std.mem.Allocator,
-        quad: WorldQuad,
-    ) !void {
-        // Backface culling (vertices are oriented CCW)
-        // Only need to check a single triangle
-        var v = [4]F4{ quad.v0.pos, quad.v1.pos, quad.v2.pos, quad.v3.pos };
+        verts_coord: *const [4]F4,
+        verts_uv: *const [4]UV,
+        tex_u: usize,
+        tex_v: usize,
+    ) void {
+        var vertices: [4]ProjectedVertex = undefined;
 
-        // Clip -> NDC
-        var rec_ws: [4]f32 = undefined;
-        for (0..v.len) |i| {
-            const rec_w = 1.0 / v[i][3];
-            rec_ws[i] = rec_w;
-            v[i] *= @as(F4, @splat(rec_w));
-        }
+        inline for (0..4) |i| {
+            const rec_w = 1.0 / verts_coord[i][3];
+            vertices[i].q = rec_w;
+            const v = verts_coord[i] * @as(F4, @splat(rec_w));
 
-        // Backface culling
-        const signed_area =
-            (v[1][0] - v[0][0]) * (v[2][1] - v[0][1]) -
-            (v[1][1] - v[0][1]) * (v[2][0] - v[0][0]);
-        if (signed_area < 0) return;
-
-        // NDC -> raster
-        var raster_verts: [4]Vec2fx = undefined;
-        for (0..v.len) |i| {
-            const vert_pos = v[i];
-            raster_verts[i] = ndcToScreenFixedPoint(
-                vert_pos[0],
-                vert_pos[1],
+            vertices[i].xy = ndcToScreenFixedPoint(
+                v[0],
+                v[1],
                 self.fb_width,
                 self.fb_height,
             );
+
+            vertices[i].uv = verts_uv[i];
         }
 
-        // Still using fan triangulation
-        try self.triangles.append(allocator, .{
-            .v0 = raster_verts[0],
-            .v1 = raster_verts[1],
-            .v2 = raster_verts[2],
-            .q0 = rec_ws[0],
-            .q1 = rec_ws[1],
-            .q2 = rec_ws[2],
-            .uv0 = quad.v0.uv,
-            .uv1 = quad.v1.uv,
-            .uv2 = quad.v2.uv,
-
-            .tex_u = quad.tex_u,
-            .tex_v = quad.tex_v,
-            .tex_tile_size = quad.tex_tile_size,
+        const base: u32 = @intCast(self.frame_vertices.items.len);
+        self.frame_vertices.appendSliceAssumeCapacity(vertices);
+        self.frame_primitives.appendAssumeCapacity(.{
+            .base_vertex = base,
+            .vertex_count = 4,
         });
-
-        try self.triangles.append(allocator, .{
-            .v0 = raster_verts[0],
-            .v1 = raster_verts[2],
-            .v2 = raster_verts[3],
-            .q0 = rec_ws[0],
-            .q1 = rec_ws[2],
-            .q2 = rec_ws[3],
-            .uv0 = quad.v0.uv,
-            .uv1 = quad.v2.uv,
-            .uv2 = quad.v3.uv,
-
-            .tex_u = quad.tex_u,
-            .tex_v = quad.tex_v,
-            .tex_tile_size = quad.tex_tile_size,
+        self.frame_materials.appendAssumeCapacity(.{
+            .tex_u = @intCast(tex_u),
+            .tex_v = @intCast(tex_v),
         });
     }
 
-    /// Use fan triangulation to emit triangles from the clipped convex polygon
-    /// in clip space
-    fn emitPolygonFan(
+    inline fn emitPolygon(
         self: *Renderer,
-        allocator: std.mem.Allocator,
-        polygon_in: ClippedPolygon,
-        quad: WorldQuad,
-    ) !void {
-        if (polygon_in.len < 3) return; // triangle is degenerate
+        verts_coord: []F4,
+        verts_uv: []UV,
+        tex_u: usize,
+        tex_v: usize,
+    ) void {
+        const len: u8 = @intCast(verts_coord.len);
+        var vertices: [9]ProjectedVertex = undefined;
 
-        var polygon = polygon_in;
+        for (0..len) |i| {
+            const rec_w = 1.0 / verts_coord[i][3];
+            vertices[i].q = rec_w;
+            const v = verts_coord[i] * @as(F4, @splat(rec_w));
 
-        // Clip -> NDC
-        var rec_ws: [9]f32 = undefined;
-        for (0..polygon.len) |i| {
-            const rec_w = 1.0 / polygon.verts[i].pos[3];
-            rec_ws[i] = rec_w;
-            polygon.verts[i].pos *= @as(F4, @splat(rec_w));
-        }
-
-        // Backface culling (vertices are oriented CCW)
-        // Only need to check a single triangle
-        {
-            const v0 = polygon.verts[0].pos;
-            const v1 = polygon.verts[1].pos;
-            const v2 = polygon.verts[2].pos;
-            const signed_area =
-                (v1[0] - v0[0]) * (v2[1] - v0[1]) -
-                (v1[1] - v0[1]) * (v2[0] - v0[0]);
-            if (signed_area < 0) return;
-        }
-
-        // NDC -> raster
-        var raster_verts: [9]Vec2fx = undefined;
-        for (0..polygon.len) |i| {
-            const vert_pos = polygon.verts[i].pos;
-            raster_verts[i] = ndcToScreenFixedPoint(
-                vert_pos[0],
-                vert_pos[1],
+            vertices[i].xy = ndcToScreenFixedPoint(
+                v[0],
+                v[1],
                 self.fb_width,
                 self.fb_height,
             );
+
+            vertices[i].uv = verts_uv;
         }
 
-        // Using fan triangulation, emit the raster triangles
-        var i: usize = 1;
-        while (i + 1 < polygon.len) : (i += 1) {
-            try self.triangles.append(allocator, .{
-                .v0 = raster_verts[0],
-                .v1 = raster_verts[i],
-                .v2 = raster_verts[i + 1],
-                .q0 = rec_ws[0],
-                .q1 = rec_ws[i],
-                .q2 = rec_ws[i + 1],
-                .uv0 = polygon.verts[0].uv,
-                .uv1 = polygon.verts[i].uv,
-                .uv2 = polygon.verts[i + 1].uv,
-
-                .tex_u = quad.tex_u,
-                .tex_v = quad.tex_v,
-                .tex_tile_size = quad.tex_tile_size,
-            });
-        }
+        const base: u32 = @intCast(self.frame_vertices.items.len);
+        self.frame_vertices.appendAssumeCapacity(vertices);
+        self.frame_primitives.appendAssumeCapacity(.{
+            .base_vertex = base,
+            .vertex_count = len,
+        });
+        self.frame_materials.appendAssumeCapacity(.{
+            .tex_u = @intCast(tex_u),
+            .tex_v = @intCast(tex_v),
+        });
     }
 
     //// CHUNK RENDERING ///////////////////////////////////////////////////////
@@ -653,12 +612,12 @@ fn emitBucket(
             allocator,
             renderer,
         );
-
         return;
     }
 
     // No faces are visible
-    if (cam_axis <= slab_min or cam_axis >= slab_max) return;
+    if (cam_axis <= slab_min or cam_axis >= slab_max)
+        return;
 
     // Test all faces
     const positive = switch (kind) {

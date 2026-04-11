@@ -3,7 +3,7 @@ const std = @import("std");
 const FogMode = enum { none, linear, exp, exp2 };
 
 pub const Fog = struct {
-    enabled: bool = true,
+    enabled: bool = false,
     mode: FogMode = .linear,
 
     // Linear fog

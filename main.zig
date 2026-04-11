@@ -16,7 +16,7 @@ const Chunk = @import("world/Chunk.zig").Chunk;
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 100.0,
+        .view_distance = 500.0,
         .sensitivity = 0.0025,
         .near = 0.1,
     },

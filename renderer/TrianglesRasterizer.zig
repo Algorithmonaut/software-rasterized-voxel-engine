@@ -425,6 +425,8 @@ pub const TrianglesRasterizer = struct {
         fb: Framebuffer,
         atlas: *Atlas,
     ) !void {
+        std.debug.print("Triangle count: {}\n", .{triangles.len});
+
         @memset(self.tile_counts, 0);
 
         // TODO: A lot of these properties are shared between the
