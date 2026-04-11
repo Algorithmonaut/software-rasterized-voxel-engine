@@ -3,7 +3,7 @@ const BlockId = @import("../world/Block.zig").BlockId;
 
 pub const PlaneKind = enum(u8) { pos_x, neg_x, pos_y, neg_y, pos_z, neg_z };
 
-const RenderQuad = struct {
+pub const RenderQuad = struct {
     fixed: u8, // fixed coordinate on the normal axis
     row: u8, // first varying coordinate
     col: u8, // second varying coordinate
@@ -34,5 +34,14 @@ pub const Mesh = struct {
             .pos_z => try self.pos_z_faces.append(allocator, render_quad),
             .neg_z => try self.neg_z_faces.append(allocator, render_quad),
         }
+    }
+
+    pub inline fn clear(self: *Mesh) void {
+        self.pos_x_faces.clearRetainingCapacity();
+        self.neg_x_faces.clearRetainingCapacity();
+        self.pos_y_faces.clearRetainingCapacity();
+        self.neg_y_faces.clearRetainingCapacity();
+        self.pos_z_faces.clearRetainingCapacity();
+        self.neg_z_faces.clearRetainingCapacity();
     }
 };

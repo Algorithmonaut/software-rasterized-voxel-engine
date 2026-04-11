@@ -195,7 +195,9 @@ fn rectMask(start: usize, width: usize) u32 {
 }
 
 /// Counts how many consecutive 1 bits appear in mask, starting at bit start
-fn runWidthFromSlow(mask: u32, start: usize, size: usize) usize {
+fn runWidthFromStart(mask: u32, start: usize) usize {
+    const size = CHUNK_SIZE;
+
     var width: usize = 0;
     var i = start;
     while (i < size) : (i += 1) {
@@ -209,18 +211,7 @@ fn runWidthFromSlow(mask: u32, start: usize, size: usize) usize {
 
 const voxelCoord = struct { x: usize, y: usize, z: usize };
 
-fn faceFor(comptime kind: PlaneKind) Face {
-    return switch (kind) {
-        .pos_x => .right,
-        .neg_x => .left,
-        .pos_y => .top,
-        .neg_y => .bottom,
-        .pos_z => .back,
-        .neg_z => .front,
-    };
-}
-
-fn cellToVoxel(
+inline fn cellToVoxel(
     comptime kind: PlaneKind,
     plane_index: usize,
     row: usize,
@@ -237,11 +228,12 @@ fn greedyMergePlane(
     mesh: *Mesh,
     allocator: std.mem.Allocator,
     voxels: []const BlockId,
-    size: usize,
     comptime kind: PlaneKind,
     plane_index: usize,
     plane_in: [32]u32,
 ) !void {
+    const size = CHUNK_SIZE;
+
     var plane = plane_in;
 
     var row: usize = 0;
@@ -251,7 +243,7 @@ fn greedyMergePlane(
             const xyz0 = cellToVoxel(kind, plane_index, row, col);
             const id0 = voxels[voxelIndex(size, xyz0.x, xyz0.y, xyz0.z)];
 
-            var width = runWidthFromSlow(plane[row], col, size);
+            var width = runWidthFromStart(plane[row], col);
 
             var c = col;
             while (c < col + width) : (c += 1) {
@@ -311,7 +303,7 @@ pub fn generateLodMesh(
     bitfields: *BitfieldViews,
     coord: Vec3i,
     allocator: std.mem.Allocator,
-    mesh: *std.ArrayList(Quad),
+    mesh: Mesh,
 ) !void {
     const size = CHUNK_SIZE;
 
@@ -322,7 +314,7 @@ pub fn generateLodMesh(
     var pos_z_planes = std.mem.zeroes(PlaneSet);
     var neg_z_planes = std.mem.zeroes(PlaneSet);
 
-    mesh.clearRetainingCapacity();
+    mesh.clear();
 
     //// X AXIS ////
 
@@ -364,12 +356,12 @@ pub fn generateLodMesh(
     );
 
     for (0..size) |i| {
-        try greedyMergePlane(mesh, allocator, voxels, size, .pos_x, i, pos_x_planes[i]);
-        try greedyMergePlane(mesh, allocator, voxels, size, .neg_x, i, neg_x_planes[i]);
-        try greedyMergePlane(mesh, allocator, voxels, size, .pos_y, i, pos_y_planes[i]);
-        try greedyMergePlane(mesh, allocator, voxels, size, .neg_y, i, neg_y_planes[i]);
-        try greedyMergePlane(mesh, allocator, voxels, size, .pos_z, i, pos_z_planes[i]);
-        try greedyMergePlane(mesh, allocator, voxels, size, .neg_z, i, neg_z_planes[i]);
+        try greedyMergePlane(mesh, allocator, voxels, .pos_x, i, pos_x_planes[i]);
+        try greedyMergePlane(mesh, allocator, voxels, .neg_x, i, neg_x_planes[i]);
+        try greedyMergePlane(mesh, allocator, voxels, .pos_y, i, pos_y_planes[i]);
+        try greedyMergePlane(mesh, allocator, voxels, .neg_y, i, neg_y_planes[i]);
+        try greedyMergePlane(mesh, allocator, voxels, .pos_z, i, pos_z_planes[i]);
+        try greedyMergePlane(mesh, allocator, voxels, .neg_z, i, neg_z_planes[i]);
     }
 }
 

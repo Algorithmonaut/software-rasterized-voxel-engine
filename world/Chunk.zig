@@ -9,6 +9,7 @@ const Block = @import("Block.zig");
 const Quad = Block.Quad;
 const BlockId = Block.BlockId;
 const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
+const Mesh = @import("../mesh/Mesh.zig").Mesh;
 
 pub const CHUNK_SIZE = 32;
 const LOD1_CHUNK_SIZE = CHUNK_SIZE / 2;
@@ -164,43 +165,6 @@ pub fn createBitfields(voxels: []BlockId) BitfieldViews {
     return bitfields_out;
 }
 
-//// MESH DATA /////////////////////////////////////////////////////////////////
-
-const ChunkMeshes = struct {
-    lod0: std.ArrayList(Quad),
-
-    // WARN: Part of LOD implementation, do not remove
-
-    // lod1: std.ArrayList(Quad),
-    // lod2: std.ArrayList(Quad),
-    // lod3: std.ArrayList(Quad),
-    // lod4: std.ArrayList(Quad),
-
-    fn init(allocator: std.mem.Allocator) !ChunkMeshes {
-        return .{
-            .lod0 = try std.ArrayList(Quad).initCapacity(allocator, CHUNK_SIZE),
-
-            // WARN: Part of LOD implementation, do not remove
-
-            // .lod1 = try std.ArrayList(Quad).initCapacity(allocator, LOD1_CHUNK_SIZE),
-            // .lod2 = try std.ArrayList(Quad).initCapacity(allocator, LOD2_CHUNK_SIZE),
-            // .lod3 = try std.ArrayList(Quad).initCapacity(allocator, LOD3_CHUNK_SIZE),
-            // .lod4 = try std.ArrayList(Quad).initCapacity(allocator, LOD4_CHUNK_SIZE),
-        };
-    }
-
-    fn deinit(self: *ChunkMeshes, allocator: std.mem.Allocator) void {
-        self.lod0.deinit(allocator);
-
-        // WARN: Part of LOD implementation, do not remove
-
-        // self.lod1.deinit(allocator);
-        // self.lod2.deinit(allocator);
-        // self.lod3.deinit(allocator);
-        // self.lod4.deinit(allocator);
-    }
-};
-
 //// MAIN //////////////////////////////////////////////////////////////////////
 
 pub const Chunk = struct {
@@ -208,7 +172,7 @@ pub const Chunk = struct {
     dimensions: usize,
 
     lods: ChunkLods,
-    meshes: ChunkMeshes,
+    mesh: Mesh,
 
     dirty: bool = true,
     queued: bool = false,
@@ -244,7 +208,6 @@ pub const Chunk = struct {
     }
 
     pub fn generate(
-        allocator: std.mem.Allocator,
         coord: ChunkCoord,
         size: usize,
         world: *World,
@@ -266,7 +229,7 @@ pub const Chunk = struct {
             .world_min = world_min,
             .world_max = world_max,
             .dimensions = size,
-            .meshes = try ChunkMeshes.init(allocator),
+            .mesh = Mesh{},
 
             .bitfields = bitfields,
         };
