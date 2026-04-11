@@ -17,7 +17,7 @@ const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
         .view_distance = 200.0,
-        .sensitivity = 0.0010,
+        .sensitivity = 0.0025,
         .near = 0.1,
     },
     .player_config = .{

@@ -17,10 +17,23 @@ const PosVec = @Vector(3, usize);
 
 const PlaneSet = [32][32]u32;
 
-const PlaneKind = @import("Mesh.zig").PlaneKind;
-const Mesh = @import("Mesh.zig").Mesh;
-
 const CHUNK_SIZE = @import("../world/Chunk.zig").CHUNK_SIZE;
+
+const FaceTemplate = struct {
+    p0: Vec3i,
+    p1: Vec3i,
+    p2: Vec3i,
+    p3: Vec3i,
+};
+
+const PlaneKind = enum {
+    pos_x,
+    neg_x,
+    pos_y,
+    neg_y,
+    pos_z,
+    neg_z,
+};
 
 // BINARY CULLED MESHER | GENERATE PLANES //////////////////////////////////////
 
@@ -183,6 +196,172 @@ fn buildZPlanes(
 
 //// GREEDY MESHER /////////////////////////////////////////////////////////////
 
+const QuadLocalUv = struct {
+    uv0: UV,
+    uv1: UV,
+    uv2: UV,
+    uv3: UV,
+};
+
+// TODO: UNDERSTAND THIS CODE, TIRED TONIGHT
+
+// NOTE: REMOVED
+fn localUVsFor(comptime kind: PlaneKind, width: usize, height: usize) QuadLocalUv {
+    const u_extent: f32 = @floatFromInt(switch (kind) {
+        .pos_x, .neg_x => width * 16,
+        .pos_y, .neg_y, .pos_z, .neg_z => height * 16,
+    });
+
+    const v_extent: f32 = @floatFromInt(switch (kind) {
+        .pos_x, .neg_x => height * 16,
+        .pos_y, .neg_y, .pos_z, .neg_z => width * 16,
+    });
+
+    return switch (kind) {
+        .pos_x => .{
+            .uv0 = .{ 0, v_extent },
+            .uv1 = .{ 0, 0 },
+            .uv2 = .{ u_extent, 0 },
+            .uv3 = .{ u_extent, v_extent },
+        },
+
+        .neg_x => .{
+            .uv0 = .{ u_extent, v_extent },
+            .uv1 = .{ u_extent, 0 },
+            .uv2 = .{ 0, 0 },
+            .uv3 = .{ 0, v_extent },
+        },
+
+        .pos_y => .{
+            .uv0 = .{ 0, v_extent },
+            .uv1 = .{ 0, 0 },
+            .uv2 = .{ u_extent, 0 },
+            .uv3 = .{ u_extent, v_extent },
+        },
+
+        .neg_y => .{
+            .uv0 = .{ 0, 0 },
+            .uv1 = .{ 0, v_extent },
+            .uv2 = .{ u_extent, v_extent },
+            .uv3 = .{ u_extent, 0 },
+        },
+
+        .pos_z => .{
+            .uv0 = .{ u_extent, v_extent },
+            .uv1 = .{ u_extent, 0 },
+            .uv2 = .{ 0, 0 },
+            .uv3 = .{ 0, v_extent },
+        },
+
+        .neg_z => .{
+            .uv0 = .{ 0, v_extent },
+            .uv1 = .{ 0, 0 },
+            .uv2 = .{ u_extent, 0 },
+            .uv3 = .{ u_extent, v_extent },
+        },
+    };
+}
+
+// NOTE: REMOVED
+fn makeTexturedQuad(
+    p0: PosVec,
+    p1: PosVec,
+    p2: PosVec,
+    p3: PosVec,
+    local_uv: QuadLocalUv,
+    block_id: BlockId,
+    face: Face,
+) Quad {
+    return .{
+        .v0 = .{ .pos = p0, .uv = local_uv.uv0 },
+        .v1 = .{ .pos = p1, .uv = local_uv.uv1 },
+        .v2 = .{ .pos = p2, .uv = local_uv.uv2 },
+        .v3 = .{ .pos = p3, .uv = local_uv.uv3 },
+
+        // Remove magic number
+        .u = @as(usize, @intFromEnum(face)) * 16,
+        .v = @as(usize, @intFromEnum(block_id)) * 16,
+        .atlas_tile_size = 16,
+    };
+}
+
+// NOTE: REMOVED
+fn appendMergedQuad(
+    mesh: *std.ArrayList(Quad),
+    allocator: std.mem.Allocator,
+    comptime kind: PlaneKind,
+    plane_index: usize,
+    row: usize,
+    col: usize,
+    width: usize,
+    height: usize,
+    id: BlockId,
+) !void {
+    const face = faceFor(kind);
+    // NOTE: Remove magic number
+
+    // .p0 = .{ 1, 0, 1 }, .p1 = .{ 1, 1, 1 }, .p2 = .{ 0, 1, 1 }, .p3 = .{ 0, 0, 1 } // back
+    // .p0 = .{ 0, 0, 0 }, .p1 = .{ 0, 1, 0 }, .p2 = .{ 1, 1, 0 }, .p3 = .{ 1, 0, 0 } // front
+    // .p0 = .{ 0, 0, 1 }, .p1 = .{ 0, 1, 1 }, .p2 = .{ 0, 1, 0 }, .p3 = .{ 0, 0, 0 } // left
+    // .p0 = .{ 1, 0, 0 }, .p1 = .{ 1, 1, 0 }, .p2 = .{ 1, 1, 1 }, .p3 = .{ 1, 0, 1 } // right
+    // .p0 = .{ 0, 0, 1 }, .p1 = .{ 0, 0, 0 }, .p2 = .{ 1, 0, 0 }, .p3 = .{ 1, 0, 1 } // bottom
+    // .p0 = .{ 0, 1, 0 }, .p1 = .{ 0, 1, 1 }, .p2 = .{ 1, 1, 1 }, .p3 = .{ 1, 1, 0 } // top
+
+    const p0: PosVec, const p1: PosVec, const p2: PosVec, const p3: PosVec = switch (kind) {
+        // +X / right face: fixed x, rows=y, cols=z
+        .pos_x => .{
+            .{ plane_index + 1, row, col },
+            .{ plane_index + 1, row + height, col },
+            .{ plane_index + 1, row + height, col + width },
+            .{ plane_index + 1, row, col + width },
+        },
+
+        // -X / left face: fixed x, rows=y, cols=z
+        .neg_x => .{
+            .{ plane_index, row, col + width },
+            .{ plane_index, row + height, col + width },
+            .{ plane_index, row + height, col },
+            .{ plane_index, row, col },
+        },
+
+        // +Y / top face: fixed y, rows=x, cols=z
+        .pos_y => .{
+            .{ row, plane_index + 1, col },
+            .{ row, plane_index + 1, col + width },
+            .{ row + height, plane_index + 1, col + width },
+            .{ row + height, plane_index + 1, col },
+        },
+
+        // -Y / bottom face: fixed y, rows=x, cols=z
+        .neg_y => .{
+            .{ row, plane_index, col + width },
+            .{ row, plane_index, col },
+            .{ row + height, plane_index, col },
+            .{ row + height, plane_index, col + width },
+        },
+
+        // +Z / back face: fixed z, rows=x, cols=y
+        .pos_z => .{
+            .{ row + height, col, plane_index + 1 },
+            .{ row + height, col + width, plane_index + 1 },
+            .{ row, col + width, plane_index + 1 },
+            .{ row, col, plane_index + 1 },
+        },
+
+        // -Z / front face: fixed z, rows=x, cols=y
+        .neg_z => .{
+            .{ row, col, plane_index },
+            .{ row, col + width, plane_index },
+            .{ row + height, col + width, plane_index },
+            .{ row + height, col, plane_index },
+        },
+    };
+
+    const local_uv = localUVsFor(kind, width, height);
+    const quad = makeTexturedQuad(p0, p1, p2, p3, local_uv, id, face);
+    try mesh.append(allocator, quad);
+}
+
 /// Returns a bitmask with exactly width consecutive 1s starting at bit start.
 fn rectMask(start: usize, width: usize) u32 {
     if (width >= 32) return std.math.maxInt(u32);
@@ -234,7 +413,7 @@ fn cellToVoxel(
 }
 
 fn greedyMergePlane(
-    mesh: *Mesh,
+    mesh: *std.ArrayList(Quad),
     allocator: std.mem.Allocator,
     voxels: []const BlockId,
     size: usize,
@@ -286,14 +465,17 @@ fn greedyMergePlane(
                 height += 1;
             }
 
-            try mesh.appendRenderQuad(allocator, kind, .{
-                .block_id = id0,
-                .col = col,
-                .row = row,
-                .fixed = plane_index,
-                .width = width,
-                .height = height,
-            });
+            try appendMergedQuad(
+                mesh,
+                allocator,
+                kind,
+                plane_index,
+                row,
+                col,
+                width,
+                height,
+                id0,
+            );
 
             var r = row;
             while (r < row + height) : (r += 1) {
