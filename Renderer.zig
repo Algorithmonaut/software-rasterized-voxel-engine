@@ -27,6 +27,7 @@ const Vertex = Block.Vertex;
 const Vec2fx = types.Vec2fx;
 const SUBPIXEL_BITS = types.SUBPIXEL_BITS;
 const SUBPIXEL_SCALE = types.SUBPIXEL_SCALE;
+const SUBPIXEL_MASK = (1 << SUBPIXEL_BITS) - 1;
 
 const Mat4f = @import("math/matrix.zig").Mat4f;
 
@@ -121,6 +122,14 @@ pub const Renderer = struct {
         };
     }
 
+    inline fn floorFixed(x: i32) i32 {
+        return x >> SUBPIXEL_BITS;
+    }
+
+    inline fn ceilFixed(x: i32) i32 {
+        return (x + SUBPIXEL_MASK) >> SUBPIXEL_BITS;
+    }
+
     /// No need to do backface culling anymore
     inline fn emitQuad(
         self: *Renderer,
@@ -177,10 +186,10 @@ pub const Renderer = struct {
         self.frame_primitives.appendAssumeCapacity(.{
             .base_vertex = base,
             .vertex_count = 4,
-            .min_tx = @divFloor(min_x, tile_dim),
-            .min_ty = @divFloor(min_y, tile_dim),
-            .max_tx = std.math.divCeil(i32, max_x, tile_dim) catch unreachable,
-            .max_ty = std.math.divCeil(i32, max_y, tile_dim) catch unreachable,
+            .min_tx = @divFloor(floorFixed(min_x), tile_dim),
+            .min_ty = @divFloor(floorFixed(min_y), tile_dim),
+            .max_tx = std.math.divCeil(i32, ceilFixed(max_x), tile_dim) catch unreachable,
+            .max_ty = std.math.divCeil(i32, ceilFixed(max_y), tile_dim) catch unreachable,
         });
         self.frame_materials.appendAssumeCapacity(.{
             .tex_u = tex_u,

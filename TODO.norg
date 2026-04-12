@@ -1,5 +1,10 @@
 - (x) Recompute frustum planes once per frame instead of reconstructing them per 
       chunk in `isChunkInFrustum`.
+- ( ) Reimplement triangle may overlap tile, but this time add a case if the triangle is fully
+      inside.
+- ( ) Maybe do not use usize for binning.
+- ( ) For far enough triangles, trivially rasterize as a single color.
+- ( ) Color tile differently in debug view: in bbox: red, eliminated thanks to barycentric: green
 - ( ) Replace `renderer.init` chunk entry estimate (`view_distance / 2` cubed 
       is the wrong scale); use chunks in radius.
 - ( ) Replace chunk booleans with an enum:
