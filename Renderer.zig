@@ -39,10 +39,17 @@ const UV = @Vector(2, f32);
 const eps: f32 = 0.0001;
 
 pub const Renderer = struct {
-    const ChunkRenderEntry = struct { chunk: *Chunk, dist2: f32 };
-    const ProjectedVertex = struct { xy: Vec2fx, q: f32, uv: UV };
-    const MaterialRef = struct { tex_u: u16, tex_v: u16 };
-    const PrimitiveRef = struct { base_vertex: u32, vertex_count: u8 };
+    pub const ChunkRenderEntry = struct { chunk: *Chunk, dist2: f32 };
+    pub const ProjectedVertex = struct { xy: Vec2fx, q: f32, uv: UV };
+    pub const MaterialRef = struct { tex_u: u16, tex_v: u16 };
+    pub const PrimitiveRef = struct {
+        base_vertex: u32 = undefined,
+        vertex_count: u8 = undefined,
+        min_tx: u16 = 0,
+        max_tx: u16 = std.math.maxInt(u16),
+        min_ty: u16 = 0,
+        max_ty: u16 = std.math.maxInt(u16),
+    };
 
     frame_primitives: std.ArrayList(PrimitiveRef),
     frame_materials: std.ArrayList(MaterialRef),
@@ -90,12 +97,10 @@ pub const Renderer = struct {
     }
 
     pub fn deinit(self: *Renderer, allocator: std.mem.Allocator) void {
-        self.triangles.clearAndFree(allocator);
-        self.chunk_entries.clearAndFree(allocator);
-    }
-
-    pub fn beginFrame(self: *Renderer) void {
-        self.triangles.clearRetainingCapacity();
+        self.frame_primitives.deinit(allocator);
+        self.frame_materials.deinit(allocator);
+        self.frame_vertices.deinit(allocator);
+        self.chunk_entries.deinit(allocator);
     }
 
     inline fn ndcToScreenFixedPoint(
@@ -126,67 +131,126 @@ pub const Renderer = struct {
     ) void {
         var vertices: [4]ProjectedVertex = undefined;
 
-        inline for (0..4) |i| {
-            const rec_w = 1.0 / verts_coord[i][3];
-            vertices[i].q = rec_w;
-            const v = verts_coord[i] * @as(F4, @splat(rec_w));
+        var rec_w = 1.0 / verts_coord[0][3];
+        vertices[0].q = rec_w;
+        var v = verts_coord[0] * @as(F4, @splat(rec_w));
 
-            vertices[i].xy = ndcToScreenFixedPoint(
+        var p = ndcToScreenFixedPoint(
+            v[0],
+            v[1],
+            self.fb_width,
+            self.fb_height,
+        );
+
+        var min_x = p[0];
+        var max_x = p[0];
+        var min_y = p[1];
+        var max_y = p[1];
+
+        vertices[0].xy = p;
+        vertices[0].uv = verts_uv[0];
+
+        inline for (1..4) |i| {
+            rec_w = 1.0 / verts_coord[i][3];
+            vertices[i].q = rec_w;
+            v = verts_coord[i] * @as(F4, @splat(rec_w));
+
+            p = ndcToScreenFixedPoint(
                 v[0],
                 v[1],
                 self.fb_width,
                 self.fb_height,
             );
 
+            min_x = @min(min_x, p[0]);
+            max_x = @max(max_x, p[0]);
+            min_y = @min(min_y, p[1]);
+            max_y = @max(max_y, p[1]);
+
+            vertices[i].xy = p;
             vertices[i].uv = verts_uv[i];
         }
 
+        const tile_dim = self.tile_dimensions;
         const base: u32 = @intCast(self.frame_vertices.items.len);
         self.frame_vertices.appendSliceAssumeCapacity(vertices);
         self.frame_primitives.appendAssumeCapacity(.{
             .base_vertex = base,
             .vertex_count = 4,
+            .min_tx = @divFloor(min_x, tile_dim),
+            .min_ty = @divFloor(min_y, tile_dim),
+            .max_tx = std.math.divCeil(i32, max_x, tile_dim) catch unreachable,
+            .max_ty = std.math.divCeil(i32, max_y, tile_dim) catch unreachable,
         });
         self.frame_materials.appendAssumeCapacity(.{
-            .tex_u = @intCast(tex_u),
-            .tex_v = @intCast(tex_v),
+            .tex_u = tex_u,
+            .tex_v = tex_v,
         });
     }
 
     inline fn emitPolygon(
         self: *Renderer,
-        verts_coord: []F4,
-        verts_uv: []UV,
+        polygon: *ClippedPolygon,
         tex_u: usize,
         tex_v: usize,
     ) void {
-        const len: u8 = @intCast(verts_coord.len);
+        const len = polygon.len;
         var vertices: [9]ProjectedVertex = undefined;
 
-        for (0..len) |i| {
-            const rec_w = 1.0 / verts_coord[i][3];
-            vertices[i].q = rec_w;
-            const v = verts_coord[i] * @as(F4, @splat(rec_w));
+        var rec_w = 1.0 / polygon.verts[0].pos[3];
+        vertices[0].q = rec_w;
+        var v = polygon.verts[0].pos * @as(F4, @splat(rec_w));
 
-            vertices[i].xy = ndcToScreenFixedPoint(
+        var p = ndcToScreenFixedPoint(
+            v[0],
+            v[1],
+            self.fb_width,
+            self.fb_height,
+        );
+
+        var min_x = p[0];
+        var max_x = p[0];
+        var min_y = p[1];
+        var max_y = p[1];
+
+        vertices[0].xy = p;
+        vertices[0].uv = polygon.verts[0].uv;
+
+        for (1..len) |i| {
+            rec_w = 1.0 / polygon.verts[i].pos[3];
+            vertices[i].q = rec_w;
+            v = polygon.verts[i].pos * @as(F4, @splat(rec_w));
+
+            p = ndcToScreenFixedPoint(
                 v[0],
                 v[1],
                 self.fb_width,
                 self.fb_height,
             );
 
-            vertices[i].uv = verts_uv;
+            min_x = @min(min_x, p[0]);
+            max_x = @max(max_x, p[0]);
+            min_y = @min(min_y, p[1]);
+            max_y = @max(max_y, p[1]);
+
+            vertices[i].xy = p;
+            vertices[i].uv = polygon.verts[i].uv;
         }
 
+        const tile_dim = self.tile_dimensions;
         const base: u32 = @intCast(self.frame_vertices.items.len);
-        self.frame_vertices.appendAssumeCapacity(vertices);
+        self.frame_vertices.appendAssumeCapacity(vertices[0..len]);
         self.frame_primitives.appendAssumeCapacity(.{
             .base_vertex = base,
             .vertex_count = len,
+            .min_tx = @divFloor(min_x, tile_dim),
+            .min_ty = @divFloor(min_y, tile_dim),
+            .max_tx = std.math.divCeil(i32, max_x, tile_dim) catch unreachable,
+            .max_ty = std.math.divCeil(i32, max_y, tile_dim) catch unreachable,
         });
         self.frame_materials.appendAssumeCapacity(.{
-            .tex_u = @intCast(tex_u),
-            .tex_v = @intCast(tex_v),
+            .tex_u = tex_u,
+            .tex_v = tex_v,
         });
     }
 
@@ -427,7 +491,6 @@ fn emitRenderQuad(
     rq: RenderQuad,
     chunk_min: F3,
     combined_mat: Mat4f,
-    allocator: std.mem.Allocator,
     renderer: *Renderer,
 ) !void {
     const fx = chunk_min[0];
@@ -514,59 +577,42 @@ fn emitRenderQuad(
         .neg_y => .{ .{ v_0, u_0 }, .{ v_1, u_0 }, .{ v_1, u_1 }, .{ v_0, u_1 } },
     };
 
-    // HACK: Rewrite cleanly after rewritting the RasterTriangle array
-    // Maybe pass kind and block_id to the rasterizer directly, less mem traffic
-
-    const quad = WorldQuad{
-        .tex_tile_size = 16,
-        .tex_u = @intFromEnum(kind) * TEX_SIZE,
-        .tex_v = @intFromEnum(rq.block_id) * TEX_SIZE,
-        .v0 = .{ .uv = verts_uv[0], .pos = verts_coord[0] },
-        .v1 = .{ .uv = verts_uv[1], .pos = verts_coord[1] },
-        .v2 = .{ .uv = verts_uv[2], .pos = verts_coord[2] },
-        .v3 = .{ .uv = verts_uv[3], .pos = verts_coord[3] },
-    };
-
     // Quad trivially inside
 
+    const tex_u: u16 = @intFromEnum(kind) * TEX_SIZE;
+    const tex_v: u16 = @intFromEnum(rq.block_id) * TEX_SIZE;
+
     if (or_code == 0) {
-        try renderer.emitQuad(allocator, quad);
+        renderer.emitQuad(&verts_coord, &verts_uv, tex_u, tex_v);
         return;
     }
 
     var clipped_polygon: ClippedPolygon = undefined;
-    clipped_polygon.verts[0] = quad.v0;
-    clipped_polygon.verts[1] = quad.v1;
-    clipped_polygon.verts[2] = quad.v2;
-    clipped_polygon.verts[3] = quad.v3;
+    clipped_polygon.verts[0].pos = verts_coord[0];
+    clipped_polygon.verts[1].pos = verts_coord[1];
+    clipped_polygon.verts[2].pos = verts_coord[2];
+    clipped_polygon.verts[3].pos = verts_coord[3];
+    clipped_polygon.verts[0].uv = verts_uv[0];
+    clipped_polygon.verts[1].uv = verts_uv[1];
+    clipped_polygon.verts[2].uv = verts_uv[2];
+    clipped_polygon.verts[3].uv = verts_uv[3];
     clipped_polygon.len = 4;
 
-    if ((or_code & @intFromEnum(Plane.LEFT)) != 0) {
+    if ((or_code & @intFromEnum(Plane.LEFT)) != 0)
         clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.LEFT);
-        if (clipped_polygon.len < 3) return;
-    }
-
-    if ((or_code & @intFromEnum(Plane.RIGHT)) != 0) {
+    if (clipped_polygon.len < 3) return;
+    if ((or_code & @intFromEnum(Plane.RIGHT)) != 0)
         clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.RIGHT);
-        if (clipped_polygon.len < 3) return;
-    }
-
-    if ((or_code & @intFromEnum(Plane.BOTTOM)) != 0) {
+    if (clipped_polygon.len < 3) return;
+    if ((or_code & @intFromEnum(Plane.BOTTOM)) != 0)
         clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.BOTTOM);
-        if (clipped_polygon.len < 3) return;
-    }
-
-    if ((or_code & @intFromEnum(Plane.TOP)) != 0) {
+    if (clipped_polygon.len < 3) return;
+    if ((or_code & @intFromEnum(Plane.TOP)) != 0)
         clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.TOP);
-        if (clipped_polygon.len < 3) return;
-    }
-
-    if ((or_code & @intFromEnum(Plane.NEAR)) != 0) {
+    if ((or_code & @intFromEnum(Plane.NEAR)) != 0)
         clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.NEAR);
-        if (clipped_polygon.len < 3) return;
-    }
 
-    try renderer.emitPolygonFan(allocator, clipped_polygon, quad);
+    renderer.emitPolygon(clipped_polygon.verts);
 }
 
 //// TRIVIAL, PLANE NORMAL BASED CULLING | AXIS BUCKET CULL ////////////////////
@@ -580,7 +626,6 @@ fn emitBucket(
     chunk_min: F3,
     combined_mat: Mat4f,
     renderer: *Renderer,
-    allocator: std.mem.Allocator,
 ) !void {
 
     // POSITIVE AXIS (box is chunk)
@@ -609,7 +654,6 @@ fn emitBucket(
             quad,
             chunk_min,
             combined_mat,
-            allocator,
             renderer,
         );
         return;
@@ -640,7 +684,6 @@ fn emitBucket(
                 quad,
                 chunk_min,
                 combined_mat,
-                allocator,
                 renderer,
             );
         } else {
@@ -649,7 +692,6 @@ fn emitBucket(
                 quad,
                 chunk_min,
                 combined_mat,
-                allocator,
                 renderer,
             );
         }
@@ -660,17 +702,16 @@ pub fn generatePrimitivesFromChunk(
     chunk: *Chunk,
     camera_pos: F3,
     combined_mat: Mat4f,
-    allocator: std.mem.Allocator,
     renderer: *Renderer,
 ) !void {
     const min: F3 = @floatFromInt(chunk.world_min);
     const max: F3 = @floatFromInt(chunk.world_max);
     const pos = camera_pos;
 
-    try emitBucket(.pos_x, chunk.mesh.pos_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer, allocator);
-    try emitBucket(.pos_y, chunk.mesh.pos_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer, allocator);
-    try emitBucket(.pos_z, chunk.mesh.pos_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer, allocator);
-    try emitBucket(.neg_x, chunk.mesh.neg_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer, allocator);
-    try emitBucket(.neg_y, chunk.mesh.neg_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer, allocator);
-    try emitBucket(.neg_z, chunk.mesh.neg_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer, allocator);
+    try emitBucket(.pos_x, chunk.mesh.pos_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer);
+    try emitBucket(.pos_y, chunk.mesh.pos_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer);
+    try emitBucket(.pos_z, chunk.mesh.pos_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer);
+    try emitBucket(.neg_x, chunk.mesh.neg_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer);
+    try emitBucket(.neg_y, chunk.mesh.neg_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer);
+    try emitBucket(.neg_z, chunk.mesh.neg_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer);
 }
