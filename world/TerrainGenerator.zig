@@ -5,6 +5,10 @@ const BlockId = Block.BlockId;
 
 const WorldConfig = @import("../EngineConfig.zig").EngineConfig.WorldConfig;
 
+const ChunkCoord = @import("../math/types.zig").ChunkCoord;
+
+const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
+
 //// DETERMINISTIC HASHING ////
 
 fn hash2(x: i32, y: i32, seed: u32) u32 {
@@ -100,6 +104,9 @@ pub const TerrainGenerator = struct {
     mountain_gain: f32,
     mountain_scale: f32,
 
+    min_world_y: i32,
+    max_world_y: i32,
+
     pub fn init(conf: WorldConfig) TerrainGenerator {
         return .{
             .seed = conf.seed,
@@ -107,12 +114,13 @@ pub const TerrainGenerator = struct {
             .lacunarity = conf.lacunarity,
             .gain = conf.gain,
             .scale = conf.scale,
-
             .mountain_seed = conf.mountain_seed,
             .mountain_octaves = conf.mountain_octaves,
             .mountain_lacunarity = conf.mountain_lacunarity,
             .mountain_gain = conf.mountain_gain,
             .mountain_scale = conf.mountain_scale,
+            .min_world_y = conf.min_world_y,
+            .max_world_y = conf.max_world_y - 1,
         };
     }
 
@@ -126,6 +134,7 @@ pub const TerrainGenerator = struct {
 
         // Replace by a valid seed
         const h = fbm2(nx, nz, self.octaves, self.gain, self.lacunarity, self.seed);
+        // TODO: Move to conf
         const base_height: f32 = 32.0;
         const amplitude: f32 = 24.0;
 
@@ -133,24 +142,41 @@ pub const TerrainGenerator = struct {
     }
 
     pub fn fillChunkVoxels(
-        self: TerrainGenerator,
-        voxels: []BlockId,
-        chunk_coord: @Vector(3, i32),
-        size: usize,
-    ) void {
-        const chunk_size_i: i32 = @intCast(size);
+        self: *TerrainGenerator,
+        allocator: std.mem.Allocator,
+        job: GenerationJob,
+    ) !GenerationResult {
+        const size = CHUNK_SIZE;
+
+        const voxels = try allocator.alloc(BlockId, size * size * size);
+
+        const chunk_min_y = job.coord[1] * size;
+        const chunk_max_y = CHUNK_SIZE + size;
+
+        if (chunk_max_y <= self.min_world_y or chunk_min_y > self.max_world_y) {
+            @memset(voxels, .air);
+            return .{
+                .coord = job.coord,
+                .voxels = voxels,
+            };
+        }
 
         for (0..size) |z| {
             for (0..size) |x| {
-                const world_x = chunk_coord[0] * chunk_size_i + @as(i32, @intCast(x));
-                const world_z = chunk_coord[2] * chunk_size_i + @as(i32, @intCast(z));
-                const h = self.terrainHeight(world_x, world_z);
+                const world_x = job.coord[0] * size + @as(i32, @intCast(x));
+                const world_z = job.coord[2] * size + @as(i32, @intCast(z));
+                const h_unclamped = self.terrainHeight(world_x, world_z);
+                const h = std.math.clamp(h_unclamped, self.min_world_y, self.max_world_y);
 
                 for (0..size) |y| {
-                    const world_y = chunk_coord[1] * chunk_size_i + @as(i32, @intCast(y));
+                    const world_y = job.coord[1] * size + @as(i32, @intCast(y));
                     const idx = x + y * size + z * size * size;
 
-                    if (world_y > h) {
+                    if (world_y < self.min_world_y) {
+                        voxels[idx] = .air;
+                    } else if (world_y >= self.max_world_y) {
+                        voxels[idx] = .air;
+                    } else if (world_y > h) {
                         voxels[idx] = .air;
                     } else if (world_y == h) {
                         voxels[idx] = .grass;
@@ -162,5 +188,19 @@ pub const TerrainGenerator = struct {
                 }
             }
         }
+
+        return .{
+            .coord = job.coord,
+            .voxels = voxels,
+        };
     }
+};
+
+pub const GenerationJob = struct {
+    coord: ChunkCoord,
+};
+
+pub const GenerationResult = struct {
+    coord: ChunkCoord,
+    voxels: []BlockId,
 };

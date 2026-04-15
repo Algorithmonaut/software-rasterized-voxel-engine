@@ -11,8 +11,6 @@ const Player = @import("../game/Player.zig").Player;
 
 const Vec3f = @import("../math/types.zig").Vec3f;
 
-const TrianglesRasterizer = @import("../renderer/TrianglesRasterizer.zig").TrianglesRasterizer;
-
 pub const SdlPlatform = struct {
     freq: u64, // tick counter
     last_frame: u64, // ticks per second
@@ -77,7 +75,6 @@ pub const SdlPlatform = struct {
         dt: f32,
         player: *Player,
         sdl_gfx: *SdlGraphics,
-        triangle_rasterizer: *TrianglesRasterizer,
     ) void {
         while (c.SDL_PollEvent(&self.ev) != 0) {
             switch (self.ev.type) {
@@ -100,12 +97,12 @@ pub const SdlPlatform = struct {
                         //     c.SDL_WarpMouseInWindow(@as(?*c.SDL_Window, sdl_gfx.window), w / 2, h / 2);
                         // }
                     }
-                    const scancode = self.ev.key.keysym.scancode;
+                    // const scancode = self.ev.key.keysym.scancode;
 
-                    if (self.ev.key.repeat == 0 and scancode == c.SDL_SCANCODE_Z) {
-                        triangle_rasterizer.render_wireframe = !triangle_rasterizer.render_wireframe;
-                        std.debug.print("wireframe = {}\n", .{triangle_rasterizer.render_wireframe});
-                    }
+                    // if (self.ev.key.repeat == 0 and scancode == c.SDL_SCANCODE_Z) {
+                    //     triangle_rasterizer.render_wireframe = !triangle_rasterizer.render_wireframe;
+                    //     std.debug.print("wireframe = {}\n", .{triangle_rasterizer.render_wireframe});
+                    // }
                 },
 
                 else => {},

@@ -19,6 +19,8 @@ const I3 = types.Vec3i;
 const WorldCoord = types.WorldCoord;
 const ChunkCoord = types.ChunkCoord;
 
+const ChunkWorker = @import("world/ChunkWorker.zig").ChunkWorker;
+
 const Block = @import("world/Block.zig");
 const WorldQuad = Block.WorldQuad;
 const WorldVertex = Block.WorldVertex;
@@ -29,10 +31,13 @@ const SUBPIXEL_BITS = types.SUBPIXEL_BITS;
 const SUBPIXEL_SCALE = types.SUBPIXEL_SCALE;
 const SUBPIXEL_MASK = (1 << SUBPIXEL_BITS) - 1;
 
+const VOXEL_COUNT = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
+
 const Mat4f = @import("math/matrix.zig").Mat4f;
 
 const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
-const RasterTriangle = @import("triangle.zig").RasterTriangle;
+
+const createBitfields = @import("world/Chunk.zig").createBitfields;
 
 // TODO: Centralize this
 const UV = @Vector(2, f32);
@@ -61,6 +66,8 @@ pub const Renderer = struct {
     fb_width: usize,
     fb_height: usize,
     tile_dimensions: usize,
+    tiles_count_w: usize,
+    tiles_count_h: usize,
 
     planes: [5]F4 = undefined,
 
@@ -71,29 +78,22 @@ pub const Renderer = struct {
     ) !Renderer {
         _ = view_distance;
 
-        std.debug.print("ProjectedVertex: size={}, align={}\n", .{
-            @sizeOf(ProjectedVertex),
-            @alignOf(ProjectedVertex),
-        });
-        std.debug.print("MaterialRef: size={}, align={}\n", .{
-            @sizeOf(MaterialRef),
-            @alignOf(MaterialRef),
-        });
-        std.debug.print("PrimitiveRef: size={}, align={}\n", .{
-            @sizeOf(PrimitiveRef),
-            @alignOf(PrimitiveRef),
-        });
+        const tiles_count_w = try std.math.divCeil(usize, conf.width, conf.tile_dimensions);
+        const tiles_count_h = try std.math.divCeil(usize, conf.height, conf.tile_dimensions);
 
         return .{
             // TODO: I presume that these are good estimates, but please investigate
             .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 70_000),
             .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 70_000),
-            .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 140_000),
+            .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 280_000),
 
             .chunk_entries = try std.ArrayList(ChunkRenderEntry).initCapacity(allocator, 100),
             .fb_width = conf.width,
             .fb_height = conf.height,
             .tile_dimensions = conf.tile_dimensions,
+
+            .tiles_count_w = tiles_count_w,
+            .tiles_count_h = tiles_count_h,
         };
     }
 
@@ -102,6 +102,12 @@ pub const Renderer = struct {
         self.frame_materials.deinit(allocator);
         self.frame_vertices.deinit(allocator);
         self.chunk_entries.deinit(allocator);
+    }
+
+    pub fn beginFrame(self: *Renderer) void {
+        self.frame_primitives.clearRetainingCapacity();
+        self.frame_materials.clearRetainingCapacity();
+        self.frame_vertices.clearRetainingCapacity();
     }
 
     inline fn ndcToScreenFixedPoint(
@@ -122,12 +128,59 @@ pub const Renderer = struct {
         };
     }
 
+    // inline fn floorFixed(x: i32) i32 {
+    //     return x >> SUBPIXEL_BITS;
+    // }
+    //
+    // inline fn ceilFixed(x: i32) i32 {
+    //     return (x + SUBPIXEL_MASK) >> SUBPIXEL_BITS;
+    // }
+
     inline fn floorFixed(x: i32) i32 {
-        return x >> SUBPIXEL_BITS;
+        return @intCast(@divFloor(@as(i64, x), SUBPIXEL_SCALE));
     }
 
     inline fn ceilFixed(x: i32) i32 {
-        return (x + SUBPIXEL_MASK) >> SUBPIXEL_BITS;
+        const xi: i64 = x;
+        return @intCast(-@divFloor(-xi, SUBPIXEL_SCALE));
+    }
+
+    // TODO: Understand this code
+    inline fn clampTileRange(
+        self: *const Renderer,
+        min_x_fx: i32,
+        max_x_fx: i32,
+        min_y_fx: i32,
+        max_y_fx: i32,
+    ) struct { min_tx: u16, max_tx: u16, min_ty: u16, max_ty: u16 } {
+        const tile_dim: i32 = @intCast(self.tile_dimensions);
+        const tile_w: i32 = @intCast(self.tiles_count_w);
+        const tile_h: i32 = @intCast(self.tiles_count_h);
+
+        // Convert fixed-point screen bbox to pixel bbox
+        const px_min_x = floorFixed(min_x_fx);
+        const px_max_x = ceilFixed(max_x_fx);
+        const px_min_y = floorFixed(min_y_fx);
+        const px_max_y = ceilFixed(max_y_fx);
+
+        // Convert to tile coords in signed space
+        const raw_min_tx = @divFloor(px_min_x, tile_dim);
+        const raw_max_tx = std.math.divCeil(i32, px_max_x, tile_dim) catch unreachable;
+        const raw_min_ty = @divFloor(px_min_y, tile_dim);
+        const raw_max_ty = std.math.divCeil(i32, px_max_y, tile_dim) catch unreachable;
+
+        // Clamp to tile grid, max is exclusive
+        const min_tx = std.math.clamp(raw_min_tx, 0, tile_w);
+        const max_tx = std.math.clamp(raw_max_tx, 0, tile_w);
+        const min_ty = std.math.clamp(raw_min_ty, 0, tile_h);
+        const max_ty = std.math.clamp(raw_max_ty, 0, tile_h);
+
+        return .{
+            .min_tx = @intCast(min_tx),
+            .max_tx = @intCast(max_tx),
+            .min_ty = @intCast(min_ty),
+            .max_ty = @intCast(max_ty),
+        };
     }
 
     /// No need to do backface culling anymore
@@ -135,8 +188,8 @@ pub const Renderer = struct {
         self: *Renderer,
         verts_coord: *const [4]F4,
         verts_uv: *const [4]UV,
-        tex_u: usize,
-        tex_v: usize,
+        tex_u: u16,
+        tex_v: u16,
     ) void {
         var vertices: [4]ProjectedVertex = undefined;
 
@@ -180,30 +233,54 @@ pub const Renderer = struct {
             vertices[i].uv = verts_uv[i];
         }
 
-        const tile_dim = self.tile_dimensions;
+        const tr = self.clampTileRange(min_x, max_x, min_y, max_y);
+
+        const prim_i = self.frame_primitives.items.len;
+        const old_vert_len = self.frame_vertices.items.len;
+        const old_prim_len = self.frame_primitives.items.len;
+        const old_mat_len = self.frame_materials.items.len;
+
+        std.debug.assert(old_prim_len == old_mat_len);
+
         const base: u32 = @intCast(self.frame_vertices.items.len);
-        self.frame_vertices.appendSliceAssumeCapacity(vertices);
+        self.frame_vertices.appendSliceAssumeCapacity(&vertices);
         self.frame_primitives.appendAssumeCapacity(.{
             .base_vertex = base,
             .vertex_count = 4,
-            .min_tx = @divFloor(floorFixed(min_x), tile_dim),
-            .min_ty = @divFloor(floorFixed(min_y), tile_dim),
-            .max_tx = std.math.divCeil(i32, ceilFixed(max_x), tile_dim) catch unreachable,
-            .max_ty = std.math.divCeil(i32, ceilFixed(max_y), tile_dim) catch unreachable,
+            .min_tx = tr.min_tx,
+            .max_tx = tr.max_tx,
+            .min_ty = tr.min_ty,
+            .max_ty = tr.max_ty,
         });
         self.frame_materials.appendAssumeCapacity(.{
             .tex_u = tex_u,
             .tex_v = tex_v,
         });
+
+        if (self.frame_vertices.items.len != old_vert_len + 4)
+            std.debug.panic(
+                "emitQuad bad append: prim_i={}, old_vert_len={}, new_vert_len={}",
+                .{ prim_i, old_vert_len, self.frame_vertices.items.len },
+            );
+
+        if (self.frame_primitives.items[prim_i].base_vertex != base)
+            std.debug.panic(
+                "emitQuad bad base: prim_i={}, expected={}, got={}",
+                .{ prim_i, base, self.frame_primitives.items[prim_i].base_vertex },
+            );
     }
 
     inline fn emitPolygon(
         self: *Renderer,
         polygon: *ClippedPolygon,
-        tex_u: usize,
-        tex_v: usize,
+        tex_u: u16,
+        tex_v: u16,
     ) void {
         const len = polygon.len;
+
+        if (len < 3) std.debug.panic("Less than 3 vertices", .{});
+        if (len > 9) std.debug.panic("More than 3 vertices", .{});
+
         var vertices: [9]ProjectedVertex = undefined;
 
         var rec_w = 1.0 / polygon.verts[0].pos[3];
@@ -246,21 +323,41 @@ pub const Renderer = struct {
             vertices[i].uv = polygon.verts[i].uv;
         }
 
-        const tile_dim = self.tile_dimensions;
+        const tr = self.clampTileRange(min_x, max_x, min_y, max_y);
+
+        const prim_i = self.frame_primitives.items.len;
+        const old_vert_len = self.frame_vertices.items.len;
+        const old_prim_len = self.frame_primitives.items.len;
+        const old_mat_len = self.frame_materials.items.len;
+
+        std.debug.assert(old_prim_len == old_mat_len);
+
         const base: u32 = @intCast(self.frame_vertices.items.len);
-        self.frame_vertices.appendAssumeCapacity(vertices[0..len]);
+        self.frame_vertices.appendSliceAssumeCapacity(vertices[0..len]);
         self.frame_primitives.appendAssumeCapacity(.{
             .base_vertex = base,
-            .vertex_count = len,
-            .min_tx = @divFloor(min_x, tile_dim),
-            .min_ty = @divFloor(min_y, tile_dim),
-            .max_tx = std.math.divCeil(i32, max_x, tile_dim) catch unreachable,
-            .max_ty = std.math.divCeil(i32, max_y, tile_dim) catch unreachable,
+            .vertex_count = @intCast(len),
+            .min_tx = tr.min_tx,
+            .max_tx = tr.max_tx,
+            .min_ty = tr.min_ty,
+            .max_ty = tr.max_ty,
         });
         self.frame_materials.appendAssumeCapacity(.{
             .tex_u = tex_u,
             .tex_v = tex_v,
         });
+
+        if (self.frame_vertices.items.len != old_vert_len + len)
+            std.debug.panic(
+                "emitPolygon bad append: prim_i={}, len={}, old_vert_len={}, new_vert_len={}",
+                .{ prim_i, len, old_vert_len, self.frame_vertices.items.len },
+            );
+
+        if (self.frame_primitives.items[prim_i].base_vertex != base)
+            std.debug.panic(
+                "emitPolygon bad base: prim_i={}, expected={}, got={}",
+                .{ prim_i, base, self.frame_primitives.items[prim_i].base_vertex },
+            );
     }
 
     //// CHUNK RENDERING ///////////////////////////////////////////////////////
@@ -339,6 +436,39 @@ pub const Renderer = struct {
         };
     }
 
+    fn drainWorkerResults(
+        allocator: std.mem.Allocator,
+        world: *World,
+        chunk_worker: *ChunkWorker,
+    ) void {
+        while (chunk_worker.pollGenerationResult()) |job| {
+            if (world.getChunk(job.coord)) |chunk| {
+                if (job.voxels.len != VOXEL_COUNT) {
+                    std.log.err("generation result for {any} has invalid voxel length {}", .{
+                        job.coord,
+                        job.voxels.len,
+                    });
+                    allocator.free(job.voxels);
+                    chunk.state = .absent;
+                    continue;
+                }
+
+                allocator.free(chunk.voxels);
+                chunk.voxels = job.voxels;
+                chunk.state = .generated;
+            }
+        }
+
+        while (chunk_worker.pollMeshJob()) |job| {
+            if (world.getChunk(job.coord)) |chunk| {
+                chunk.mesh.deinit(allocator);
+                allocator.destroy(chunk.mesh);
+                chunk.mesh = job.mesh;
+                chunk.state = .ready;
+            }
+        }
+    }
+
     pub fn renderWorld(
         self: *Renderer,
         allocator: std.mem.Allocator,
@@ -346,7 +476,7 @@ pub const Renderer = struct {
         chunk_size: usize,
         world: *World,
         camera: *Camera,
-        terrain_generator: *TerrainGenerator,
+        chunk_worker: *ChunkWorker,
     ) !void {
         const chunk_size_i: i32 = @intCast(chunk_size);
         const player_chunk = worldToChunkCoord(player_pos, chunk_size_i);
@@ -355,7 +485,8 @@ pub const Renderer = struct {
 
         self.chunk_entries.clearRetainingCapacity();
 
-        // For a render radius R = chunk_view_radius, gather chunk coords around the player
+        drainWorkerResults(allocator, world, chunk_worker);
+
         var cz = player_chunk[2] - chunk_view_radius;
         while (cz <= player_chunk[2] + chunk_view_radius) : (cz += 1) {
             var cy = player_chunk[1] - chunk_view_radius;
@@ -368,10 +499,52 @@ pub const Renderer = struct {
                     if (dx * dx + dy * dy + dz * dz > chunk_view_radius * chunk_view_radius) continue;
 
                     const coord = ChunkCoord{ cx, cy, cz };
-                    const chunk = try world.ensureChunk(coord, terrain_generator);
+                    const chunk = try world.insertChunk(allocator, coord);
+
+                    if (chunk.state == .absent) {
+                        try chunk_worker.submitGenerationJob(.{ .coord = coord });
+                        chunk.state = .generating;
+                    } else if (chunk.state == .generated) {
+                        if (chunk.voxels.len != VOXEL_COUNT) {
+                            std.log.err("chunk {any} marked generated with invalid voxel length {}", .{
+                                coord,
+                                chunk.voxels.len,
+                            });
+                            chunk.state = .absent;
+                            continue;
+                        }
+
+                        chunk.bitfields = createBitfields(chunk.voxels);
+
+                        const pos_x_neighbor = world.getChunk(.{ coord[0] + 1, coord[1], coord[2] });
+                        const neg_x_neighbor = world.getChunk(.{ coord[0] - 1, coord[1], coord[2] });
+
+                        const pos_y_neighbor = world.getChunk(.{ coord[0], coord[1] + 1, coord[2] });
+                        const neg_y_neighbor = world.getChunk(.{ coord[0], coord[1] - 1, coord[2] });
+
+                        const pos_z_neighbor = world.getChunk(.{ coord[0], coord[1], coord[2] + 1 });
+                        const neg_z_neighbor = world.getChunk(.{ coord[0], coord[1], coord[2] - 1 });
+
+                        try chunk_worker.submitMeshJob(.{
+                            .coord = coord,
+                            .voxels = chunk.voxels,
+                            .chunk_bitfield_views = &chunk.bitfields,
+
+                            .pos_x_neighbor_bitfields_solid_x = if (pos_x_neighbor) |adj| &adj.bitfields.solid_x else null,
+                            .neg_x_neighbor_bitfields_solid_x = if (neg_x_neighbor) |adj| &adj.bitfields.solid_x else null,
+
+                            .pos_y_neighbor_bitfields_solid_y = if (pos_y_neighbor) |adj| &adj.bitfields.solid_y else null,
+                            .neg_y_neighbor_bitfields_solid_y = if (neg_y_neighbor) |adj| &adj.bitfields.solid_y else null,
+
+                            .pos_z_neighbor_bitfields_solid_z = if (pos_z_neighbor) |adj| &adj.bitfields.solid_z else null,
+                            .neg_z_neighbor_bitfields_solid_z = if (neg_z_neighbor) |adj| &adj.bitfields.solid_z else null,
+                        });
+
+                        chunk.state = .meshing;
+                    }
 
                     if (!self.isChunkInFrustum(chunk)) continue;
-                    if (chunk.meshing or chunk.queued or chunk.dirty) continue;
+                    if (chunk.state != .ready) continue;
 
                     try self.chunk_entries.append(
                         allocator,
@@ -382,7 +555,11 @@ pub const Renderer = struct {
                     );
                 }
             }
+
+            drainWorkerResults(allocator, world, chunk_worker);
         }
+
+        drainWorkerResults(allocator, world, chunk_worker);
 
         // Front to back rendering
         std.sort.block(ChunkRenderEntry, self.chunk_entries.items, {}, struct {
@@ -392,15 +569,12 @@ pub const Renderer = struct {
         }.lessThan);
 
         for (self.chunk_entries.items) |chunk| {
-            // WARN: Part of LOD implementation, do not remove
-            try generatePrimitivesFromChunk(chunk.chunk, camera.from, camera.combined_mat, allocator, self);
+            try generatePrimitivesFromChunk(chunk.chunk, camera.from, camera.combined_mat, self);
         }
     }
 };
 
 //// PRIMITIVE BUILDING & CULLING //////////////////////////////////////////////
-
-/// Sutherland Hodgman algorithm can intersect the convex polygon in at most
 /// 2 places => at most 2 new vertices.
 /// But to do that, at least one old vertex must be removed.
 /// We clip against 5 planes, and start with a quad: 4 + 5 = 9 vertices.
@@ -607,21 +781,28 @@ fn emitRenderQuad(
     clipped_polygon.verts[3].uv = verts_uv[3];
     clipped_polygon.len = 4;
 
-    if ((or_code & @intFromEnum(Plane.LEFT)) != 0)
+    if ((or_code & @intFromEnum(Plane.LEFT)) != 0) {
         clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.LEFT);
-    if (clipped_polygon.len < 3) return;
-    if ((or_code & @intFromEnum(Plane.RIGHT)) != 0)
+        if (clipped_polygon.len < 3) return;
+    }
+    if ((or_code & @intFromEnum(Plane.RIGHT)) != 0) {
         clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.RIGHT);
-    if (clipped_polygon.len < 3) return;
-    if ((or_code & @intFromEnum(Plane.BOTTOM)) != 0)
+        if (clipped_polygon.len < 3) return;
+    }
+    if ((or_code & @intFromEnum(Plane.BOTTOM)) != 0) {
         clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.BOTTOM);
-    if (clipped_polygon.len < 3) return;
-    if ((or_code & @intFromEnum(Plane.TOP)) != 0)
+        if (clipped_polygon.len < 3) return;
+    }
+    if ((or_code & @intFromEnum(Plane.TOP)) != 0) {
         clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.TOP);
-    if ((or_code & @intFromEnum(Plane.NEAR)) != 0)
+        if (clipped_polygon.len < 3) return;
+    }
+    if ((or_code & @intFromEnum(Plane.NEAR)) != 0) {
         clipped_polygon = clipPolygonAgainstPlane(clipped_polygon, Plane.NEAR);
+        if (clipped_polygon.len < 3) return;
+    }
 
-    renderer.emitPolygon(clipped_polygon.verts);
+    renderer.emitPolygon(&clipped_polygon, tex_u, tex_v);
 }
 
 //// TRIVIAL, PLANE NORMAL BASED CULLING | AXIS BUCKET CULL ////////////////////

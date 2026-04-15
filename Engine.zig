@@ -11,9 +11,9 @@ const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const Atlas = @import("Atlas.zig").Atlas;
 const TilePool = @import("tile.zig").TilePool;
 const World = @import("world/World.zig").World;
-const TriangleRasterizer = @import("renderer/TrianglesRasterizer.zig").TrianglesRasterizer;
+const Rasterizer = @import("renderer/Rasterizer.zig").Rasterizer;
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
-const Mesher = @import("mesh/Mesher.zig").Mesher;
+const ChunkWorker = @import("world/ChunkWorker.zig").ChunkWorker;
 
 const Vec3f = @import("math/types.zig").Vec3f;
 
@@ -26,10 +26,10 @@ pub const Engine = struct {
     tile_pool: TilePool,
     atlas: Atlas,
     world: World,
-    triangle_rasterizer: TriangleRasterizer,
-    terrain_generator: TerrainGenerator,
-    mesher: *Mesher,
+    rasterizer: Rasterizer,
+    terrain_generator: *TerrainGenerator,
     player: Player,
+    chunk_worker: *ChunkWorker,
 
     pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
         const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
@@ -37,13 +37,15 @@ pub const Engine = struct {
         const graphics = try SdlGraphics.init(conf.framebuffer_config);
         const atlas = try Atlas.init(allocator, conf.atlas_config);
         const world = World.init(allocator);
-        const triangle_rasterizer = try TriangleRasterizer.init(allocator, tile_pool.count);
+        const rasterizer = try Rasterizer.init(allocator, tile_pool.count);
 
-        const mesher = try allocator.create(Mesher);
-        mesher.* = try Mesher.init(allocator);
-        try mesher.start();
+        const terrain_generator = try allocator.create(TerrainGenerator);
+        terrain_generator.* = TerrainGenerator.init(conf.world_config);
 
-        const terrain_generator = TerrainGenerator.init(conf.world_config);
+        const chunk_worker = try allocator.create(ChunkWorker);
+        chunk_worker.* = try ChunkWorker.init(allocator, 32_000, terrain_generator);
+        try chunk_worker.start();
+
         const player = Player.init(
             conf.player_config,
             conf.camera_config,
@@ -65,9 +67,9 @@ pub const Engine = struct {
             .tile_pool = tile_pool,
             .atlas = atlas,
             .world = world,
-            .triangle_rasterizer = triangle_rasterizer,
+            .rasterizer = rasterizer,
             .terrain_generator = terrain_generator,
-            .mesher = mesher,
+            .chunk_worker = chunk_worker,
         };
     }
 

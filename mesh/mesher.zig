@@ -4,12 +4,15 @@ const Chunk = @import("../world/Chunk.zig").Chunk;
 const BitfieldViews = @import("../world/Chunk.zig").BitfieldViews;
 const Atlas = @import("../Atlas.zig").Atlas;
 const World = @import("../world/World.zig").World;
+const ChunkCoord = @import("../math/types.zig").ChunkCoord;
 
 const Block = @import("../world/Block.zig");
 const Quad = Block.Quad;
 const BlockId = Block.BlockId;
 const Face = Block.Face;
 const UV = Block.UV;
+
+const Bitfield = @import("../world/Chunk.zig").Bitfield;
 
 const types = @import("../math/types.zig");
 const Vec3i = types.Vec3i;
@@ -298,14 +301,10 @@ fn greedyMergePlane(
 
 //// MAIN //////////////////////////////////////////////////////////////////////
 
-pub fn generateLodMesh(
-    world: *World,
-    voxels: []const BlockId, // always 32^3 for now
-    bitfields: *BitfieldViews,
-    coord: Vec3i,
+pub fn generateMesh(
     allocator: std.mem.Allocator,
-    mesh: *Mesh,
-) !void {
+    job: MeshJob,
+) !MeshResult {
     const size = CHUNK_SIZE;
 
     var pos_x_planes = std.mem.zeroes(PlaneSet);
@@ -315,213 +314,69 @@ pub fn generateLodMesh(
     var pos_z_planes = std.mem.zeroes(PlaneSet);
     var neg_z_planes = std.mem.zeroes(PlaneSet);
 
-    mesh.clear();
-
-    //// X AXIS ////
-
-    const pos_x_neighbor = world.getChunk(.{ coord[0] + 1, coord[1], coord[2] });
-    const neg_x_neighbor = world.getChunk(.{ coord[0] - 1, coord[1], coord[2] });
+    const mesh = try allocator.create(Mesh);
+    mesh.* = .{};
 
     buildXPlanes(
-        &bitfields.solid_x,
-        if (pos_x_neighbor) |adj| &adj.bitfields.solid_x else null,
-        if (neg_x_neighbor) |adj| &adj.bitfields.solid_x else null,
+        &job.chunk_bitfield_views.solid_x,
+        job.pos_x_neighbor_bitfields_solid_x,
+        job.neg_x_neighbor_bitfields_solid_x,
         &pos_x_planes,
         &neg_x_planes,
     );
 
-    //// Y AXIS ////
-
-    const pos_y_neighbor = world.getChunk(.{ coord[0], coord[1] + 1, coord[2] });
-    const neg_y_neighbor = world.getChunk(.{ coord[0], coord[1] - 1, coord[2] });
-
     buildYPlanes(
-        &bitfields.solid_y,
-        if (pos_y_neighbor) |adj| &adj.bitfields.solid_y else null,
-        if (neg_y_neighbor) |adj| &adj.bitfields.solid_y else null,
+        &job.chunk_bitfield_views.solid_y,
+        job.pos_y_neighbor_bitfields_solid_y,
+        job.neg_y_neighbor_bitfields_solid_y,
         &pos_y_planes,
         &neg_y_planes,
     );
 
-    //// Z AXIS ////
-
-    const pos_z_neighbor = world.getChunk(.{ coord[0], coord[1], coord[2] + 1 });
-    const neg_z_neighbor = world.getChunk(.{ coord[0], coord[1], coord[2] - 1 });
-
     buildZPlanes(
-        &bitfields.solid_z,
-        if (pos_z_neighbor) |adj| &adj.bitfields.solid_z else null,
-        if (neg_z_neighbor) |adj| &adj.bitfields.solid_z else null,
+        &job.chunk_bitfield_views.solid_z,
+        job.pos_z_neighbor_bitfields_solid_z,
+        job.neg_z_neighbor_bitfields_solid_z,
         &pos_z_planes,
         &neg_z_planes,
     );
 
     for (0..size) |i| {
-        try greedyMergePlane(mesh, allocator, voxels, .pos_x, i, pos_x_planes[i]);
-        try greedyMergePlane(mesh, allocator, voxels, .neg_x, i, neg_x_planes[i]);
-        try greedyMergePlane(mesh, allocator, voxels, .pos_y, i, pos_y_planes[i]);
-        try greedyMergePlane(mesh, allocator, voxels, .neg_y, i, neg_y_planes[i]);
-        try greedyMergePlane(mesh, allocator, voxels, .pos_z, i, pos_z_planes[i]);
-        try greedyMergePlane(mesh, allocator, voxels, .neg_z, i, neg_z_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.voxels, .pos_x, i, pos_x_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.voxels, .neg_x, i, neg_x_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.voxels, .pos_y, i, pos_y_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.voxels, .neg_y, i, neg_y_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.voxels, .pos_z, i, pos_z_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.voxels, .neg_z, i, neg_z_planes[i]);
     }
+
+    return .{
+        .coord = job.coord,
+        .mesh = mesh,
+    };
 }
 
-pub fn generateMesh(
-    chunk: *Chunk,
-    world: *World,
-    allocator: std.mem.Allocator,
-) !void {
-    try generateLodMesh(
-        world,
-        &chunk.lods.lod0,
-        &chunk.bitfields,
-        chunk.coord,
-        allocator,
-        &chunk.mesh,
-    );
+pub const MeshJob = struct {
+    coord: ChunkCoord,
 
-    // WARN: Part of LOD implementation, do not remove
+    voxels: []BlockId,
 
-    // var data_lod1 = Chunk.getResizedVoxelDataAndBitfield(
-    //     &chunk.lods.lod1,
-    //     CHUNK_SIZE / 2,
-    // );
-    // try generateLodMesh(
-    //     world,
-    //     &data_lod1.voxels,
-    //     &data_lod1.bitfields,
-    //     chunk.coord,
-    //     allocator,
-    //     &chunk.meshes.lod1,
-    // );
-    //
-    // var data_lod2 = Chunk.getResizedVoxelDataAndBitfield(
-    //     &chunk.lods.lod2,
-    //     CHUNK_SIZE / 4,
-    // );
-    // try generateLodMesh(
-    //     world,
-    //     &data_lod2.voxels,
-    //     &data_lod2.bitfields,
-    //     chunk.coord,
-    //     allocator,
-    //     &chunk.meshes.lod2,
-    // );
-    //
-    // var data_lod3 = Chunk.getResizedVoxelDataAndBitfield(
-    //     &chunk.lods.lod3,
-    //     CHUNK_SIZE / 8,
-    // );
-    // try generateLodMesh(
-    //     world,
-    //     &data_lod3.voxels,
-    //     &data_lod3.bitfields,
-    //     chunk.coord,
-    //     allocator,
-    //     &chunk.meshes.lod3,
-    // );
-    //
-    // var data_lod4 = Chunk.getResizedVoxelDataAndBitfield(
-    //     &chunk.lods.lod4,
-    //     CHUNK_SIZE / 16,
-    // );
-    // try generateLodMesh(
-    //     world,
-    //     &data_lod4.voxels,
-    //     &data_lod4.bitfields,
-    //     chunk.coord,
-    //     allocator,
-    //     &chunk.meshes.lod4,
-    // );
-}
+    chunk_bitfield_views: *BitfieldViews,
 
-//// JOB ///////////////////////////////////////////////////////////////////////
+    pos_x_neighbor_bitfields_solid_x: ?*[32][32]Bitfield,
+    neg_x_neighbor_bitfields_solid_x: ?*[32][32]Bitfield,
 
-pub const ChunkJob = struct {
-    chunk: *Chunk,
-    // TODO: Remove this and pass adjacent chunks directly
-    world: *World,
+    pos_y_neighbor_bitfields_solid_y: ?*[32][32]Bitfield,
+    neg_y_neighbor_bitfields_solid_y: ?*[32][32]Bitfield,
+
+    pos_z_neighbor_bitfields_solid_z: ?*[32][32]Bitfield,
+    neg_z_neighbor_bitfields_solid_z: ?*[32][32]Bitfield,
+
+    generation_budget: usize = 3,
+    meshing_budget: usize = 3,
 };
 
-pub const Mesher = struct {
-    allocator: std.mem.Allocator,
-
-    mutex: std.Thread.Mutex = .{},
-    cond: std.Thread.Condition = .{},
-
-    jobs: std.ArrayList(ChunkJob),
-    shutting_down: bool = false,
-
-    thread: ?std.Thread = null,
-
-    pub fn init(allocator: std.mem.Allocator) !Mesher {
-        return .{
-            .allocator = allocator,
-            .jobs = try std.ArrayList(ChunkJob).initCapacity(allocator, 64),
-        };
-    }
-
-    pub fn deinit(self: *Mesher) void {
-        self.jobs.deinit(self.allocator);
-    }
-
-    pub fn start(self: *Mesher) !void {
-        self.thread = try std.Thread.spawn(.{}, workerMain, .{self});
-    }
-
-    pub fn stop(self: *Mesher) void {
-        self.mutex.lock();
-        self.shutting_down = true;
-        self.cond.signal();
-        self.mutex.unlock();
-
-        if (self.thread) |thread| {
-            thread.join();
-            self.thread = null;
-        }
-    }
-
-    pub fn enqueue(self: *Mesher, job: ChunkJob) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        try self.jobs.append(self.allocator, job);
-        self.cond.signal();
-    }
-
-    fn workerMain(self: *Mesher) void {
-        while (true) {
-            self.mutex.lock();
-
-            while (self.jobs.items.len == 0 and !self.shutting_down) {
-                self.cond.wait(&self.mutex);
-            }
-
-            if (self.shutting_down and self.jobs.items.len == 0) {
-                self.mutex.unlock();
-                return;
-            }
-
-            const job = self.jobs.pop() orelse unreachable;
-            self.mutex.unlock();
-
-            job.chunk.queued = false;
-            job.chunk.meshing = true;
-
-            generateMesh(job.chunk, job.world, self.allocator) catch |err| {
-                std.log.err("generateMesh failed: {}", .{err});
-            };
-
-            job.chunk.dirty = false;
-            job.chunk.meshing = false;
-        }
-    }
-};
-
-//// MESHING INPUT /////////////////////////////////////////////////////////////
-
-const MeshingInput = struct {
-    voxels: []const BlockId, // always 32^3 for now
-    bitfields: BitfieldViews,
-    coord: Vec3i,
+pub const MeshResult = struct {
+    coord: ChunkCoord,
+    mesh: *Mesh,
 };

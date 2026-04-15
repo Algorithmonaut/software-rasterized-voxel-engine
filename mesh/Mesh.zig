@@ -52,4 +52,15 @@ pub const Mesh = struct {
         self.pos_z_faces.clearRetainingCapacity();
         self.neg_z_faces.clearRetainingCapacity();
     }
+
+    pub inline fn deinit(self: *Mesh, allocator: std.mem.Allocator) void {
+        self.pos_x_faces.deinit(allocator);
+        self.neg_x_faces.deinit(allocator);
+
+        self.pos_y_faces.deinit(allocator);
+        self.neg_y_faces.deinit(allocator);
+
+        self.pos_z_faces.deinit(allocator);
+        self.neg_z_faces.deinit(allocator);
+    }
 };

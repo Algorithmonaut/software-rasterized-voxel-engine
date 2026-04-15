@@ -14,6 +14,8 @@ const AtomicUsize = std.atomic.Value(usize);
 
 const BATCH_SIZE: usize = 16;
 
+const rasterization = @import("rasterization.zig");
+
 fn tileWorker(
     next: *AtomicUsize,
     tile_pool: *TilePool,
@@ -42,15 +44,45 @@ fn tileWorker(
 
             for (tile_refs[start..end]) |prim_i_u| {
                 const prim_i: usize = @intCast(prim_i_u);
-                // renderTriangleInTile(&triangles[tri_i], t, atlas, render_wireframe, fog_struct);
+                if (prim_i >= frame_primitives.len)
+                    std.debug.panic("prim_i out of range: {} / {}", .{ prim_i, frame_primitives.len });
+
+                const prim = frame_primitives[prim_i];
+                if (prim.vertex_count < 3 or prim.vertex_count > 9)
+                    std.debug.panic("bad vertex_count: prim_i={}, count={}", .{ prim_i, prim.vertex_count });
+
+                const vert_start: usize = @intCast(prim.base_vertex);
+                const vert_end: usize = vert_start + @as(usize, @intCast(prim.vertex_count));
+                if (vert_end > frame_vertices.len)
+                    std.debug.panic(
+                        "bad vertex slice: prim_i={}, base={}, count={}, end={}, verts_len={}",
+                        .{ prim_i, prim.base_vertex, prim.vertex_count, vert_end, frame_vertices.len },
+                    );
+
+                if (prim.vertex_count == 4)
+                    rasterization.renderQuadInTile(
+                        frame_materials[prim_i],
+                        frame_vertices[vert_start..vert_end],
+                        t,
+                        atlas,
+                    )
+                else
+                    rasterization.renderPolygonInTile(
+                        frame_materials[prim_i],
+                        frame_vertices[vert_start..vert_end],
+                        t,
+                        atlas,
+                    );
             }
+
+            t.write_to_fb(buf);
         }
     }
 }
 
 pub const Rasterizer = struct {
-    render_wireframe: bool,
-    render_linear_depth: bool,
+    render_wireframe: bool = false,
+    render_linear_depth: bool = false,
 
     // TODO: Maybe change to u32
     tile_counts: []u32,
@@ -62,10 +94,10 @@ pub const Rasterizer = struct {
 
     pub fn init(allocator: std.mem.Allocator, tile_count: usize) !Rasterizer {
         return .{
-            .tile_counts = try allocator.alloc(usize, tile_count),
-            .tile_offsets = try allocator.alloc(usize, tile_count + 1),
-            .write_pos = try allocator.alloc(usize, tile_count + 1),
-            .tile_primitive_indices = try allocator.alloc(usize, 70_000),
+            .tile_counts = try allocator.alloc(u32, tile_count),
+            .tile_offsets = try allocator.alloc(u32, tile_count + 1),
+            .write_pos = try allocator.alloc(u32, tile_count + 1),
+            .tile_primitive_indices = try allocator.alloc(u32, 70_000),
         };
     }
 
@@ -100,7 +132,7 @@ pub const Rasterizer = struct {
         frame_materials: []const MaterialRef,
         frame_vertices: []const ProjectedVertex,
     ) !void {
-        std.debug.print("Triangle count: {}.\n", .{frame_vertices.len / 3});
+        std.debug.print("Primitive count: {}.\n", .{frame_primitives.len});
 
         @memset(self.tile_counts, 0);
 
@@ -117,7 +149,7 @@ pub const Rasterizer = struct {
             }
         }
 
-        var sum: usize = 0;
+        var sum: u32 = 0;
         for (0..tile_pool.count) |t| {
             self.tile_offsets[t] = sum;
             sum += self.tile_counts[t];
@@ -136,7 +168,7 @@ pub const Rasterizer = struct {
                     const tile_i = tx + tile_pool.count_w * ty;
                     // if (!triangleOverlapTile(&prim, tile)) continue;
                     const dst = self.write_pos[tile_i];
-                    self.tile_primitive_indices[dst] = @intCast(tile_i);
+                    self.tile_primitive_indices[dst] = @intCast(prim_i);
                     self.write_pos[tile_i] = dst + 1;
                 }
             }
@@ -161,5 +193,7 @@ pub const Rasterizer = struct {
                 frame_vertices,
             });
         }
+
+        wg.wait();
     }
 };

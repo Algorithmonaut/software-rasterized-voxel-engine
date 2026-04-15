@@ -145,7 +145,6 @@ pub const Player = struct {
         if (dx == 0) return;
 
         const eps: f32 = 0.001;
-        const chunk_size: i32 = 32;
 
         self.position[0] += dx;
 
@@ -167,7 +166,6 @@ pub const Player = struct {
                 while (z <= max_z) : (z += 1) {
                     const block_id = world.getBlockIdFromWorldCoordinates(
                         .{ x, y, z },
-                        chunk_size,
                     );
 
                     if (block_id == BlockId.air)
@@ -193,7 +191,6 @@ pub const Player = struct {
         if (dz == 0) return;
 
         const eps: f32 = 0.001;
-        const chunk_size: i32 = 32;
 
         self.position[2] += dz;
 
@@ -215,7 +212,6 @@ pub const Player = struct {
                 while (z <= max_z) : (z += 1) {
                     const block_id = world.getBlockIdFromWorldCoordinates(
                         .{ x, y, z },
-                        chunk_size,
                     );
 
                     if (block_id == BlockId.air) continue;
@@ -240,7 +236,6 @@ pub const Player = struct {
         if (dy == 0) return;
 
         const eps: f32 = 0.001;
-        const chunk_size: i32 = 32;
 
         self.position[1] += dy;
 
@@ -262,7 +257,6 @@ pub const Player = struct {
                 while (z <= max_z) : (z += 1) {
                     const block_id = world.getBlockIdFromWorldCoordinates(
                         .{ x, y, z },
-                        chunk_size,
                     );
 
                     if (block_id == BlockId.air) {

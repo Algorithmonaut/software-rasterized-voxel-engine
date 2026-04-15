@@ -74,6 +74,13 @@
   seems hard.
   Implemented correct selection of mipmaps level.
 
+* 11/04/26
+  Rewrote chunk mesh data to reduce chunk memory cost & allow for bucked backface culling.
+
+* 12/04/26
+  Rewrote the renderer and rasterizer such that primitives are triangulated in the tile 
+  rasterizer worker.
+
   TODO: Find out why  coord mod N   ==   coord & (N - 1)
   TODO: Understand mipFromRho
   TODO: Start using texture arrays instead.

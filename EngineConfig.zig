@@ -64,6 +64,18 @@ pub const EngineConfig = struct {
         mountain_lacunarity: f32,
         mountain_gain: f32,
         mountain_scale: f32,
+
+        /// Inclusive
+        min_world_y: i32,
+        /// Exclusive
+        max_world_y: i32,
+
+        bootstrap_radius_chunk: i32,
+        render_radius_chunks: i32,
+        collision_radius_chunks: i32,
+
+        gen_budget_per_tick: u32,
+        mesh_budget_per_tick: u32,
     };
 
     camera_config: CameraConfig,

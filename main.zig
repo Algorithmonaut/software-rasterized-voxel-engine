@@ -13,10 +13,12 @@ const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Renderer = @import("Renderer.zig").Renderer;
 const Chunk = @import("world/Chunk.zig").Chunk;
 
+const CHUNK_SIZE = @import("world/Chunk.zig").CHUNK_SIZE;
+
 const engine_config = EngineConfig{
     .camera_config = .{
         .fov = 90.0,
-        .view_distance = 500.0,
+        .view_distance = 800.0,
         .sensitivity = 0.0025,
         .near = 0.1,
     },
@@ -67,6 +69,15 @@ const engine_config = EngineConfig{
         .mountain_lacunarity = 2.0,
         .mountain_octaves = 2,
         .mountain_scale = 0.002,
+
+        .min_world_y = -192,
+        .max_world_y = 320,
+
+        .bootstrap_radius_chunk = 20,
+        .collision_radius_chunks = 3,
+        .gen_budget_per_tick = 5,
+        .mesh_budget_per_tick = 5,
+        .render_radius_chunks = 20,
     },
 };
 
@@ -100,7 +111,6 @@ pub fn main() !void {
             frame.dt,
             &engine.player,
             &engine.graphics,
-            &engine.triangle_rasterizer,
         );
 
         engine.renderer.computeFrustumPlanes(engine.player.camera.combined_mat);
@@ -118,19 +128,21 @@ pub fn main() !void {
         try engine.renderer.renderWorld(
             allocator,
             engine.player.camera.from,
-            engine.world.chunk_size,
+            CHUNK_SIZE,
             &engine.world,
             &engine.player.camera,
-            &engine.terrain_generator,
+            engine.chunk_worker,
         );
 
-        try engine.triangle_rasterizer.render(
+        try engine.rasterizer.render(
             allocator,
             &pool,
-            engine.renderer.triangles.items,
             &engine.tile_pool,
             frame.framebuffer,
             &engine.atlas,
+            engine.renderer.frame_primitives.items,
+            engine.renderer.frame_materials.items,
+            engine.renderer.frame_vertices.items,
         );
 
         if (engine_config.debug_config.show_tex_atlas) engine.atlas.debug_show_atlas(&frame.framebuffer);
@@ -139,7 +151,5 @@ pub fn main() !void {
         if (engine_config.debug_config.show_fps) engine.platform.fps_counter_update();
 
         total_frame_ns += frame_timer.read();
-
-        try engine.world.meshChunks(allocator, engine.mesher);
     }
 }

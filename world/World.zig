@@ -1,31 +1,24 @@
 const std = @import("std");
+
 const Chunk = @import("Chunk.zig").Chunk;
-const WorldConfig = @import("../EngineConfig.zig").EngineConfig.WorldConfig;
-
-const ChunkCoord = @import("../math/types.zig").ChunkCoord;
-
-const Mesher = @import("../mesh/Mesher.zig").Mesher;
-const MesherFile = @import("../mesh/Mesher.zig");
-const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
+const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
 
 const types = @import("../math/types.zig");
-const WorldCoord = types.WorldCoord;
-const Vec3i = types.Vec3i;
-const BlockId = @import("../world/Block.zig").BlockId;
+const ChunkCoord = types.ChunkCoord;
+const I3 = types.Vec3i;
 
-const Renderer = @import("../Renderer.zig").Renderer;
+const BlockId = @import("Block.zig").BlockId;
+
+const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
 
 pub const World = struct {
     allocator: std.mem.Allocator,
     chunks: std.AutoHashMap(u64, *Chunk),
-    chunk_size: usize,
 
     pub fn init(allocator: std.mem.Allocator) World {
         return .{
             .allocator = allocator,
             .chunks = std.AutoHashMap(u64, *Chunk).init(allocator),
-            // Remove magic number
-            .chunk_size = 32,
         };
     }
 
@@ -54,132 +47,45 @@ pub const World = struct {
         return self.chunks.get(chunkKey(coord));
     }
 
-    pub fn getBlockIdFromWorldCoordinates(
+    pub fn insertChunk(
         self: *World,
-        coord: Vec3i,
-        chunk_size: i32,
-    ) BlockId {
-        const chunk_size_vec: Vec3i = @splat(chunk_size);
-        const chunk_size_u: usize = @intCast(chunk_size);
-
-        const chunk_pos: Vec3i = @divFloor(coord, chunk_size_vec);
-        const local_pos: @Vector(3, usize) = @intCast(@mod(coord, chunk_size_vec));
-
-        if (self.getChunk(chunk_pos)) |chunk| return chunk.lods.lod0[
-            local_pos[0] + local_pos[1] * chunk_size_u +
-                local_pos[2] * chunk_size_u * chunk_size_u
-        ];
-
-        return BlockId.unknown;
-    }
-
-    pub fn ensureChunk(
-        self: *World,
+        allocator: std.mem.Allocator,
         coord: ChunkCoord,
-        terrain_generator: *TerrainGenerator,
     ) !*Chunk {
         const key = chunkKey(coord);
 
-        if (self.chunks.get(key)) |chunk| {
-            return chunk;
-        }
+        if (self.chunks.get(key)) |chunk| return chunk;
 
         const chunk_ptr = try self.allocator.create(Chunk);
         errdefer self.allocator.destroy(chunk_ptr);
 
-        chunk_ptr.* = try Chunk.generate(
-            coord,
-            self.chunk_size,
-            self,
-            terrain_generator,
-        );
+        chunk_ptr.* = try Chunk.create(allocator, coord);
 
         try self.chunks.put(key, chunk_ptr);
+
         return chunk_ptr;
     }
 
-    pub fn removeChunk(self: *World, coord: ChunkCoord) bool {
+    pub fn removeChunk(self: *World, coord: ChunkCoord) void {
         const key = chunkKey(coord);
 
         if (self.chunks.fetchRemove(key)) |entry| {
             entry.value.deinit(self.allocator);
             self.allocator.destroy(entry.value);
-            return true;
-        }
-
-        return false;
-    }
-
-    pub fn meshChunks(
-        self: *World,
-        allocator: std.mem.Allocator,
-        mesher: *Mesher,
-    ) !void {
-        _ = allocator;
-        var it = self.chunks.iterator();
-
-        while (it.next()) |entry| {
-            const chunk = entry.value_ptr.*;
-            if (!chunk.dirty or chunk.queued or chunk.meshing) continue;
-
-            chunk.queued = true;
-
-            try mesher.enqueue(.{
-                .world = self,
-                .chunk = chunk,
-            });
         }
     }
 
-    pub fn bootstrapInitialChunks(
-        self: *World,
-        allocator: std.mem.Allocator,
-        player_pos: WorldCoord,
-        view_distance: f32,
-        terrain_generator: *TerrainGenerator,
-        world: *World,
-    ) !void {
-        _ = player_pos;
-        // const chunk_size_i: i32 = @intCast(self.chunk_size);
+    pub fn getBlockIdFromWorldCoordinates(self: *World, coord: I3) BlockId {
+        const chunk_size_vec: I3 = @splat(CHUNK_SIZE);
 
-        var prepared: usize = 0;
+        const chunk_pos: I3 = @divFloor(coord, chunk_size_vec);
+        const local_pos: @Vector(3, usize) = @intCast(@mod(coord, chunk_size_vec));
 
-        const horizontal_radius: i32 = @intFromFloat(@ceil(
-            view_distance / @as(f32, @floatFromInt(self.chunk_size)),
-        ));
+        if (self.getChunk(chunk_pos)) |chunk| return chunk.voxels[
+            local_pos[0] + local_pos[1] * CHUNK_SIZE +
+                local_pos[2] * CHUNK_SIZE * CHUNK_SIZE
+        ];
 
-        const VERTICAL_MIN: i32 = -2;
-        const VERTICAL_MAX: i32 = 0;
-
-        var cz = -horizontal_radius;
-        while (cz <= horizontal_radius) : (cz += 1) {
-            var cy = VERTICAL_MIN;
-            while (cy <= VERTICAL_MAX) : (cy += 1) {
-                var cx = -horizontal_radius;
-                while (cx <= horizontal_radius) : (cx += 1) {
-                    const dx: i64 = @intCast(cx);
-                    const dz: i64 = @intCast(cz);
-
-                    if (dx * dx + dz * dz > horizontal_radius * horizontal_radius) continue;
-
-                    prepared += 1;
-                    if (prepared % 10 == 0) std.debug.print("PREPARED: {}\n", .{prepared});
-
-                    _ = try self.ensureChunk(.{ cx, cy, cz }, terrain_generator);
-                }
-            }
-        }
-
-        var it = self.chunks.iterator();
-        var counter: usize = 0;
-
-        while (it.next()) |entry| {
-            const chunk = entry.value_ptr.*;
-            if (!chunk.dirty) continue;
-            try MesherFile.generateMesh(chunk, world, allocator);
-            if (self.chunks.get(entry.key_ptr.*)) |c| c.dirty = false;
-            counter += 1;
-            if (counter % 10 == 0) std.debug.print("REMAINING TO BE MESHED: {}\n", .{prepared - counter});
-        }
+        return .unknown;
     }
 };
