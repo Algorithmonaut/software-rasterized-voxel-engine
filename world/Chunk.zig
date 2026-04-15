@@ -27,11 +27,12 @@ pub const ChunkState = enum(u8) {
 };
 
 pub const Bitfield = u32;
+pub const Bitfields = [CHUNK_SIZE][CHUNK_SIZE]Bitfield;
 
 pub const BitfieldViews = struct {
-    solid_x: [CHUNK_SIZE][CHUNK_SIZE]Bitfield, // [y][z], bits are x
-    solid_y: [CHUNK_SIZE][CHUNK_SIZE]Bitfield, // [x][z], bits are y
-    solid_z: [CHUNK_SIZE][CHUNK_SIZE]Bitfield, // [x][y], bits are z
+    solid_x: Bitfields, // [y][z], bits are x
+    solid_y: Bitfields, // [x][z], bits are y
+    solid_z: Bitfields, // [x][y], bits are z
 };
 
 pub fn createBitfields(voxels: []const BlockId) BitfieldViews {

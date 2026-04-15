@@ -31,7 +31,7 @@ pub const World = struct {
         self.chunks.deinit();
     }
 
-    inline fn chunkKey(coord: ChunkCoord) u64 {
+    pub inline fn chunkKey(coord: ChunkCoord) u64 {
         // [-1048576, +1048575] (i32) ===[1 << 20 = 1048576]===> [0, 2097151]
         // [0, 2097151] fits in 21 bits; 21*3 = 63 bits
         const bias: i64 = 1 << 20;
@@ -57,7 +57,6 @@ pub const World = struct {
         if (self.chunks.get(key)) |chunk| return chunk;
 
         const chunk_ptr = try self.allocator.create(Chunk);
-        errdefer self.allocator.destroy(chunk_ptr);
 
         chunk_ptr.* = try Chunk.create(allocator, coord);
 

@@ -132,7 +132,7 @@ pub const Rasterizer = struct {
         frame_materials: []const MaterialRef,
         frame_vertices: []const ProjectedVertex,
     ) !void {
-        std.debug.print("Primitive count: {}.\n", .{frame_primitives.len});
+        // std.debug.print("Primitive count: {}.\n", .{frame_primitives.len});
 
         @memset(self.tile_counts, 0);
 

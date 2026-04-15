@@ -14,6 +14,7 @@ const World = @import("world/World.zig").World;
 const Rasterizer = @import("renderer/Rasterizer.zig").Rasterizer;
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 const ChunkWorker = @import("world/ChunkWorker.zig").ChunkWorker;
+const ChunkManager = @import("world/ChunkManager.zig").ChunkManager;
 
 const Vec3f = @import("math/types.zig").Vec3f;
 
@@ -30,6 +31,7 @@ pub const Engine = struct {
     terrain_generator: *TerrainGenerator,
     player: Player,
     chunk_worker: *ChunkWorker,
+    chunk_manager: ChunkManager,
 
     pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
         const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
@@ -43,7 +45,7 @@ pub const Engine = struct {
         terrain_generator.* = TerrainGenerator.init(conf.world_config);
 
         const chunk_worker = try allocator.create(ChunkWorker);
-        chunk_worker.* = try ChunkWorker.init(allocator, 32_000, terrain_generator);
+        chunk_worker.* = try ChunkWorker.init(allocator, 320_000, terrain_generator);
         try chunk_worker.start();
 
         const player = Player.init(
@@ -58,6 +60,8 @@ pub const Engine = struct {
             conf.camera_config.view_distance,
         );
 
+        const chunk_manager = ChunkManager.init(800, 1_000, -192, 320);
+
         return Engine{
             .allocator = allocator,
             .player = player,
@@ -70,6 +74,7 @@ pub const Engine = struct {
             .rasterizer = rasterizer,
             .terrain_generator = terrain_generator,
             .chunk_worker = chunk_worker,
+            .chunk_manager = chunk_manager,
         };
     }
 

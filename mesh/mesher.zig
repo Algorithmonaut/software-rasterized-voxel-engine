@@ -65,10 +65,11 @@ fn scatterMaskX(
     }
 }
 
+// TODO: Replace [32][32]u32 with bitfields
 fn buildXPlanes(
-    solid_x: *[32][32]u32,
-    pos_x_neighbor_solid_x: ?*[32][32]u32,
-    neg_x_neightbor_solid_x: ?*[32][32]u32,
+    solid_x: *const [32][32]u32,
+    pos_x_neighbor_solid_x: ?*const [32][32]u32,
+    neg_x_neightbor_solid_x: ?*const [32][32]u32,
     pos_x_planes: *PlaneSet,
     neg_x_planes: *PlaneSet,
 ) void {
@@ -111,9 +112,9 @@ fn scatterMaskY(
 }
 
 fn buildYPlanes(
-    solid_y: *[32][32]u32,
-    pos_y_neighbor_solid_y: ?*[32][32]u32,
-    neg_y_neightbor_solid_y: ?*[32][32]u32,
+    solid_y: *const [32][32]u32,
+    pos_y_neighbor_solid_y: ?*const [32][32]u32,
+    neg_y_neightbor_solid_y: ?*const [32][32]u32,
     pos_y_planes: *PlaneSet,
     neg_y_planes: *PlaneSet,
 ) void {
@@ -156,9 +157,9 @@ fn scatterMaskZ(
 }
 
 fn buildZPlanes(
-    solid_z: *[32][32]u32,
-    pos_z_neighbor_solid_z: ?*[32][32]u32,
-    neg_z_neighbor_solid_z: ?*[32][32]u32,
+    solid_z: *const [32][32]u32,
+    pos_z_neighbor_solid_z: ?*const [32][32]u32,
+    neg_z_neighbor_solid_z: ?*const [32][32]u32,
     pos_z_planes: *PlaneSet,
     neg_z_planes: *PlaneSet,
 ) void {
@@ -359,21 +360,19 @@ pub fn generateMesh(
 pub const MeshJob = struct {
     coord: ChunkCoord,
 
-    voxels: []BlockId,
+    voxels: []const BlockId,
 
-    chunk_bitfield_views: *BitfieldViews,
+    chunk_bitfield_views: *const BitfieldViews,
 
-    pos_x_neighbor_bitfields_solid_x: ?*[32][32]Bitfield,
-    neg_x_neighbor_bitfields_solid_x: ?*[32][32]Bitfield,
+    // TODO: Reduce name size
+    pos_x_neighbor_bitfields_solid_x: ?*const [32][32]Bitfield,
+    neg_x_neighbor_bitfields_solid_x: ?*const [32][32]Bitfield,
 
-    pos_y_neighbor_bitfields_solid_y: ?*[32][32]Bitfield,
-    neg_y_neighbor_bitfields_solid_y: ?*[32][32]Bitfield,
+    pos_y_neighbor_bitfields_solid_y: ?*const [32][32]Bitfield,
+    neg_y_neighbor_bitfields_solid_y: ?*const [32][32]Bitfield,
 
-    pos_z_neighbor_bitfields_solid_z: ?*[32][32]Bitfield,
-    neg_z_neighbor_bitfields_solid_z: ?*[32][32]Bitfield,
-
-    generation_budget: usize = 3,
-    meshing_budget: usize = 3,
+    pos_z_neighbor_bitfields_solid_z: ?*const [32][32]Bitfield,
+    neg_z_neighbor_bitfields_solid_z: ?*const [32][32]Bitfield,
 };
 
 pub const MeshResult = struct {
