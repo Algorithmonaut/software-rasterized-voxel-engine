@@ -2,10 +2,13 @@ const std = @import("std");
 
 const World = @import("World.zig").World;
 
-const Chunk = @import("Chunk.zig").Chunk;
+const BitfieldViews = @import("Chunk.zig").BitfieldViews;
+const ChunkVersion = @import("Chunk.zig").ChunkVersion;
+const ChunkSlot = @import("Chunk.zig").ChunkSlot;
 const ChunkWorker = @import("ChunkWorker.zig").ChunkWorker;
 const Bitfield = @import("Chunk.zig").Bitfield;
 const Bitfields = @import("Chunk.zig").Bitfields;
+const BlockId = @import("Block.zig").BlockId;
 
 const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
 const VOXEL_COUNT = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
@@ -38,42 +41,40 @@ const WorldVertex = Block.WorldVertex;
 
 const Mat4f = @import("../math/matrix.zig").Mat4f;
 
-const Axis = enum(u8) { x, y, z };
+pub const AtomicU32 = std.atomic.Value(u32);
 
-fn neighborBitfields(comptime axis: Axis, neighbor: ?*Chunk) ?*const Bitfields {
-    const adj = neighbor orelse return null;
-    if (adj.state == .absent or adj.state == .generating) return null;
+fn publishGeneratedVersion(
+    allocator: std.mem.Allocator,
+    slot: *ChunkSlot,
+    voxels: []const BlockId,
+    bitfields: *const BitfieldViews,
+) !usize {
+    const next_gen = slot.gen.load(.acquire) + 1;
 
-    return switch (axis) {
-        .x => &adj.bitfields.solid_x,
-        .y => &adj.bitfields.solid_y,
-        .z => &adj.bitfields.solid_z,
+    const ver = try allocator.create(ChunkVersion);
+    ver.* = .{
+        .refs = AtomicU32.init(1),
+        .gen = next_gen,
+        .voxels = voxels,
+        .bitfields = bitfields,
     };
-}
 
-fn createMeshJob(chunk: *Chunk, world: *World) MeshJob {
-    const c = chunk.coord;
+    const old = slot.current;
+    slot.current = ver;
+    slot.gen.store(next_gen, .release);
 
-    const pos_x = neighborBitfields(.x, world.getChunk(.{ c[0] + 1, c[1], c[2] }));
-    const neg_x = neighborBitfields(.x, world.getChunk(.{ c[0] - 1, c[1], c[2] }));
+    // Terrain changed, current mesh is now stale.
+    if (slot.mesh) |m| {
+        m.deinit(allocator);
+        allocator.destroy(m);
+        slot.mesh = null;
+    }
 
-    const pos_y = neighborBitfields(.y, world.getChunk(.{ c[0], c[1] + 1, c[2] }));
-    const neg_y = neighborBitfields(.y, world.getChunk(.{ c[0], c[1] - 1, c[2] }));
+    if (old) |prev| {
+        prev.releaseVersion(allocator);
+    }
 
-    const pos_z = neighborBitfields(.z, world.getChunk(.{ c[0], c[1], c[2] + 1 }));
-    const neg_z = neighborBitfields(.z, world.getChunk(.{ c[0], c[1], c[2] - 1 }));
-
-    return .{
-        .coord = c,
-        .voxels = chunk.voxels,
-        .chunk_bitfield_views = chunk.bitfields,
-        .pos_x_neighbor_bitfields_solid_x = pos_x,
-        .neg_x_neighbor_bitfields_solid_x = neg_x,
-        .pos_y_neighbor_bitfields_solid_y = pos_y,
-        .neg_y_neighbor_bitfields_solid_y = neg_y,
-        .pos_z_neighbor_bitfields_solid_z = pos_z,
-        .neg_z_neighbor_bitfields_solid_z = neg_z,
-    };
+    return next_gen;
 }
 
 //// CHUNK PREGENERATION ///////////////////////////////////////////////////////
@@ -95,7 +96,6 @@ fn generationWorker(
             const chunk_coord_i = base + incr;
             if (chunk_coord_i >= chunk_coords.len) break;
             const coord = chunk_coords[chunk_coord_i];
-            const chunk = world.getChunk(coord) orelse unreachable;
 
             const result = terrain_generator.fillChunkVoxels(
                 allocator,
@@ -104,9 +104,9 @@ fn generationWorker(
                 std.debug.panic("fillChunkVoxels failed: {s}", .{@errorName(err)});
             };
 
-            chunk.voxels = result.voxels;
-            chunk.bitfields = result.bitfield_views;
-            chunk.state = .generated;
+            const slot = world.getChunkSlot(coord) orelse return;
+            _ = try publishGeneratedVersion(allocator, slot, result.voxels, result.bitfield_views);
+            slot.state = .generated;
         }
     }
 }
@@ -131,7 +131,7 @@ fn meshingWorker(
 
             const result = mesher.generateMesh(
                 allocator,
-                createMeshJob(chunk, world),
+                mesher.makeMeshJob(world, coord),
             ) catch |err| {
                 std.debug.panic("generateMesh failed: {s}", .{@errorName(err)});
             };
@@ -145,7 +145,7 @@ fn meshingWorker(
 //// MAIN //////////////////////////////////////////////////////////////////////
 
 pub const ChunkManager = struct {
-    pub const ChunkRenderEntry = struct { chunk: *Chunk, dist2: f32 };
+    pub const ChunkRenderEntry = struct { chunk: *ChunkSlot, dist2: f32 };
 
     // TODO: Maybe I should keep only chunk_* values here
     chunk_render_distance: i32,
@@ -154,7 +154,7 @@ pub const ChunkManager = struct {
     chunk_min_y: i32,
     chunk_max_y: i32,
 
-    loaded: std.ArrayList(*Chunk),
+    loaded: std.ArrayList(*ChunkSlot),
     loaded_count: usize,
 
     /// Chunks that are in view distance
@@ -162,10 +162,10 @@ pub const ChunkManager = struct {
     active_count: usize,
 
     /// Chunks that are visible in the view frustum (computed per frame)
-    visible: std.ArrayList(*Chunk),
+    visible: std.ArrayList(*ChunkSlot),
 
     // Force loaded/active to be recreated on first frame
-    last_player_chunk: ChunkCoord = .{ 100, 0, 0 },
+    last_player_chunk: ChunkCoord = .{ 1000, 0, 0 },
 
     fn chunkCountInSphericalSegment(
         radius_world_in: f32,

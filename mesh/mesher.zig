@@ -1,7 +1,5 @@
 const std = @import("std");
 
-const Chunk = @import("../world/Chunk.zig").Chunk;
-const BitfieldViews = @import("../world/Chunk.zig").BitfieldViews;
 const Atlas = @import("../Atlas.zig").Atlas;
 const World = @import("../world/World.zig").World;
 const ChunkCoord = @import("../math/types.zig").ChunkCoord;
@@ -12,7 +10,8 @@ const BlockId = Block.BlockId;
 const Face = Block.Face;
 const UV = Block.UV;
 
-const Bitfield = @import("../world/Chunk.zig").Bitfield;
+const Bitfields = @import("../world/Chunk.zig").Bitfields;
+const ChunkVersion = @import("../world/Chunk.zig").ChunkVersion;
 
 const types = @import("../math/types.zig");
 const Vec3i = types.Vec3i;
@@ -302,10 +301,79 @@ fn greedyMergePlane(
 
 //// MAIN //////////////////////////////////////////////////////////////////////
 
-pub fn generateMesh(
-    allocator: std.mem.Allocator,
-    job: MeshJob,
-) !MeshResult {
+pub const MeshJob = struct {
+    coord: ChunkCoord,
+    source_gen: usize,
+
+    center: *ChunkVersion,
+
+    pos_x: ?*ChunkVersion = null,
+    neg_x: ?*ChunkVersion = null,
+    pos_y: ?*ChunkVersion = null,
+    neg_y: ?*ChunkVersion = null,
+    pos_z: ?*ChunkVersion = null,
+    neg_z: ?*ChunkVersion = null,
+
+    pub fn deinit(self: MeshJob, allocator: std.mem.Allocator) void {
+        self.center.releaseVersion(allocator);
+        if (self.pos_x) |v| v.releaseVersion(allocator);
+        if (self.neg_x) |v| v.releaseVersion(allocator);
+        if (self.pos_y) |v| v.releaseVersion(allocator);
+        if (self.neg_y) |v| v.releaseVersion(allocator);
+        if (self.pos_z) |v| v.releaseVersion(allocator);
+        if (self.neg_z) |v| v.releaseVersion(allocator);
+    }
+};
+
+pub const MeshResult = struct {
+    coord: ChunkCoord,
+    source_gen: usize,
+    mesh: *Mesh,
+};
+
+pub fn makeMeshJob(world: *World, coord: ChunkCoord) ?MeshJob {
+    const slot = world.getChunkSlot(coord) orelse return null;
+    const center = slot.current orelse return null;
+    center.retainVersion();
+    errdefer center.releaseVersion(world.allocator);
+
+    var job = MeshJob{
+        .coord = coord,
+        .source_gen = slot.gen.load(.acquire),
+        .center = center,
+    };
+
+    inline for ([_]struct { field: []const u8, dc: ChunkCoord }{
+        .{ .field = "pos_x", .dc = .{ 1, 0, 0 } },
+        .{ .field = "neg_x", .dc = .{ -1, 0, 0 } },
+        .{ .field = "pos_y", .dc = .{ 0, 1, 0 } },
+        .{ .field = "neg_y", .dc = .{ 0, -1, 0 } },
+        .{ .field = "pos_z", .dc = .{ 0, 0, 1 } },
+        .{ .field = "neg_z", .dc = .{ 0, 0, -1 } },
+    }) |entry| {
+        const ncoord = coord + entry.dc;
+        if (world.getChunkSlot(ncoord)) |nslot| {
+            if (nslot.current) |nver| {
+                nver.retainVersion();
+                @field(job, entry.field) = nver;
+            }
+        }
+    }
+
+    return job;
+}
+
+pub fn processMeshJob(allocator: std.mem.Allocator, job: MeshJob) !MeshResult {
+    defer {
+        job.center.releaseVersion(allocator);
+        if (job.pos_x) |v| v.releaseVersion(allocator);
+        if (job.neg_x) |v| v.releaseVersion(allocator);
+        if (job.pos_y) |v| v.releaseVersion(allocator);
+        if (job.neg_y) |v| v.releaseVersion(allocator);
+        if (job.pos_z) |v| v.releaseVersion(allocator);
+        if (job.neg_z) |v| v.releaseVersion(allocator);
+    }
+
     const size = CHUNK_SIZE;
 
     var pos_x_planes = std.mem.zeroes(PlaneSet);
@@ -315,67 +383,45 @@ pub fn generateMesh(
     var pos_z_planes = std.mem.zeroes(PlaneSet);
     var neg_z_planes = std.mem.zeroes(PlaneSet);
 
-    const mesh = try allocator.create(Mesh);
-    mesh.* = .{};
-
     buildXPlanes(
-        &job.chunk_bitfield_views.solid_x,
-        job.pos_x_neighbor_bitfields_solid_x,
-        job.neg_x_neighbor_bitfields_solid_x,
+        &job.center.bitfields.solid_x,
+        if (job.pos_x) |v| &v.bitfields.solid_x else null,
+        if (job.neg_x) |v| &v.bitfields.solid_x else null,
         &pos_x_planes,
         &neg_x_planes,
     );
 
     buildYPlanes(
-        &job.chunk_bitfield_views.solid_y,
-        job.pos_y_neighbor_bitfields_solid_y,
-        job.neg_y_neighbor_bitfields_solid_y,
+        &job.center.bitfields.solid_y,
+        if (job.pos_y) |v| &v.bitfields.solid_y else null,
+        if (job.neg_y) |v| &v.bitfields.solid_y else null,
         &pos_y_planes,
         &neg_y_planes,
     );
 
     buildZPlanes(
-        &job.chunk_bitfield_views.solid_z,
-        job.pos_z_neighbor_bitfields_solid_z,
-        job.neg_z_neighbor_bitfields_solid_z,
+        &job.center.bitfields.solid_z,
+        if (job.pos_z) |v| &v.bitfields.solid_z else null,
+        if (job.neg_z) |v| &v.bitfields.solid_z else null,
         &pos_z_planes,
         &neg_z_planes,
     );
 
+    const mesh = try allocator.create(Mesh);
+    mesh.* = .{};
+
     for (0..size) |i| {
-        try greedyMergePlane(mesh, allocator, job.voxels, .pos_x, i, pos_x_planes[i]);
-        try greedyMergePlane(mesh, allocator, job.voxels, .neg_x, i, neg_x_planes[i]);
-        try greedyMergePlane(mesh, allocator, job.voxels, .pos_y, i, pos_y_planes[i]);
-        try greedyMergePlane(mesh, allocator, job.voxels, .neg_y, i, neg_y_planes[i]);
-        try greedyMergePlane(mesh, allocator, job.voxels, .pos_z, i, pos_z_planes[i]);
-        try greedyMergePlane(mesh, allocator, job.voxels, .neg_z, i, neg_z_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.center.voxels, .pos_x, i, pos_x_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.center.voxels, .neg_x, i, neg_x_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.center.voxels, .pos_y, i, pos_y_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.center.voxels, .neg_y, i, neg_y_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.center.voxels, .pos_z, i, pos_z_planes[i]);
+        try greedyMergePlane(mesh, allocator, job.center.voxels, .neg_z, i, neg_z_planes[i]);
     }
 
     return .{
         .coord = job.coord,
+        .source_gen = job.source_gen,
         .mesh = mesh,
     };
 }
-
-pub const MeshJob = struct {
-    coord: ChunkCoord,
-
-    voxels: []const BlockId,
-
-    chunk_bitfield_views: *const BitfieldViews,
-
-    // TODO: Reduce name size
-    pos_x_neighbor_bitfields_solid_x: ?*const [32][32]Bitfield,
-    neg_x_neighbor_bitfields_solid_x: ?*const [32][32]Bitfield,
-
-    pos_y_neighbor_bitfields_solid_y: ?*const [32][32]Bitfield,
-    neg_y_neighbor_bitfields_solid_y: ?*const [32][32]Bitfield,
-
-    pos_z_neighbor_bitfields_solid_z: ?*const [32][32]Bitfield,
-    neg_z_neighbor_bitfields_solid_z: ?*const [32][32]Bitfield,
-};
-
-pub const MeshResult = struct {
-    coord: ChunkCoord,
-    mesh: *Mesh,
-};

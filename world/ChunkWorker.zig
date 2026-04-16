@@ -82,7 +82,7 @@ pub const ChunkWorker = struct {
         }
     }
 
-    pub inline fn pollMeshJob(self: *ChunkWorker) ?MeshResult {
+    pub inline fn pollMeshResult(self: *ChunkWorker) ?MeshResult {
         return self.mesh_result_buffer.pop();
     }
 

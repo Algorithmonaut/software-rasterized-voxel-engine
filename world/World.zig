@@ -1,9 +1,10 @@
 const std = @import("std");
+const helpers = @import("../helpers.zig");
+const types = @import("../math/types.zig");
 
-const Chunk = @import("Chunk.zig").Chunk;
+const ChunkSlot = @import("Chunk.zig").ChunkSlot;
 const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
 
-const types = @import("../math/types.zig");
 const ChunkCoord = types.ChunkCoord;
 const I3 = types.Vec3i;
 
@@ -12,20 +13,21 @@ const BlockId = @import("Block.zig").BlockId;
 const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
 
 pub const World = struct {
-    allocator: std.mem.Allocator,
-    chunks: std.AutoHashMap(u64, *Chunk),
+    // When AutoHashMap grows or rehashes, its values can move, so we need ptr
+    chunks: std.AutoHashMap(u64, *ChunkSlot),
 
     pub fn init(allocator: std.mem.Allocator) World {
         return .{
             .allocator = allocator,
-            .chunks = std.AutoHashMap(u64, *Chunk).init(allocator),
+            .chunks = std.AutoHashMap(u64, *ChunkSlot).init(allocator),
         };
     }
 
-    pub fn deinit(self: *World) void {
+    pub fn deinit(self: *World, allocator: std.mem.Allocator) void {
         var it = self.chunks.valueIterator();
-        while (it.next()) |chunk_ptr| {
-            chunk_ptr.deinit(self.allocator);
+        while (it.next()) |slot_ptr| {
+            slot_ptr.*.destroy(allocator);
+            allocator.destroy(slot_ptr);
         }
 
         self.chunks.deinit();
@@ -43,48 +45,49 @@ pub const World = struct {
         return (x << 42) | (y << 21) | z;
     }
 
-    pub fn getChunk(self: *World, coord: ChunkCoord) ?*Chunk {
+    pub inline fn getChunkSlot(self: *World, coord: ChunkCoord) ?*ChunkSlot {
         return self.chunks.get(chunkKey(coord));
     }
 
-    pub fn insertChunk(
+    pub inline fn getOrPutChunkSlot(
         self: *World,
         allocator: std.mem.Allocator,
         coord: ChunkCoord,
-    ) !*Chunk {
+    ) !*ChunkSlot {
         const key = chunkKey(coord);
+        const gop = try self.chunks.getOrPut(chunkKey(coord));
+        if (!gop.found_existing) {
+            errdefer _ = self.chunks.remove(key);
 
-        if (self.chunks.get(key)) |chunk| return chunk;
-
-        const chunk_ptr = try self.allocator.create(Chunk);
-
-        chunk_ptr.* = try Chunk.create(allocator, coord);
-
-        try self.chunks.put(key, chunk_ptr);
-
-        return chunk_ptr;
+            const slot = try allocator.create(ChunkSlot);
+            slot.* = ChunkSlot.create(coord);
+            gop.value_ptr.* = slot;
+        }
+        return gop.value_ptr;
     }
 
-    pub fn removeChunk(self: *World, coord: ChunkCoord) void {
-        const key = chunkKey(coord);
-
-        if (self.chunks.fetchRemove(key)) |entry| {
-            entry.value.deinit(self.allocator);
-            self.allocator.destroy(entry.value);
+    pub inline fn removeChunkSlot(
+        self: *World,
+        allocator: std.mem.Allocator,
+        coord: ChunkCoord,
+    ) void {
+        if (self.chunks.fetchRemove(chunkKey(coord))) |entry| {
+            entry.value.destroy(allocator);
+            allocator.destroy(entry.value);
         }
     }
 
-    pub fn getBlockIdFromWorldCoordinates(self: *World, coord: I3) BlockId {
+    pub inline fn getBlockIdFromWorldCoordinates(self: *World, coord: I3) BlockId {
         const chunk_size_vec: I3 = @splat(CHUNK_SIZE);
 
         const chunk_pos: I3 = @divFloor(coord, chunk_size_vec);
         const local_pos: @Vector(3, usize) = @intCast(@mod(coord, chunk_size_vec));
 
-        if (self.getChunk(chunk_pos)) |chunk| return chunk.voxels[
-            local_pos[0] + local_pos[1] * CHUNK_SIZE +
-                local_pos[2] * CHUNK_SIZE * CHUNK_SIZE
-        ];
-
+        if (self.getChunkSlot(chunk_pos)) |chunk_slot| {
+            if (chunk_slot.current) |cur| return cur.voxels[
+                helpers.voxelIndex(CHUNK_SIZE, local_pos[0], local_pos[1], local_pos[2])
+            ];
+        }
         return .unknown;
     }
 };

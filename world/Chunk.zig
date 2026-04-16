@@ -14,8 +14,8 @@ inline fn voxelIndex(size: usize, x: usize, y: usize, z: usize) usize {
     return x + y * size + z * size * size;
 }
 
-pub const AtomicU32 = std.atomic.Value(u32);
 pub const AtomicU8 = std.atomic.Value(u8);
+pub const AtomicU32 = std.atomic.Value(u32);
 pub const LodLevel = u8;
 
 pub const AtomicUsize = std.atomic.Value(usize);
@@ -37,71 +37,65 @@ pub const BitfieldViews = struct {
     solid_z: Bitfields, // [x][y], bits are z
 };
 
+// fn markAdjacentChunksAsDirty(c: ChunkCoord, world: *World) void {
+//     if (world.getChunk(.{ c[0] + 1, c[1], c[2] })) |a| a.dirty = true;
+//     if (world.getChunk(.{ c[0] - 1, c[1], c[2] })) |a| a.dirty = true;
+//     if (world.getChunk(.{ c[0], c[1] + 1, c[2] })) |a| a.dirty = true;
+//     if (world.getChunk(.{ c[0], c[1] - 1, c[2] })) |a| a.dirty = true;
+//     if (world.getChunk(.{ c[0], c[1], c[2] + 1 })) |a| a.dirty = true;
+//     if (world.getChunk(.{ c[0], c[1], c[2] - 1 })) |a| a.dirty = true;
+// }
+
 /// Stable identity stored in World's hashmap
-const ChunkSlot = struct {
-    gen: AtomicUsize,
-    current: std.atomic.Value(?*ChunkVersion),
-    mesh: std.atomic.Value(?*Mesh),
-};
-
-/// Immutable after publishing
-const ChunkVersion = struct {
-    voxels: []const BlockId,
-    bitfields: *const BitfieldViews,
-};
-
-pub const Chunk = struct {
+pub const ChunkSlot = struct {
     coord: ChunkCoord,
-    voxels: []BlockId = undefined,
-    mesh: *Mesh = undefined,
-    bitfields: *BitfieldViews = undefined,
+    gen: AtomicUsize = AtomicUsize.init(0),
+    current: ?*ChunkVersion = null,
 
     world_min: ChunkCoord,
     world_max: ChunkCoord,
 
     state: ChunkState = .absent,
-    dirty: bool = false,
-
     edited: bool = false,
 
-    fn markAdjacentChunksAsDirty(c: ChunkCoord, world: *World) void {
-        if (world.getChunk(.{ c[0] + 1, c[1], c[2] })) |a| a.dirty = true;
-        if (world.getChunk(.{ c[0] - 1, c[1], c[2] })) |a| a.dirty = true;
-        if (world.getChunk(.{ c[0], c[1] + 1, c[2] })) |a| a.dirty = true;
-        if (world.getChunk(.{ c[0], c[1] - 1, c[2] })) |a| a.dirty = true;
-        if (world.getChunk(.{ c[0], c[1], c[2] + 1 })) |a| a.dirty = true;
-        if (world.getChunk(.{ c[0], c[1], c[2] - 1 })) |a| a.dirty = true;
-    }
+    mesh: ?*Mesh = null,
 
-    pub fn create(
-        allocator: std.mem.Allocator,
-        coord: ChunkCoord,
-    ) !Chunk {
+    pub fn create(coord: ChunkCoord) ChunkSlot {
         const size_vec = @as(ChunkCoord, @splat(CHUNK_SIZE));
         const world_min = coord * size_vec;
         const world_max = world_min + size_vec;
 
-        const mesh = try allocator.create(Mesh);
-        mesh.* = .{};
-
-        const bitfields = try allocator.create(BitfieldViews);
-        bitfields.* = std.mem.zeroInit(BitfieldViews, .{});
-
-        return .{
-            .coord = coord,
-            .world_min = world_min,
-            .world_max = world_max,
-            .mesh = mesh,
-            .bitfields = bitfields,
-            .voxels = try allocator.alloc(BlockId, CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE),
-        };
+        return .{ .coord = coord, .world_min = world_min, .world_max = world_max };
     }
 
-    pub fn deinit(self: *Chunk, allocator: std.mem.Allocator) void {
-        allocator.free(self.voxels);
-        allocator.destroy(self.bitfields);
-        self.mesh.deinit(allocator);
-        allocator.destroy(self.mesh);
-        self.* = undefined;
+    pub fn destroy(self: *ChunkSlot, allocator: std.mem.Allocator) void {
+        if (self.current) |cur| cur.releaseVersion(allocator);
+        if (self.mesh) |m| {
+            m.deinit(allocator);
+            allocator.destroy(m);
+        }
+    }
+};
+
+/// Immutable after publishing
+pub const ChunkVersion = struct {
+    refs: AtomicU32 = AtomicU32.init(1), // one published reference held by the slot
+    gen: usize,
+
+    voxels: []const BlockId,
+    // TODO: Rename to bitfieldViews
+    bitfields: *const BitfieldViews,
+
+    pub fn retainVersion(self: *ChunkVersion) void {
+        _ = self.refs.fetchAdd(1, .acq_rel);
+    }
+
+    pub fn releaseVersion(self: *ChunkVersion, allocator: std.mem.Allocator) void {
+        const prev = self.refs.fetchSub(1, .acq_rel);
+        if (prev == 1) {
+            allocator.free(self.voxels);
+            allocator.destroy(@constCast(self.bitfields));
+            allocator.destroy(self);
+        }
     }
 };
