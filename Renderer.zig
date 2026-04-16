@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const Chunk = @import("world/Chunk.zig").Chunk;
 const World = @import("world/World.zig").World;
 const Camera = @import("game/Camera.zig").Camera;
 const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
+const ChunkSlot = @import("world/Chunk.zig").ChunkSlot;
 const RenderQuad = @import("mesh/Mesh.zig").RenderQuad;
 
 const CHUNK_SIZE = @import("world/Chunk.zig").CHUNK_SIZE;
@@ -673,18 +673,20 @@ fn emitBucket(
 
 pub fn generatePrimitivesFromChunk(
     renderer: *Renderer,
-    chunk: *const Chunk,
+    slot: *const ChunkSlot,
     camera_pos: F3,
     combined_mat: Mat4f,
 ) !void {
-    const min: F3 = @floatFromInt(chunk.world_min);
-    const max: F3 = @floatFromInt(chunk.world_max);
+    const mesh = slot.mesh orelse return;
+
+    const min: F3 = @floatFromInt(slot.world_min);
+    const max: F3 = @floatFromInt(slot.world_max);
     const pos = camera_pos;
 
-    try emitBucket(.pos_x, chunk.mesh.pos_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer);
-    try emitBucket(.pos_y, chunk.mesh.pos_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer);
-    try emitBucket(.pos_z, chunk.mesh.pos_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer);
-    try emitBucket(.neg_x, chunk.mesh.neg_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer);
-    try emitBucket(.neg_y, chunk.mesh.neg_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer);
-    try emitBucket(.neg_z, chunk.mesh.neg_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer);
+    try emitBucket(.pos_x, mesh.pos_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer);
+    try emitBucket(.pos_y, mesh.pos_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer);
+    try emitBucket(.pos_z, mesh.pos_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer);
+    try emitBucket(.neg_x, mesh.neg_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer);
+    try emitBucket(.neg_y, mesh.neg_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer);
+    try emitBucket(.neg_z, mesh.neg_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer);
 }

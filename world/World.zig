@@ -18,7 +18,6 @@ pub const World = struct {
 
     pub fn init(allocator: std.mem.Allocator) World {
         return .{
-            .allocator = allocator,
             .chunks = std.AutoHashMap(u64, *ChunkSlot).init(allocator),
         };
     }
@@ -63,7 +62,7 @@ pub const World = struct {
             slot.* = ChunkSlot.create(coord);
             gop.value_ptr.* = slot;
         }
-        return gop.value_ptr;
+        return gop.value_ptr.*;
     }
 
     pub inline fn removeChunkSlot(

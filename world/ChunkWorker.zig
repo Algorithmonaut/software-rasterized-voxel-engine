@@ -69,15 +69,22 @@ pub const ChunkWorker = struct {
         }
     }
 
-    pub inline fn submitMeshJob(self: *ChunkWorker, mesh_job: MeshJob) !void {
+    pub inline fn submitMeshJob(self: *ChunkWorker, job: MeshJob) !void {
         if (DEBUG_SINGLE_THREADED) {
-            const result = try mesher.generateMesh(self.allocator, mesh_job);
+            defer job.deinit(self.allocator);
+
+            const result = try mesher.processMeshJob(self.allocator, job);
+            errdefer {
+                result.mesh.deinit(self.allocator);
+                self.allocator.destroy(result.mesh);
+            }
+
             try self.mesh_result_buffer.push(result);
         } else {
             self.mutex.lock();
             defer self.mutex.unlock();
 
-            try self.mesh_job_buffer.push(mesh_job);
+            try self.mesh_job_buffer.push(job);
             self.cond.signal();
         }
     }
@@ -110,7 +117,11 @@ pub const ChunkWorker = struct {
                     std.Thread.yield() catch {};
                     continue;
                 },
-                else => return,
+                // else => {
+                //     self.allocator.free(result.voxels);
+                //     self.allocator.destroy(result.bitfield_views);
+                //     return;
+                // },
             };
             break;
         }
@@ -123,7 +134,11 @@ pub const ChunkWorker = struct {
                     std.Thread.yield() catch {};
                     continue;
                 },
-                else => return,
+                // else => {
+                //     result.mesh.deinit(self.allocator);
+                //     self.allocator.destroy(result.mesh);
+                //     return;
+                // },
             };
             break;
         }
@@ -152,7 +167,9 @@ pub const ChunkWorker = struct {
             }
 
             while (self.mesh_job_buffer.pop()) |job| {
-                const result = mesher.generateMesh(self.allocator, job) catch |err| {
+                defer job.deinit(self.allocator);
+
+                const result = mesher.processMeshJob(self.allocator, job) catch |err| {
                     std.log.err("generateMesh failed for {any}: {s}", .{ job.coord, @errorName(err) });
                     continue;
                 };

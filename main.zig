@@ -110,15 +110,17 @@ pub fn main() !void {
     var pool: std.Thread.Pool = undefined;
     try pool.init(.{ .allocator = allocator });
 
-    try engine.chunk_manager.bootstrapInitialChunks(
-        allocator,
-        &engine.world,
-        engine.terrain_generator,
-    );
+    // try engine.chunk_manager.bootstrapInitialChunks(
+    //     allocator,
+    //     &engine.world,
+    //     engine.terrain_generator,
+    // );
 
     var t: usize = 0;
 
     while (engine.platform.running) : (t += 1) {
+        try engine.chunk_manager.drainWorkerResults(allocator, &engine.world, engine.chunk_worker);
+
         var frame_timer = try std.time.Timer.start();
 
         var frame = try engine.beginFrame();
@@ -178,7 +180,5 @@ pub fn main() !void {
         if (engine_config.debug_config.show_fps) engine.platform.fps_counter_update();
 
         total_frame_ns += frame_timer.read();
-
-        engine.chunk_manager.drainWorkerResults(allocator, &engine.world, engine.chunk_worker);
     }
 }
