@@ -7,11 +7,13 @@ const WorldConfig = @import("../EngineConfig.zig").EngineConfig.WorldConfig;
 
 const ChunkCoord = @import("../math/types.zig").ChunkCoord;
 
+const BitfieldViews = @import("Chunk.zig").BitfieldViews;
+
 const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
 
 //// DETERMINISTIC HASHING ////
 
-fn hash2(x: i32, y: i32, seed: u32) u32 {
+inline fn hash2(x: i32, y: i32, seed: u32) u32 {
     var h: u32 = seed;
 
     h ^= @as(u32, @bitCast(x)) *% 0x27d4eb2d;
@@ -28,7 +30,7 @@ fn hash2(x: i32, y: i32, seed: u32) u32 {
     return h;
 }
 
-fn hash2Signed(x: i32, y: i32, seed: u32) f32 {
+inline fn hash2Signed(x: i32, y: i32, seed: u32) f32 {
     const h = hash2(x, y, seed);
     const t = @as(f32, @floatFromInt(h)) / 4294967295.0;
     return t * 2.0 - 1.0; // [-1, 1]
@@ -45,7 +47,7 @@ inline fn lerp(a: f32, b: f32, t: f32) f32 {
     return a + (b - a) * t;
 }
 
-fn valueNoise2(x: f32, y: f32, seed: u32) f32 {
+inline fn valueNoise2(x: f32, y: f32, seed: u32) f32 {
     const x0: i32 = @intFromFloat(@floor(x));
     const y0: i32 = @intFromFloat(@floor(y));
     const x1 = x0 + 1;
@@ -68,7 +70,7 @@ fn valueNoise2(x: f32, y: f32, seed: u32) f32 {
     return lerp(ix0, ix1, sy);
 }
 
-fn fbm2(x: f32, y: f32, octaves: u32, gain: f32, lacunarity: f32, seed: u32) f32 {
+inline fn fbm2(x: f32, y: f32, octaves: u32, gain: f32, lacunarity: f32, seed: u32) f32 {
     var sum: f32 = 0.0;
     var amp: f32 = 1.0;
     var freq: f32 = 1.0;
@@ -128,7 +130,7 @@ pub const TerrainGenerator = struct {
         _ = self;
     }
 
-    fn terrainHeight(self: TerrainGenerator, world_x: i32, world_z: i32) i32 {
+    inline fn terrainHeight(self: TerrainGenerator, world_x: i32, world_z: i32) i32 {
         const nx = @as(f32, @floatFromInt(world_x)) * self.scale;
         const nz = @as(f32, @floatFromInt(world_z)) * self.scale;
 
@@ -141,6 +143,30 @@ pub const TerrainGenerator = struct {
         return @intFromFloat(base_height + h * amplitude);
     }
 
+    inline fn generateChunkBitfieldViews(voxels: []BlockId, bitfield_views: *BitfieldViews) void {
+        for (0..CHUNK_SIZE) |x_u| {
+            const x: u5 = @intCast(x_u);
+            const mx: u32 = @as(u32, 1) << x;
+
+            for (0..CHUNK_SIZE) |y_u| {
+                const y: u5 = @intCast(y_u);
+                const my: u32 = @as(u32, 1) << y;
+
+                for (0..CHUNK_SIZE) |z_u| {
+                    const z: u5 = @intCast(z_u);
+                    const mz: u32 = @as(u32, 1) << z;
+
+                    const idx = x_u + y_u * CHUNK_SIZE + z_u * CHUNK_SIZE * CHUNK_SIZE;
+                    if (voxels[idx] == .air) continue;
+
+                    bitfield_views.solid_x[y_u][z_u] |= mx;
+                    bitfield_views.solid_y[x_u][z_u] |= my;
+                    bitfield_views.solid_z[x_u][y_u] |= mz;
+                }
+            }
+        }
+    }
+
     pub fn fillChunkVoxels(
         self: *TerrainGenerator,
         allocator: std.mem.Allocator,
@@ -150,14 +176,19 @@ pub const TerrainGenerator = struct {
 
         const voxels = try allocator.alloc(BlockId, size * size * size);
 
+        const bitfield_views = try allocator.create(BitfieldViews);
+        bitfield_views.* = std.mem.zeroInit(BitfieldViews, .{});
+
         const chunk_min_y = job.coord[1] * size;
-        const chunk_max_y = CHUNK_SIZE + size;
+        const chunk_max_y = chunk_min_y + size;
 
         if (chunk_max_y <= self.min_world_y or chunk_min_y > self.max_world_y) {
             @memset(voxels, .air);
+
             return .{
                 .coord = job.coord,
                 .voxels = voxels,
+                .bitfield_views = bitfield_views,
             };
         }
 
@@ -189,9 +220,12 @@ pub const TerrainGenerator = struct {
             }
         }
 
+        generateChunkBitfieldViews(voxels, bitfield_views);
+
         return .{
             .coord = job.coord,
             .voxels = voxels,
+            .bitfield_views = bitfield_views,
         };
     }
 };
@@ -203,4 +237,5 @@ pub const GenerationJob = struct {
 pub const GenerationResult = struct {
     coord: ChunkCoord,
     voxels: []BlockId,
+    bitfield_views: *BitfieldViews,
 };

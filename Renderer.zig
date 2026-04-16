@@ -45,7 +45,6 @@ const UV = @Vector(2, f32);
 const eps: f32 = 0.0001;
 
 pub const Renderer = struct {
-    pub const ChunkRenderEntry = struct { chunk: *Chunk, dist2: f32 };
     pub const ProjectedVertex = struct { xy: Vec2fx, q: f32, uv: UV };
     pub const MaterialRef = struct { tex_u: u16, tex_v: u16 };
     pub const PrimitiveRef = struct {
@@ -60,8 +59,6 @@ pub const Renderer = struct {
     frame_primitives: std.ArrayList(PrimitiveRef),
     frame_materials: std.ArrayList(MaterialRef),
     frame_vertices: std.ArrayList(ProjectedVertex),
-
-    chunk_entries: std.ArrayList(ChunkRenderEntry),
 
     fb_width: usize,
     fb_height: usize,
@@ -87,7 +84,6 @@ pub const Renderer = struct {
             .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 70_000),
             .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 280_000),
 
-            .chunk_entries = try std.ArrayList(ChunkRenderEntry).initCapacity(allocator, 100),
             .fb_width = conf.width,
             .fb_height = conf.height,
             .tile_dimensions = conf.tile_dimensions,
@@ -358,219 +354,6 @@ pub const Renderer = struct {
                 "emitPolygon bad base: prim_i={}, expected={}, got={}",
                 .{ prim_i, base, self.frame_primitives.items[prim_i].base_vertex },
             );
-    }
-
-    //// CHUNK RENDERING ///////////////////////////////////////////////////////
-
-    pub fn computeFrustumPlanes(self: *Renderer, combined_mat: Mat4f) void {
-        self.planes = .{
-            combined_mat.r[3] + combined_mat.r[0], // left
-            combined_mat.r[3] - combined_mat.r[0], // right
-            combined_mat.r[3] + combined_mat.r[1], // bottom
-            combined_mat.r[3] - combined_mat.r[1], // top
-            combined_mat.r[2], // near
-        };
-    }
-
-    fn isChunkInFrustum(self: *Renderer, chunk: *Chunk) bool {
-        const world_max: F3 = @floatFromInt(chunk.world_max);
-        const world_min: F3 = @floatFromInt(chunk.world_min);
-
-        for (self.planes) |plane| {
-            const point = F4{
-                if (plane[0] >= 0) world_max[0] else world_min[0],
-                if (plane[1] >= 0) world_max[1] else world_min[1],
-                if (plane[2] >= 0) world_max[2] else world_min[2],
-                1,
-            };
-
-            const dist = @reduce(.Add, point * plane);
-            if (dist < 0) return false;
-        }
-
-        return true;
-    }
-
-    pub fn worldToChunkCoord(coord: WorldCoord, chunk_size: i32) ChunkCoord {
-        const x_i = @as(i32, @intFromFloat(@floor(coord[0])));
-        const y_i = @as(i32, @intFromFloat(@floor(coord[1])));
-        const z_i = @as(i32, @intFromFloat(@floor(coord[2])));
-
-        return .{
-            @divFloor(x_i, chunk_size),
-            @divFloor(y_i, chunk_size),
-            @divFloor(z_i, chunk_size),
-        };
-    }
-
-    /// Returns the avg of the two AABB points aka. chunk center
-    pub fn chunkCenter(chunk: *const Chunk) @Vector(3, f32) {
-        const half_vec = @as(@Vector(3, f32), @splat(0.5));
-        const world_min: @Vector(3, f32) = @floatFromInt(chunk.world_min);
-        const world_max: @Vector(3, f32) = @floatFromInt(chunk.world_max);
-
-        return (world_min + world_max) * half_vec;
-    }
-
-    fn dist2ToPlayer(player: WorldCoord, chunk: *const Chunk) f32 {
-        const c = chunkCenter(chunk);
-        const d = c - player;
-        return d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
-    }
-
-    pub fn worldVertexFromChunkVertex(
-        vert: Vertex,
-        chunk_pos: ChunkCoord,
-        chunk_size: usize,
-    ) WorldVertex {
-        const v_pos_f: F3 = @floatFromInt(vert.pos);
-        const chunk_pos_f: F3 = @floatFromInt(chunk_pos);
-        const size_splat_f: F3 = @splat(@as(f32, @floatFromInt(chunk_size)));
-
-        const temp: F3 = v_pos_f + chunk_pos_f * size_splat_f;
-        const v_pos: F4 = .{ temp[0], temp[1], temp[2], 1 };
-
-        return .{
-            .pos = v_pos,
-            .uv = vert.uv,
-        };
-    }
-
-    fn drainWorkerResults(
-        allocator: std.mem.Allocator,
-        world: *World,
-        chunk_worker: *ChunkWorker,
-    ) void {
-        while (chunk_worker.pollGenerationResult()) |job| {
-            if (world.getChunk(job.coord)) |chunk| {
-                if (job.voxels.len != VOXEL_COUNT) {
-                    std.log.err("generation result for {any} has invalid voxel length {}", .{
-                        job.coord,
-                        job.voxels.len,
-                    });
-                    allocator.free(job.voxels);
-                    chunk.state = .absent;
-                    continue;
-                }
-
-                allocator.free(chunk.voxels);
-                chunk.voxels = job.voxels;
-                chunk.state = .generated;
-            }
-        }
-
-        while (chunk_worker.pollMeshJob()) |job| {
-            if (world.getChunk(job.coord)) |chunk| {
-                chunk.mesh.deinit(allocator);
-                allocator.destroy(chunk.mesh);
-                chunk.mesh = job.mesh;
-                chunk.state = .ready;
-            }
-        }
-    }
-
-    pub fn renderWorld(
-        self: *Renderer,
-        allocator: std.mem.Allocator,
-        player_pos: WorldCoord,
-        chunk_size: usize,
-        world: *World,
-        camera: *Camera,
-        chunk_worker: *ChunkWorker,
-    ) !void {
-        const chunk_size_i: i32 = @intCast(chunk_size);
-        const player_chunk = worldToChunkCoord(player_pos, chunk_size_i);
-        const chunk_view_radius: i32 = @intFromFloat(@ceil(camera.view_distance /
-            @as(f32, @floatFromInt(chunk_size))));
-
-        self.chunk_entries.clearRetainingCapacity();
-
-        drainWorkerResults(allocator, world, chunk_worker);
-
-        var cz = player_chunk[2] - chunk_view_radius;
-        while (cz <= player_chunk[2] + chunk_view_radius) : (cz += 1) {
-            var cy = player_chunk[1] - chunk_view_radius;
-            while (cy <= player_chunk[1] + chunk_view_radius) : (cy += 1) {
-                var cx = player_chunk[0] - chunk_view_radius;
-                while (cx <= player_chunk[0] + chunk_view_radius) : (cx += 1) {
-                    const dx = cx - player_chunk[0];
-                    const dy = cy - player_chunk[1];
-                    const dz = cz - player_chunk[2];
-                    if (dx * dx + dy * dy + dz * dz > chunk_view_radius * chunk_view_radius) continue;
-
-                    const coord = ChunkCoord{ cx, cy, cz };
-                    const chunk = try world.insertChunk(allocator, coord);
-
-                    if (chunk.state == .absent) {
-                        try chunk_worker.submitGenerationJob(.{ .coord = coord });
-                        chunk.state = .generating;
-                    } else if (chunk.state == .generated) {
-                        if (chunk.voxels.len != VOXEL_COUNT) {
-                            std.log.err("chunk {any} marked generated with invalid voxel length {}", .{
-                                coord,
-                                chunk.voxels.len,
-                            });
-                            chunk.state = .absent;
-                            continue;
-                        }
-
-                        chunk.bitfields = createBitfields(chunk.voxels);
-
-                        const pos_x_neighbor = world.getChunk(.{ coord[0] + 1, coord[1], coord[2] });
-                        const neg_x_neighbor = world.getChunk(.{ coord[0] - 1, coord[1], coord[2] });
-
-                        const pos_y_neighbor = world.getChunk(.{ coord[0], coord[1] + 1, coord[2] });
-                        const neg_y_neighbor = world.getChunk(.{ coord[0], coord[1] - 1, coord[2] });
-
-                        const pos_z_neighbor = world.getChunk(.{ coord[0], coord[1], coord[2] + 1 });
-                        const neg_z_neighbor = world.getChunk(.{ coord[0], coord[1], coord[2] - 1 });
-
-                        try chunk_worker.submitMeshJob(.{
-                            .coord = coord,
-                            .voxels = chunk.voxels,
-                            .chunk_bitfield_views = &chunk.bitfields,
-
-                            .pos_x_neighbor_bitfields_solid_x = if (pos_x_neighbor) |adj| &adj.bitfields.solid_x else null,
-                            .neg_x_neighbor_bitfields_solid_x = if (neg_x_neighbor) |adj| &adj.bitfields.solid_x else null,
-
-                            .pos_y_neighbor_bitfields_solid_y = if (pos_y_neighbor) |adj| &adj.bitfields.solid_y else null,
-                            .neg_y_neighbor_bitfields_solid_y = if (neg_y_neighbor) |adj| &adj.bitfields.solid_y else null,
-
-                            .pos_z_neighbor_bitfields_solid_z = if (pos_z_neighbor) |adj| &adj.bitfields.solid_z else null,
-                            .neg_z_neighbor_bitfields_solid_z = if (neg_z_neighbor) |adj| &adj.bitfields.solid_z else null,
-                        });
-
-                        chunk.state = .meshing;
-                    }
-
-                    if (!self.isChunkInFrustum(chunk)) continue;
-                    if (chunk.state != .ready) continue;
-
-                    try self.chunk_entries.append(
-                        allocator,
-                        .{
-                            .chunk = chunk,
-                            .dist2 = dist2ToPlayer(player_pos, chunk),
-                        },
-                    );
-                }
-            }
-
-            drainWorkerResults(allocator, world, chunk_worker);
-        }
-
-        drainWorkerResults(allocator, world, chunk_worker);
-
-        // Front to back rendering
-        std.sort.block(ChunkRenderEntry, self.chunk_entries.items, {}, struct {
-            fn lessThan(_: void, a: ChunkRenderEntry, b: ChunkRenderEntry) bool {
-                return a.dist2 < b.dist2;
-            }
-        }.lessThan);
-
-        for (self.chunk_entries.items) |chunk| {
-            try generatePrimitivesFromChunk(chunk.chunk, camera.from, camera.combined_mat, self);
-        }
     }
 };
 
@@ -889,10 +672,10 @@ fn emitBucket(
 }
 
 pub fn generatePrimitivesFromChunk(
-    chunk: *Chunk,
+    renderer: *Renderer,
+    chunk: *const Chunk,
     camera_pos: F3,
     combined_mat: Mat4f,
-    renderer: *Renderer,
 ) !void {
     const min: F3 = @floatFromInt(chunk.world_min);
     const max: F3 = @floatFromInt(chunk.world_max);

@@ -67,15 +67,17 @@ pub fn createBitfields(voxels: []const BlockId) BitfieldViews {
 
 pub const Chunk = struct {
     coord: ChunkCoord,
-    voxels: []BlockId,
-    mesh: *Mesh,
-    bitfields: BitfieldViews = undefined,
+    voxels: []BlockId = undefined,
+    mesh: *Mesh = undefined,
+    bitfields: *BitfieldViews = undefined,
 
     world_min: ChunkCoord,
     world_max: ChunkCoord,
 
     state: ChunkState = .absent,
     dirty: bool = false,
+
+    edited: bool = false,
 
     fn markAdjacentChunksAsDirty(c: ChunkCoord, world: *World) void {
         if (world.getChunk(.{ c[0] + 1, c[1], c[2] })) |a| a.dirty = true;
@@ -94,20 +96,19 @@ pub const Chunk = struct {
         const world_min = coord * size_vec;
         const world_max = world_min + size_vec;
 
-        const mesh = try allocator.create(Mesh);
-        mesh.* = .{};
-
         return .{
             .coord = coord,
             .world_min = world_min,
             .world_max = world_max,
-            .mesh = mesh,
+            .mesh = try allocator.create(Mesh),
+            .bitfields = try allocator.create(BitfieldViews),
             .voxels = try allocator.alloc(BlockId, CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE),
         };
     }
 
     pub fn deinit(self: *Chunk, allocator: std.mem.Allocator) void {
         allocator.free(self.voxels);
+        allocator.destroy(self.bitfields);
         self.mesh.deinit(allocator);
         allocator.destroy(self.mesh);
         self.* = undefined;

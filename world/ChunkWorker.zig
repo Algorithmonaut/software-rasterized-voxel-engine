@@ -9,6 +9,9 @@ const mesher = @import("../mesh/mesher.zig");
 const MeshJob = mesher.MeshJob;
 const MeshResult = mesher.MeshResult;
 
+const DEBUG_SINGLE_THREADED = @import("../main.zig").DEBUG_SINGLE_THREADED;
+// const DEBUG_SINGLE_THREADED = true;
+
 pub const ChunkWorker = struct {
     allocator: std.mem.Allocator,
     terrain_generator: *TerrainGenerator,
@@ -47,10 +50,13 @@ pub const ChunkWorker = struct {
     }
 
     pub fn start(self: *ChunkWorker) !void {
+        if (DEBUG_SINGLE_THREADED) return;
         self.thread = try std.Thread.spawn(.{}, workerMain, .{self});
     }
 
     pub fn stop(self: *ChunkWorker) void {
+        if (DEBUG_SINGLE_THREADED) return;
+
         self.mutex.lock();
         self.stopping = true;
         self.cond.signal();
@@ -63,11 +69,16 @@ pub const ChunkWorker = struct {
     }
 
     pub inline fn submitMeshJob(self: *ChunkWorker, mesh_job: MeshJob) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        if (DEBUG_SINGLE_THREADED) {
+            const result = try mesher.generateMesh(self.allocator, mesh_job);
+            try self.mesh_result_buffer.push(result);
+        } else {
+            self.mutex.lock();
+            defer self.mutex.unlock();
 
-        try self.mesh_job_buffer.push(mesh_job);
-        self.cond.signal();
+            try self.mesh_job_buffer.push(mesh_job);
+            self.cond.signal();
+        }
     }
 
     pub inline fn pollMeshJob(self: *ChunkWorker) ?MeshResult {
@@ -75,11 +86,16 @@ pub const ChunkWorker = struct {
     }
 
     pub inline fn submitGenerationJob(self: *ChunkWorker, job: GenerationJob) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        if (DEBUG_SINGLE_THREADED) {
+            const result = try self.terrain_generator.fillChunkVoxels(self.allocator, job);
+            try self.generation_result_buffer.push(result);
+        } else {
+            self.mutex.lock();
+            defer self.mutex.unlock();
 
-        try self.generation_job_buffer.push(job);
-        self.cond.signal();
+            try self.generation_job_buffer.push(job);
+            self.cond.signal();
+        }
     }
 
     pub inline fn pollGenerationResult(self: *ChunkWorker) ?GenerationResult {
@@ -115,7 +131,10 @@ pub const ChunkWorker = struct {
     fn workerMain(self: *ChunkWorker) void {
         while (true) {
             self.mutex.lock();
-            while (self.mesh_job_buffer.isEmpty() and self.generation_job_buffer.isEmpty() and !self.stopping) {
+            while (self.mesh_job_buffer.isEmpty() and
+                self.generation_job_buffer.isEmpty() and
+                !self.stopping)
+            {
                 self.cond.wait(&self.mutex);
             }
             const should_stop = self.stopping;

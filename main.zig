@@ -11,9 +11,12 @@ const Camera = @import("game/Camera.zig").Camera;
 const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Renderer = @import("Renderer.zig").Renderer;
+const renderer = @import("Renderer.zig");
 const Chunk = @import("world/Chunk.zig").Chunk;
 
 const CHUNK_SIZE = @import("world/Chunk.zig").CHUNK_SIZE;
+
+pub const DEBUG_SINGLE_THREADED = false;
 
 const engine_config = EngineConfig{
     .camera_config = .{
@@ -25,7 +28,7 @@ const engine_config = EngineConfig{
     .player_config = .{
         .initial_position = .{ 0.0, 100.0, 0.0 },
         .half_size = .{ 0.3, 0.9, 0.3 },
-        .speed = 800.0,
+        .speed = 8.0,
 
         .air_accel = 20,
         .air_decel = 40,
@@ -33,7 +36,7 @@ const engine_config = EngineConfig{
         .ground_decel = 240,
 
         .gravity = 40,
-        .jump_speed = 100,
+        .jump_speed = 10,
     },
 
     .framebuffer_config = .{
@@ -88,8 +91,14 @@ var total_frame_ns: u64 = 0;
 pub fn main() !void {
     @setFloatMode(.optimized);
 
+    // var debug_allocator = std.heap.DebugAllocator(.{}){};
+    // defer std.debug.assert(debug_allocator.deinit() == .ok);
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    var ts = std.heap.ThreadSafeAllocator{
+        .child_allocator = gpa.allocator(),
+    };
+    const allocator = ts.allocator();
 
     engine = try Engine.init(
         allocator,
@@ -101,7 +110,6 @@ pub fn main() !void {
 
     try engine.chunk_manager.bootstrapInitialChunks(
         allocator,
-        &pool,
         &engine.world,
         engine.terrain_generator,
     );
@@ -120,26 +128,37 @@ pub fn main() !void {
             &engine.graphics,
         );
 
-        engine.renderer.computeFrustumPlanes(engine.player.camera.combined_mat);
-
         try engine.player.update(&engine.world);
 
         engine.player.camera.view_mat = mat.create_view(
             engine.player.camera.from,
             engine.player.camera.to,
         );
+
         engine.player.camera.combined_mat = engine.player.camera.proj_mat.mul(
             engine.player.camera.view_mat,
         );
 
-        try engine.renderer.renderWorld(
+        try engine.chunk_manager.updateChunks(
             allocator,
-            engine.player.camera.from,
-            CHUNK_SIZE,
             &engine.world,
-            &engine.player.camera,
             engine.chunk_worker,
+            engine.player.camera.from,
         );
+
+        const visible_chunks = try engine.chunk_manager.getVisibleActiveChunks(
+            engine.player.camera.combined_mat,
+            allocator,
+        );
+
+        for (visible_chunks) |chunk| {
+            try renderer.generatePrimitivesFromChunk(
+                &engine.renderer,
+                chunk,
+                engine.player.camera.from,
+                engine.player.camera.combined_mat,
+            );
+        }
 
         try engine.rasterizer.render(
             allocator,
@@ -158,5 +177,9 @@ pub fn main() !void {
         if (engine_config.debug_config.show_fps) engine.platform.fps_counter_update();
 
         total_frame_ns += frame_timer.read();
+
+        std.debug.print("player height: {}\n", .{engine.player.camera.from[1]});
+
+        engine.chunk_manager.drainWorkerResults(allocator, &engine.world, engine.chunk_worker);
     }
 }

@@ -14,6 +14,8 @@ const AtomicUsize = std.atomic.Value(usize);
 
 const BATCH_SIZE: usize = 16;
 
+const DEBUG_SINGLE_THREADED = @import("../main.zig").DEBUG_SINGLE_THREADED;
+
 const rasterization = @import("rasterization.zig");
 
 fn tileWorker(
@@ -176,12 +178,9 @@ pub const Rasterizer = struct {
 
         //// THIRD PASS | RENDER TILES ////
         var next = AtomicUsize.init(0);
-        var wg = std.Thread.WaitGroup{};
-        // TODO: Move this to engine and only set it once
-        const worker_count = try std.Thread.getCpuCount();
 
-        for (0..worker_count) |_| {
-            pool.spawnWg(&wg, tileWorker, .{
+        if (DEBUG_SINGLE_THREADED) {
+            tileWorker(
                 &next,
                 tile_pool,
                 fb,
@@ -191,9 +190,27 @@ pub const Rasterizer = struct {
                 frame_primitives,
                 frame_materials,
                 frame_vertices,
-            });
-        }
+            );
+        } else {
+            // TODO: Move this to engine and only set it once
+            const worker_count = try std.Thread.getCpuCount();
+            var wg = std.Thread.WaitGroup{};
 
-        wg.wait();
+            for (0..worker_count) |_| {
+                pool.spawnWg(&wg, tileWorker, .{
+                    &next,
+                    tile_pool,
+                    fb,
+                    atlas,
+                    self.tile_offsets,
+                    self.tile_primitive_indices,
+                    frame_primitives,
+                    frame_materials,
+                    frame_vertices,
+                });
+            }
+
+            wg.wait();
+        }
     }
 };

@@ -60,7 +60,8 @@ pub const Engine = struct {
             conf.camera_config.view_distance,
         );
 
-        const chunk_manager = ChunkManager.init(800, 1_000, -192, 320);
+        // TODO: Remove magic numbers
+        const chunk_manager = try ChunkManager.init(allocator, 300, 500, -192.0, 320.0);
 
         return Engine{
             .allocator = allocator,
