@@ -18,6 +18,8 @@ pub const AtomicU32 = std.atomic.Value(u32);
 pub const AtomicU8 = std.atomic.Value(u8);
 pub const LodLevel = u8;
 
+pub const AtomicUsize = std.atomic.Value(usize);
+
 pub const ChunkState = enum(u8) {
     absent,
     generating,
@@ -35,35 +37,18 @@ pub const BitfieldViews = struct {
     solid_z: Bitfields, // [x][y], bits are z
 };
 
-pub fn createBitfields(voxels: []const BlockId) BitfieldViews {
-    std.debug.assert(voxels.len == VOXEL_COUNT);
+/// Stable identity stored in World's hashmap
+const ChunkSlot = struct {
+    gen: AtomicUsize,
+    current: std.atomic.Value(?*ChunkVersion),
+    mesh: std.atomic.Value(?*Mesh),
+};
 
-    var bitfields_out = std.mem.zeroInit(BitfieldViews, .{});
-
-    for (0..CHUNK_SIZE) |x_usize| {
-        const x: u5 = @intCast(x_usize);
-        const mx: u32 = @as(u32, 1) << x;
-
-        for (0..CHUNK_SIZE) |y_usize| {
-            const y: u5 = @intCast(y_usize);
-            const my: u32 = @as(u32, 1) << y;
-
-            for (0..CHUNK_SIZE) |z_usize| {
-                const z: u5 = @intCast(z_usize);
-                const mz: u32 = @as(u32, 1) << z;
-
-                const idx = voxelIndex(CHUNK_SIZE, x_usize, y_usize, z_usize);
-                if (voxels[idx] == .air) continue;
-
-                bitfields_out.solid_x[y_usize][z_usize] |= mx;
-                bitfields_out.solid_y[x_usize][z_usize] |= my;
-                bitfields_out.solid_z[x_usize][y_usize] |= mz;
-            }
-        }
-    }
-
-    return bitfields_out;
-}
+/// Immutable after publishing
+const ChunkVersion = struct {
+    voxels: []const BlockId,
+    bitfields: *const BitfieldViews,
+};
 
 pub const Chunk = struct {
     coord: ChunkCoord,
@@ -96,12 +81,18 @@ pub const Chunk = struct {
         const world_min = coord * size_vec;
         const world_max = world_min + size_vec;
 
+        const mesh = try allocator.create(Mesh);
+        mesh.* = .{};
+
+        const bitfields = try allocator.create(BitfieldViews);
+        bitfields.* = std.mem.zeroInit(BitfieldViews, .{});
+
         return .{
             .coord = coord,
             .world_min = world_min,
             .world_max = world_max,
-            .mesh = try allocator.create(Mesh),
-            .bitfields = try allocator.create(BitfieldViews),
+            .mesh = mesh,
+            .bitfields = bitfields,
             .voxels = try allocator.alloc(BlockId, CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE),
         };
     }

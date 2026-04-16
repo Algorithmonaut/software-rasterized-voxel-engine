@@ -42,7 +42,7 @@ const Axis = enum(u8) { x, y, z };
 
 fn neighborBitfields(comptime axis: Axis, neighbor: ?*Chunk) ?*const Bitfields {
     const adj = neighbor orelse return null;
-    // if (adj.state == .absent or adj.state == .generating) return null;
+    if (adj.state == .absent or adj.state == .generating) return null;
 
     return switch (axis) {
         .x => &adj.bitfields.solid_x,
@@ -165,7 +165,7 @@ pub const ChunkManager = struct {
     visible: std.ArrayList(*Chunk),
 
     // Force loaded/active to be recreated on first frame
-    last_player_chunk: ChunkCoord = .{ std.math.maxInt(i32), 0, 0 },
+    last_player_chunk: ChunkCoord = .{ 100, 0, 0 },
 
     fn chunkCountInSphericalSegment(
         radius_world_in: f32,
@@ -237,13 +237,14 @@ pub const ChunkManager = struct {
             .active = try std.ArrayList(ChunkRenderEntry).initCapacity(allocator, active_count),
             .active_count = active_count,
 
-            // This limits FOV to 120° + eps, eps > 0
-            .visible = try std.ArrayList(*Chunk).initCapacity(allocator, active_count / 3),
+            .visible = try std.ArrayList(*Chunk).initCapacity(allocator, active_count),
         };
     }
 
     //// CHUNK PREGENERAITON ////
 
+    // NOTE: Due to a (really weird) thread pool bug in zig std,
+    // I'am forced to use thread.spawn
     pub fn bootstrapInitialChunks(
         self: *ChunkManager,
         allocator: std.mem.Allocator,
@@ -293,59 +294,46 @@ pub const ChunkManager = struct {
             return;
         }
 
-        const cpu_count = try std.Thread.getCpuCount();
-        const worker_count = @min(cpu_count, @max(@as(usize, 1), chunk_coords.items.len));
+        const worker_count = try std.Thread.getCpuCount();
 
         var threads = try allocator.alloc(std.Thread, worker_count);
         defer allocator.free(threads);
 
-        // generation phase
-        {
-            var spawned: usize = 0;
-            errdefer {
-                for (threads[0..spawned]) |t| t.join();
-            }
+        var spawned: usize = 0;
 
-            for (0..worker_count) |i| {
-                threads[i] = try std.Thread.spawn(.{}, generationWorker, .{
-                    &next,
-                    count,
-                    allocator,
-                    chunk_coords.items,
-                    world,
-                    terrain_generator,
-                });
-                spawned += 1;
-            }
-
-            for (threads[0..spawned]) |t| {
-                t.join();
-            }
+        // generation
+        for (0..worker_count) |i| {
+            threads[i] = try std.Thread.spawn(.{}, generationWorker, .{
+                &next,
+                count,
+                allocator,
+                chunk_coords.items,
+                world,
+                terrain_generator,
+            });
+            spawned += 1;
         }
 
-        // meshing phase
+        for (threads[0..spawned]) |t| {
+            t.join();
+        }
+
+        // meshing
         next.store(0, .monotonic);
+        spawned = 0;
+        for (0..worker_count) |i| {
+            threads[i] = try std.Thread.spawn(.{}, meshingWorker, .{
+                &next,
+                count,
+                allocator,
+                chunk_coords.items,
+                world,
+            });
+            spawned += 1;
+        }
 
-        {
-            var spawned: usize = 0;
-            errdefer {
-                for (threads[0..spawned]) |t| t.join();
-            }
-
-            for (0..worker_count) |i| {
-                threads[i] = try std.Thread.spawn(.{}, meshingWorker, .{
-                    &next,
-                    count,
-                    allocator,
-                    chunk_coords.items,
-                    world,
-                });
-                spawned += 1;
-            }
-
-            for (threads[0..spawned]) |t| {
-                t.join();
-            }
+        for (threads[0..spawned]) |t| {
+            t.join();
         }
     }
 
@@ -478,9 +466,7 @@ pub const ChunkManager = struct {
         }.lessThan);
     }
 
-    pub fn getVisibleActiveChunks(self: *ChunkManager, combined_mat: Mat4f, allocator: std.mem.Allocator) ![]*Chunk {
-        _ = allocator;
-
+    pub fn getVisibleActiveChunks(self: *ChunkManager, combined_mat: Mat4f) []*Chunk {
         const planes = [5]F4{
             combined_mat.r[3] + combined_mat.r[0], // left
             combined_mat.r[3] - combined_mat.r[0], // right

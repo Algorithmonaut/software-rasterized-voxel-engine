@@ -10,7 +10,6 @@ const MeshJob = mesher.MeshJob;
 const MeshResult = mesher.MeshResult;
 
 const DEBUG_SINGLE_THREADED = @import("../main.zig").DEBUG_SINGLE_THREADED;
-// const DEBUG_SINGLE_THREADED = true;
 
 pub const ChunkWorker = struct {
     allocator: std.mem.Allocator,
@@ -32,11 +31,13 @@ pub const ChunkWorker = struct {
         comptime ring_buffer_capacity: usize,
         terrain_generator: *TerrainGenerator,
     ) !ChunkWorker {
+        const cap = ring_buffer_capacity;
+
         return .{
-            .mesh_job_buffer = try SpscRingBuffer(MeshJob).init(allocator, ring_buffer_capacity),
-            .mesh_result_buffer = try SpscRingBuffer(MeshResult).init(allocator, ring_buffer_capacity),
-            .generation_job_buffer = try SpscRingBuffer(GenerationJob).init(allocator, ring_buffer_capacity),
-            .generation_result_buffer = try SpscRingBuffer(GenerationResult).init(allocator, ring_buffer_capacity),
+            .mesh_job_buffer = try SpscRingBuffer(MeshJob).init(allocator, cap),
+            .mesh_result_buffer = try SpscRingBuffer(MeshResult).init(allocator, cap),
+            .generation_job_buffer = try SpscRingBuffer(GenerationJob).init(allocator, cap),
+            .generation_result_buffer = try SpscRingBuffer(GenerationResult).init(allocator, cap),
             .allocator = allocator,
             .terrain_generator = terrain_generator,
         };

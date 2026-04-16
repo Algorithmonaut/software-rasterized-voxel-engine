@@ -61,7 +61,7 @@ pub const Engine = struct {
         );
 
         // TODO: Remove magic numbers
-        const chunk_manager = try ChunkManager.init(allocator, 300, 500, -192.0, 320.0);
+        const chunk_manager = try ChunkManager.init(allocator, 800, 1000, -192.0, 320.0);
 
         return Engine{
             .allocator = allocator,

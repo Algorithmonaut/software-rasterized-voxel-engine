@@ -87,25 +87,15 @@
      now at version `N + 1`, the worker result should be dropped.
 
    @code zig
-   ChunkSlot          // stable identity stored in the world map
-   current: *ChunkVersion   // atomic pointer
-   version: u64             // atomic generation for stale-result checks
+    ChunkSlot          // stable identity stored in the world map
+    current: *ChunkVersion   // atomic pointer
+    version: u64             // atomic generation for stale-result checks
 
-   ChunkVersion       // immutable after publish
-   voxels
-   bitfields
-   maybe mesh pointer, maybe not
+    ChunkVersion       // immutable after publish
+    voxels
+    bitfields
+    maybe mesh pointer, maybe not
    @end
-
-   > A mesh job should carry pointers to published immutable versions, not to mutable 
-   > chunk structs. On submission, the worker pins the epoch, acquire-loads the 
-   > current version pointers for the center chunk and neighbors, and keeps that 
-   > pin until it is done reading them. When the main thread regenerates a chunk, 
-   > it allocates a new ChunkVersion, fills it completely, then release-stores the 
-   > new pointer into ChunkSlot.current, increments ChunkSlot.version, and retires 
-   > the old version instead of freeing it immediately. The old version is freed 
-   > only after a grace period, i.e. once all participants that could still have 
-   > read it are unpinned.
 
 
 * *More advanced*

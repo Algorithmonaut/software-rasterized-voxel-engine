@@ -28,7 +28,8 @@ const engine_config = EngineConfig{
     .player_config = .{
         .initial_position = .{ 0.0, 100.0, 0.0 },
         .half_size = .{ 0.3, 0.9, 0.3 },
-        .speed = 8.0,
+        // .speed = 8.0,
+        .speed = 80.0,
 
         .air_accel = 20,
         .air_decel = 40,
@@ -36,7 +37,8 @@ const engine_config = EngineConfig{
         .ground_decel = 240,
 
         .gravity = 40,
-        .jump_speed = 10,
+        // .jump_speed = 10,
+        .jump_speed = 100,
     },
 
     .framebuffer_config = .{
@@ -146,9 +148,8 @@ pub fn main() !void {
             engine.player.camera.from,
         );
 
-        const visible_chunks = try engine.chunk_manager.getVisibleActiveChunks(
+        const visible_chunks = engine.chunk_manager.getVisibleActiveChunks(
             engine.player.camera.combined_mat,
-            allocator,
         );
 
         for (visible_chunks) |chunk| {
@@ -177,8 +178,6 @@ pub fn main() !void {
         if (engine_config.debug_config.show_fps) engine.platform.fps_counter_update();
 
         total_frame_ns += frame_timer.read();
-
-        std.debug.print("player height: {}\n", .{engine.player.camera.from[1]});
 
         engine.chunk_manager.drainWorkerResults(allocator, &engine.world, engine.chunk_worker);
     }
