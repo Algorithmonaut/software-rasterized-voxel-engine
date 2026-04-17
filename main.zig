@@ -12,11 +12,14 @@ const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Renderer = @import("Renderer.zig").Renderer;
 const renderer = @import("Renderer.zig");
-const Chunk = @import("world/Chunk.zig").Chunk;
+const DebugOverlay = @import("UI/DebugOverlay.zig").DebugOverlay;
 
 const CHUNK_SIZE = @import("world/Chunk.zig").CHUNK_SIZE;
 
 pub const DEBUG_SINGLE_THREADED = false;
+
+pub const ENABLE_DEBUG_OVERLAY = true;
+pub var debug_overlay = DebugOverlay{};
 
 const engine_config = EngineConfig{
     .camera_config = .{
@@ -54,7 +57,7 @@ const engine_config = EngineConfig{
     .debug_config = .{
         .show_fps = true,
         .show_occupied_tiles = false,
-        .show_tex_atlas = true,
+        .show_tex_atlas = false,
     },
     .world_config = .{
         .seed = 12345,
@@ -156,6 +159,16 @@ pub fn main() !void {
                 engine.player.camera.combined_mat,
             );
 
+        if (ENABLE_DEBUG_OVERLAY) {
+            for (engine.renderer.frame_primitives.items) |prim| {
+                debug_overlay.triangles_after_clipping += prim.vertex_count - 2;
+            }
+
+            debug_overlay.player_pos = engine.player.camera.from;
+            debug_overlay.player_vel = engine.player.velocity;
+            debug_overlay.player_grounded = engine.player.grounded;
+        }
+
         try engine.rasterizer.render(
             allocator,
             &pool,
@@ -166,6 +179,16 @@ pub fn main() !void {
             engine.renderer.frame_materials.items,
             engine.renderer.frame_vertices.items,
         );
+
+        // engine.text.printText(10, 10, "HELLO WORLD hello world 12345 / . ; :", 0xFFFFFFFF, &frame.framebuffer);
+        // var buf: [128]u8 = undefined;
+        // const primitive_count = try std.fmt.bufPrint(&buf, "hello world PRIMITIVES: {}", .{engine.renderer.frame_primitives.items.len});
+        //
+        // engine.text2.printText(40, 60, primitive_count, 0xFFFFFFFF, &frame.framebuffer);
+
+        try debug_overlay.render(&engine.text, &frame.framebuffer);
+        debug_overlay.renderGizmo(&frame.framebuffer, engine.player.camera.from, engine.player.camera.to);
+        debug_overlay.frameReset();
 
         if (engine_config.debug_config.show_tex_atlas) engine.atlas.debug_show_atlas(&frame.framebuffer);
         if (engine_config.debug_config.show_occupied_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);

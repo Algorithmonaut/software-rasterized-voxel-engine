@@ -2,21 +2,21 @@
 
 const std = @import("std");
 
+const Text = @import("UI/Text.zig").Text;
+const Atlas = @import("Atlas.zig").Atlas;
+const Vec3f = @import("math/types.zig").Vec3f;
+const TilePool = @import("tile.zig").TilePool;
+const World = @import("world/World.zig").World;
 const Player = @import("game/Player.zig").Player;
 const Renderer = @import("Renderer.zig").Renderer;
 const FrameContext = @import("FrameContext.zig").FrameContext;
+const EngineConfig = @import("EngineConfig.zig").EngineConfig;
+const Rasterizer = @import("renderer/Rasterizer.zig").Rasterizer;
+const ChunkWorker = @import("world/ChunkWorker.zig").ChunkWorker;
 const SdlPlatform = @import("platform/SdlPlatform.zig").SdlPlatform;
 const SdlGraphics = @import("platform/SdlGraphics.zig").SdlGraphics;
-const EngineConfig = @import("EngineConfig.zig").EngineConfig;
-const Atlas = @import("Atlas.zig").Atlas;
-const TilePool = @import("tile.zig").TilePool;
-const World = @import("world/World.zig").World;
-const Rasterizer = @import("renderer/Rasterizer.zig").Rasterizer;
-const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
-const ChunkWorker = @import("world/ChunkWorker.zig").ChunkWorker;
 const ChunkManager = @import("world/ChunkManager.zig").ChunkManager;
-
-const Vec3f = @import("math/types.zig").Vec3f;
+const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
 
 /// Owns global state
 pub const Engine = struct {
@@ -32,8 +32,12 @@ pub const Engine = struct {
     player: Player,
     chunk_worker: *ChunkWorker,
     chunk_manager: ChunkManager,
+    text: Text,
+    text2: Text,
 
     pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
+        const text = try Text.init("font.bdf");
+        const text2 = try Text.init("font2.bdf");
         const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
         const platform = SdlPlatform.init();
         const graphics = try SdlGraphics.init(conf.framebuffer_config);
@@ -76,6 +80,8 @@ pub const Engine = struct {
             .terrain_generator = terrain_generator,
             .chunk_worker = chunk_worker,
             .chunk_manager = chunk_manager,
+            .text = text,
+            .text2 = text2,
         };
     }
 

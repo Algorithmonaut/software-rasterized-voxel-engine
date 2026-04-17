@@ -1,4 +1,5 @@
 const std = @import("std");
+const main = @import("main.zig");
 
 const World = @import("world/World.zig").World;
 const Camera = @import("game/Camera.zig").Camera;
@@ -622,6 +623,8 @@ fn emitBucket(
         .pos_x, .pos_y, .pos_z => cam_axis > slab_max,
         .neg_x, .neg_y, .neg_z => cam_axis < slab_min,
     }) {
+        if (main.ENABLE_DEBUG_OVERLAY) main.debug_overlay.triangles_after_bucket_cull += quads.len * 2;
+
         for (quads) |quad| try emitRenderQuad(
             kind,
             quad,
@@ -652,21 +655,29 @@ fn emitBucket(
         };
 
         if (positive) {
-            if (cam_axis > axis_world_coord + eps) try emitRenderQuad(
-                kind,
-                quad,
-                chunk_min,
-                combined_mat,
-                renderer,
-            );
+            if (cam_axis > axis_world_coord + eps) {
+                if (main.ENABLE_DEBUG_OVERLAY) main.debug_overlay.triangles_after_bucket_cull += 2;
+
+                try emitRenderQuad(
+                    kind,
+                    quad,
+                    chunk_min,
+                    combined_mat,
+                    renderer,
+                );
+            }
         } else {
-            if (cam_axis < axis_world_coord - eps) try emitRenderQuad(
-                kind,
-                quad,
-                chunk_min,
-                combined_mat,
-                renderer,
-            );
+            if (cam_axis < axis_world_coord - eps) {
+                if (main.ENABLE_DEBUG_OVERLAY) main.debug_overlay.triangles_after_bucket_cull += 2;
+
+                try emitRenderQuad(
+                    kind,
+                    quad,
+                    chunk_min,
+                    combined_mat,
+                    renderer,
+                );
+            }
         }
     }
 }
@@ -682,6 +693,11 @@ pub fn generatePrimitivesFromChunk(
     const min: F3 = @floatFromInt(slot.world_min);
     const max: F3 = @floatFromInt(slot.world_max);
     const pos = camera_pos;
+
+    if (main.ENABLE_DEBUG_OVERLAY) main.debug_overlay.visible_chunk_triangles +=
+        (mesh.pos_x_faces.items.len + mesh.neg_x_faces.items.len +
+            mesh.pos_y_faces.items.len + mesh.neg_y_faces.items.len +
+            mesh.pos_z_faces.items.len + mesh.neg_z_faces.items.len) * 2;
 
     try emitBucket(.pos_x, mesh.pos_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer);
     try emitBucket(.pos_y, mesh.pos_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer);

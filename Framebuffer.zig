@@ -38,6 +38,83 @@ pub const Framebuffer = struct {
         @memset(row_ptr[0..bytes], 0);
     }
 
+    pub fn drawLine(
+        self: *Framebuffer,
+        x0_in: i32,
+        y0_in: i32,
+        x1_in: i32,
+        y1_in: i32,
+        color: u32,
+    ) void {
+        var x0 = x0_in;
+        var y0 = y0_in;
+        const x1 = x1_in;
+        const y1 = y1_in;
+
+        const width_i32: i32 = @intCast(self.width);
+        const height_i32: i32 = @intCast(self.height);
+
+        const dx: i32 = @intCast(@abs(x1 - x0));
+        const dy: i32 = @intCast(@abs(y1 - y0));
+
+        const sx: i32 = if (x0 < x1) 1 else -1;
+        const sy: i32 = if (y0 < y1) 1 else -1;
+
+        var err: i32 = dx - dy;
+
+        while (true) {
+            if (x0 >= 0 and x0 < width_i32 and y0 >= 0 and y0 < height_i32) {
+                self.set_pixel(@intCast(x0), @intCast(y0), color);
+            }
+
+            if (x0 == x1 and y0 == y1) break;
+
+            const e2: i32 = err * 2;
+
+            if (e2 > -dy) {
+                err -= dy;
+                x0 += sx;
+            }
+
+            if (e2 < dx) {
+                err += dx;
+                y0 += sy;
+            }
+        }
+    }
+
+    pub fn drawLineBold(
+        self: *Framebuffer,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        thickness: i32,
+        color: u32,
+    ) void {
+        if (thickness <= 1) {
+            self.drawLine(x0, y0, x1, y1, color);
+            return;
+        }
+
+        const dx: i32 = x1 - x0;
+        const dy: i32 = y1 - y0;
+
+        const half: i32 = @divTrunc(thickness, 2);
+
+        if (@abs(dx) >= @abs(dy)) {
+            var o: i32 = -half;
+            while (o <= half) : (o += 1) {
+                self.drawLine(x0, y0 + o, x1, y1 + o, color);
+            }
+        } else {
+            var o: i32 = -half;
+            while (o <= half) : (o += 1) {
+                self.drawLine(x0 + o, y0, x1 + o, y1, color);
+            }
+        }
+    }
+
     pub inline fn set_pixel_blend(
         self: *const Framebuffer,
         x: usize,

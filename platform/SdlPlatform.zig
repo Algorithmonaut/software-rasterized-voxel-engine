@@ -1,5 +1,6 @@
 // NOTE: Refactored: YES
 
+const main = @import("../main.zig");
 const std = @import("std");
 const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");
@@ -63,7 +64,7 @@ pub const SdlPlatform = struct {
                 @as(f64, @floatFromInt(elapsed_counts)) / @as(f64, @floatFromInt(self.freq));
 
             const fps: f64 = @as(f64, @floatFromInt(self.frames)) / elapsed_s;
-            std.debug.print("FPS: {d:.1}\n", .{fps});
+            main.debug_overlay.fps = fps;
 
             self.frames = 0;
             self.last_fps = now;

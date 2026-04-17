@@ -1,6 +1,7 @@
 const std = @import("std");
 const types = @import("../math/types.zig");
 const mesher = @import("../mesh/mesher.zig");
+const main = @import("../main.zig");
 
 const F4 = types.Vec4f;
 const F3 = types.Vec3f;
@@ -12,6 +13,7 @@ const Mat4f = @import("../math/matrix.zig").Mat4f;
 const ChunkVersion = @import("Chunk.zig").ChunkVersion;
 const ChunkWorker = @import("ChunkWorker.zig").ChunkWorker;
 const MeshResult = @import("../mesh/mesher.zig").MeshResult;
+const DebugOverlay = @import("../UI/DebugOverlay.zig").DebugOverlay;
 const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
 const GenerationResult = @import("TerrainGenerator.zig").GenerationResult;
 
@@ -314,6 +316,9 @@ pub const ChunkManager = struct {
         self.loaded.clearRetainingCapacity();
         self.active.clearRetainingCapacity();
 
+        var generating_counter: usize = 0;
+        var meshing_counter: usize = 0;
+
         var cz = player_chunk[2] - self.chunk_load_distance;
         while (cz <= player_chunk[2] + self.chunk_load_distance) : (cz += 1) {
             var cy = self.chunk_min_y;
@@ -352,7 +357,8 @@ pub const ChunkManager = struct {
                                 }
                             }
                         },
-                        else => {},
+                        .generating => generating_counter += 1,
+                        .meshing => meshing_counter += 1,
                     }
 
                     self.loaded.appendAssumeCapacity(slot);
@@ -367,28 +373,10 @@ pub const ChunkManager = struct {
             }
         }
 
-        var absent: usize = 0;
-        var generating: usize = 0;
-        var generated: usize = 0;
-        var meshing: usize = 0;
-        var ready: usize = 0;
-
-        var it = world.chunks.valueIterator();
-        while (it.next()) |slot_ptr| {
-            const slot = slot_ptr.*;
-            switch (slot.state) {
-                .absent => absent += 1,
-                .generating => generating += 1,
-                .generated => generated += 1,
-                .meshing => meshing += 1,
-                .ready => ready += 1,
-            }
-        }
-
-        std.debug.print(
-            "states: absent={} generating={} generated={} meshing={} ready={}\n",
-            .{ absent, generating, generated, meshing, ready },
-        );
+        main.debug_overlay.chunk_generating = generating_counter;
+        main.debug_overlay.chunk_meshing = meshing_counter;
+        main.debug_overlay.chunk_loaded = self.loaded.items.len;
+        main.debug_overlay.chunk_active = self.active.items.len;
 
         std.sort.block(ChunkRenderEntry, self.active.items, {}, struct {
             fn lessThan(_: void, a: ChunkRenderEntry, b: ChunkRenderEntry) bool {
@@ -432,6 +420,8 @@ pub const ChunkManager = struct {
             if (inside and entry.slot.state == .ready)
                 if (inside) self.visible.appendAssumeCapacity(entry.slot);
         }
+
+        main.debug_overlay.chunk_visible = self.visible.items.len;
 
         return self.visible.items;
     }
