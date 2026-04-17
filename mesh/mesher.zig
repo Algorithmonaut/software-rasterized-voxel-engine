@@ -364,16 +364,6 @@ pub fn makeMeshJob(world: *World, coord: ChunkCoord) ?MeshJob {
 }
 
 pub fn processMeshJob(allocator: std.mem.Allocator, job: MeshJob) !MeshResult {
-    defer {
-        job.center.releaseVersion(allocator);
-        if (job.pos_x) |v| v.releaseVersion(allocator);
-        if (job.neg_x) |v| v.releaseVersion(allocator);
-        if (job.pos_y) |v| v.releaseVersion(allocator);
-        if (job.neg_y) |v| v.releaseVersion(allocator);
-        if (job.pos_z) |v| v.releaseVersion(allocator);
-        if (job.neg_z) |v| v.releaseVersion(allocator);
-    }
-
     const size = CHUNK_SIZE;
 
     var pos_x_planes = std.mem.zeroes(PlaneSet);

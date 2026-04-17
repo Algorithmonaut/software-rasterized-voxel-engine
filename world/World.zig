@@ -2,15 +2,17 @@ const std = @import("std");
 const helpers = @import("../helpers.zig");
 const types = @import("../math/types.zig");
 
-const ChunkSlot = @import("Chunk.zig").ChunkSlot;
-const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
-
-const ChunkCoord = types.ChunkCoord;
 const I3 = types.Vec3i;
-
+const ChunkCoord = types.ChunkCoord;
+const AtomicU32 = std.atomic.Value(u32);
 const BlockId = @import("Block.zig").BlockId;
-
+const ChunkSlot = @import("Chunk.zig").ChunkSlot;
+const ChunkVersion = @import("Chunk.zig").ChunkVersion;
+const MeshResult = @import("../mesh/mesher.zig").MeshResult;
+const GenerationResult = @import("TerrainGenerator.zig").GenerationResult;
 const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
+
+const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
 
 pub const World = struct {
     // When AutoHashMap grows or rehashes, its values can move, so we need ptr
@@ -26,7 +28,7 @@ pub const World = struct {
         var it = self.chunks.valueIterator();
         while (it.next()) |slot_ptr| {
             slot_ptr.*.destroy(allocator);
-            allocator.destroy(slot_ptr);
+            allocator.destroy(slot_ptr.*);
         }
 
         self.chunks.deinit();
@@ -88,5 +90,74 @@ pub const World = struct {
             ];
         }
         return .unknown;
+    }
+
+    pub fn publishGenerationResult(
+        self: *World,
+        allocator: std.mem.Allocator,
+        world: *World,
+        res: GenerationResult,
+    ) !void {
+        errdefer {
+            allocator.free(res.voxels);
+            allocator.destroy(res.bitfield_views);
+        }
+
+        const slot = self.getChunkSlot(res.coord) orelse {
+            allocator.free(res.voxels);
+            allocator.destroy(res.bitfield_views);
+            return;
+        };
+
+        const next_gen = slot.gen.load(.acquire) + 1;
+
+        const ver = try allocator.create(ChunkVersion);
+        ver.* = .{
+            .refs = AtomicU32.init(1),
+            .gen = next_gen,
+            .voxels = res.voxels,
+            .bitfields = res.bitfield_views,
+        };
+
+        const prev = slot.current;
+        slot.current = ver;
+        slot.gen.store(next_gen, .release);
+        if (prev) |old| old.releaseVersion(allocator);
+
+        if (slot.mesh) |m| {
+            m.deinit(allocator);
+            allocator.destroy(m);
+            slot.mesh = null;
+        }
+
+        slot.state = .generated;
+        slot.markAdjacentChunkAsDirty(world);
+    }
+
+    pub fn publishMeshResult(
+        self: *World,
+        allocator: std.mem.Allocator,
+        res: MeshResult,
+    ) !void {
+        const slot = self.getChunkSlot(res.coord) orelse {
+            res.mesh.deinit(allocator);
+            allocator.destroy(res.mesh);
+            return;
+        };
+
+        // Reject stale mesh result
+        if (res.source_gen != slot.gen.load(.acquire) or slot.current == null) {
+            res.mesh.deinit(allocator);
+            allocator.destroy(res.mesh);
+            return;
+        }
+
+        if (slot.mesh) |old_mesh| {
+            old_mesh.deinit(allocator);
+            allocator.destroy(old_mesh);
+        }
+
+        slot.mesh = res.mesh;
+        slot.state = .ready;
     }
 };

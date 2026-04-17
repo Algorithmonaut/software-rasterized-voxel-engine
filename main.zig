@@ -28,8 +28,7 @@ const engine_config = EngineConfig{
     .player_config = .{
         .initial_position = .{ 0.0, 100.0, 0.0 },
         .half_size = .{ 0.3, 0.9, 0.3 },
-        // .speed = 8.0,
-        .speed = 80.0,
+        .speed = 8.0,
 
         .air_accel = 20,
         .air_decel = 40,
@@ -37,17 +36,12 @@ const engine_config = EngineConfig{
         .ground_decel = 240,
 
         .gravity = 40,
-        // .jump_speed = 10,
-        .jump_speed = 100,
+        .jump_speed = 10,
     },
 
     .framebuffer_config = .{
         .width = 1920,
         .height = 1080,
-        // .width = 1720,
-        // .height = 720,
-        // .width = 3440,
-        // .height = 1440,
         .scale = 1,
         .tile_dimensions = 8,
     },
@@ -110,11 +104,11 @@ pub fn main() !void {
     var pool: std.Thread.Pool = undefined;
     try pool.init(.{ .allocator = allocator });
 
-    // try engine.chunk_manager.bootstrapInitialChunks(
-    //     allocator,
-    //     &engine.world,
-    //     engine.terrain_generator,
-    // );
+    try engine.chunk_manager.bootstrapInitialChunks(
+        allocator,
+        &engine.world,
+        engine.terrain_generator,
+    );
 
     var t: usize = 0;
 
@@ -154,14 +148,13 @@ pub fn main() !void {
             engine.player.camera.combined_mat,
         );
 
-        for (visible_chunks) |chunk| {
+        for (visible_chunks) |slot|
             try renderer.generatePrimitivesFromChunk(
                 &engine.renderer,
-                chunk,
+                slot,
                 engine.player.camera.from,
                 engine.player.camera.combined_mat,
             );
-        }
 
         try engine.rasterizer.render(
             allocator,

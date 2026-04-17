@@ -59,6 +59,7 @@ pub const ChunkSlot = struct {
     edited: bool = false,
 
     mesh: ?*Mesh = null,
+    mesh_dirty: bool = false,
 
     pub fn create(coord: ChunkCoord) ChunkSlot {
         const size_vec = @as(ChunkCoord, @splat(CHUNK_SIZE));
@@ -73,6 +74,25 @@ pub const ChunkSlot = struct {
         if (self.mesh) |m| {
             m.deinit(allocator);
             allocator.destroy(m);
+        }
+    }
+
+    pub fn markAdjacentChunkAsDirty(self: *ChunkSlot, world: *World) void {
+        const c = self.coord;
+        const adjacent_coords = [_]ChunkCoord{
+            .{ c[0] + 1, c[1], c[2] },
+            .{ c[0] - 1, c[1], c[2] },
+            .{ c[0], c[1] + 1, c[2] },
+            .{ c[0], c[1] - 1, c[2] },
+            .{ c[0], c[1], c[2] + 1 },
+            .{ c[0], c[1], c[2] - 1 },
+        };
+
+        for (adjacent_coords) |coord| {
+            if (world.getChunkSlot(coord)) |slot| {
+                if (slot.current == null) continue;
+                slot.mesh_dirty = true;
+            }
         }
     }
 };
