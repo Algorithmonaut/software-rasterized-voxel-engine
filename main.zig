@@ -29,7 +29,7 @@ const engine_config = EngineConfig{
         .near = 0.1,
     },
     .player_config = .{
-        .initial_position = .{ 0.0, 100.0, 0.0 },
+        .initial_position = .{ 0.0, 300.0, 0.0 },
         .half_size = .{ 0.3, 0.9, 0.3 },
         .speed = 8.0,
 

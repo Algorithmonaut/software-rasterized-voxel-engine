@@ -102,17 +102,6 @@ pub const Text = struct {
         return text;
     }
 
-    pub inline fn printBold(
-        self: *const Text,
-        start_x: usize,
-        start_y: usize,
-        text: []const u8,
-        color: u32,
-        fb: *Framebuffer,
-    ) void {
-        printText(self, start_x, start_y, text, color, fb);
-    }
-
     pub inline fn printText(
         self: *const Text,
         start_x: usize,
@@ -138,13 +127,12 @@ pub const Text = struct {
                     const shift = self.glyph_width - 1 - x;
                     const bit = (row >> @intCast(shift)) & 1;
 
-                    if (bit == 0) continue;
+                    if (bit == 0) {
+                        fb.set_pixel(start_x + x_offset + x, start_y + y, 0xFF000000);
+                        continue;
+                    }
 
-                    fb.set_pixel(
-                        start_x + x_offset + x,
-                        start_y + y,
-                        color,
-                    );
+                    fb.set_pixel(start_x + x_offset + x, start_y + y, color);
                 }
             }
 

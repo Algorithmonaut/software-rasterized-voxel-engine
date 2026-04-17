@@ -17,6 +17,7 @@ pub const DebugOverlay = struct {
     const margin_x: usize = 10;
     const margin_y: usize = 10;
 
+    clear_black: bool = false,
     enabled: bool = true,
 
     guizmo_render_scale: f32 = 50,
@@ -160,6 +161,11 @@ pub const DebugOverlay = struct {
 
     pub fn render(self: *DebugOverlay, text: *Text, fb: *Framebuffer) !void {
         if (!self.enabled) return;
+
+        if (self.clear_black) {
+            for (0..540) |i|
+                @memset(fb.base[i * fb.width * 4 .. i * fb.width * 4 + 440 * 4], 0);
+        }
 
         var y: usize = margin_y;
 

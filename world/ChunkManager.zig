@@ -88,6 +88,7 @@ fn generationWorker(
     while (true) {
         const base = next.fetchAdd(BATCH_SIZE, .monotonic);
         if (base >= chunk_coords.len) break;
+        std.debug.print("\x1b[2J\x1b[H", .{});
         std.debug.print("GENERATING, REMAINING: {}\n", .{total - base});
 
         for (0..BATCH_SIZE) |incr| {
@@ -119,6 +120,7 @@ fn meshingWorker(
     while (true) {
         const base = next.fetchAdd(BATCH_SIZE, .monotonic);
         if (base >= chunk_coords.len) break;
+        std.debug.print("\x1b[2J\x1b[H", .{});
         std.debug.print("MESHING, REMAINING: {}\n", .{total - base});
 
         for (0..BATCH_SIZE) |incr| {

@@ -31,7 +31,8 @@
 - ( ) LookAt matrix + basic block placement (fully remesh chunk for now).
 - ( ) Implement a basic UI for block selection.
 - ( ) Try to not fully remesh chunk when placing a block.
-- ( ) Reviews player physics.
+- ( ) Review player physics.
+- ( ) Fix extreme ring buffer alloc
 
 * (x) Precompute visible chunk offsets
   For a fixed chunk view radius, precompute all relative chunk offset once, 
