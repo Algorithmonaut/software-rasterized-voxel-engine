@@ -7,6 +7,8 @@ pub const Vec3i = @Vector(3, i32);
 pub const Vec4i = @Vector(4, i32);
 
 pub const ChunkCoord = @Vector(3, i32);
+/// x, z
+pub const ChunkSliceCoord = @Vector(2, i32);
 pub const WorldCoord = @Vector(3, f32);
 
 /// Fixed point screen coordinates

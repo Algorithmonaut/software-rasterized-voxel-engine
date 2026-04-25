@@ -6,6 +6,7 @@ const main = @import("../main.zig");
 const F4 = types.Vec4f;
 const F3 = types.Vec3f;
 const ChunkCoord = types.ChunkCoord;
+const ChunkSliceCoord = types.ChunkSliceCoord;
 const WorldCoord = types.WorldCoord;
 const World = @import("World.zig").World;
 const ChunkSlot = @import("Chunk.zig").ChunkSlot;
@@ -81,20 +82,20 @@ fn generationWorker(
     next: *AtomicUsize,
     total: usize,
     allocator: std.mem.Allocator,
-    chunk_coords: []ChunkCoord,
+    chunk_slice_coords: []ChunkSliceCoord,
     world: *World,
     terrain_generator: *TerrainGenerator,
 ) void {
     while (true) {
         const base = next.fetchAdd(BATCH_SIZE, .monotonic);
-        if (base >= chunk_coords.len) break;
+        if (base >= chunk_slice_coords.len) break;
         std.debug.print("\x1b[2J\x1b[H", .{});
         std.debug.print("GENERATING, REMAINING: {}\n", .{total - base});
 
         for (0..BATCH_SIZE) |incr| {
             const chunk_coord_i = base + incr;
-            if (chunk_coord_i >= chunk_coords.len) break;
-            const coord = chunk_coords[chunk_coord_i];
+            if (chunk_coord_i >= chunk_slice_coords.len) break;
+            const coord = chunk_slice_coords[chunk_coord_i];
 
             const result = terrain_generator.fillChunkVoxels(
                 allocator,
@@ -151,11 +152,14 @@ pub const ChunkManager = struct {
     chunk_render_distance: i32,
     chunk_load_distance: i32,
 
+    /// Inclusive
     chunk_min_y: i32,
+    /// Exclusive
     chunk_max_y: i32,
 
     loaded: std.ArrayList(*ChunkSlot),
     loaded_count: usize,
+    loaded_count_2d: usize,
 
     /// Chunks that are in view distance
     active: std.ArrayList(ChunkRenderEntry),
@@ -175,6 +179,7 @@ pub const ChunkManager = struct {
         max_world_y: f32,
     ) !ChunkManager {
         const loaded_count = chunkCountInSphericalSegment(load_distance, min_world_y, max_world_y);
+        const loaded_count_2d = chunkCountInSphericalSegment(load_distance, 0, 0);
         const active_count = chunkCountInSphericalSegment(render_distance, min_world_y, max_world_y);
 
         const chunk_size_f: f32 = @floatFromInt(CHUNK_SIZE);
@@ -193,6 +198,7 @@ pub const ChunkManager = struct {
 
             .loaded = try std.ArrayList(*ChunkSlot).initCapacity(allocator, loaded_count),
             .loaded_count = loaded_count,
+            .loaded_count_2d = loaded_count_2d,
 
             .active = try std.ArrayList(ChunkRenderEntry).initCapacity(allocator, active_count),
             .active_count = active_count,
@@ -208,8 +214,12 @@ pub const ChunkManager = struct {
         terrain_generator: *TerrainGenerator,
     ) !void {
         const count = self.loaded_count;
+        const slice_count = self.loaded_count_2d;
+
         var chunk_coords = try std.ArrayList(ChunkCoord).initCapacity(allocator, count);
         defer chunk_coords.deinit(allocator);
+        var chunk_slice_coords = try allocator.alloc(ChunkSliceCoord, slice_count);
+        defer allocator.free(chunk_slice_coords);
 
         var cz = -self.chunk_load_distance;
         while (cz <= self.chunk_load_distance) : (cz += 1) {
@@ -221,11 +231,15 @@ pub const ChunkManager = struct {
                         self.chunk_load_distance * self.chunk_load_distance) continue;
 
                     const coord = ChunkCoord{ cx, cy, cz };
-                    _ = try world.getOrPutChunkSlot(allocator, coord);
                     chunk_coords.appendAssumeCapacity(coord);
+                    _ = try world.getOrPutChunkSlot(allocator, coord);
                 }
             }
         }
+
+        const chunk_y_count = self.chunk_max_y - self.chunk_min_y;
+        for (0..chunk_slice_coords.len) |i|
+            chunk_slice_coords[i] = chunk_coords[i * chunk_y_count];
 
         var next = AtomicUsize.init(0);
 
@@ -234,7 +248,7 @@ pub const ChunkManager = struct {
                 &next,
                 count,
                 allocator,
-                chunk_coords.items,
+                chunk_slice_coords,
                 world,
                 terrain_generator,
             );

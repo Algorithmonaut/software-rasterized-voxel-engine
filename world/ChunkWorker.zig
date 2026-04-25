@@ -1,13 +1,15 @@
 const std = @import("std");
 
 const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
-const GenerationJob = @import("TerrainGenerator.zig").GenerationJob;
 const GenerationResult = @import("TerrainGenerator.zig").GenerationResult;
 
 const SpscRingBuffer = @import("../DS/SpscRingBuffer.zig").SpscRingBuffer;
 const mesher = @import("../mesh/mesher.zig");
 const MeshJob = mesher.MeshJob;
 const MeshResult = mesher.MeshResult;
+
+const types = @import("../math/types.zig");
+const ChunkSliceCoord = types.ChunkSliceCoord;
 
 const DEBUG_SINGLE_THREADED = @import("../main.zig").DEBUG_SINGLE_THREADED;
 
@@ -23,7 +25,7 @@ pub const ChunkWorker = struct {
 
     mesh_job_buffer: SpscRingBuffer(MeshJob),
     mesh_result_buffer: SpscRingBuffer(MeshResult),
-    generation_job_buffer: SpscRingBuffer(GenerationJob),
+    generation_job_buffer: SpscRingBuffer(ChunkSliceCoord),
     generation_result_buffer: SpscRingBuffer(GenerationResult),
 
     pub fn init(
@@ -36,7 +38,7 @@ pub const ChunkWorker = struct {
         return .{
             .mesh_job_buffer = try SpscRingBuffer(MeshJob).init(allocator, cap),
             .mesh_result_buffer = try SpscRingBuffer(MeshResult).init(allocator, cap),
-            .generation_job_buffer = try SpscRingBuffer(GenerationJob).init(allocator, cap),
+            .generation_job_buffer = try SpscRingBuffer(ChunkSliceCoord).init(allocator, cap),
             .generation_result_buffer = try SpscRingBuffer(GenerationResult).init(allocator, cap),
             .allocator = allocator,
             .terrain_generator = terrain_generator,
@@ -93,37 +95,30 @@ pub const ChunkWorker = struct {
         return self.mesh_result_buffer.pop();
     }
 
-    pub inline fn submitGenerationJob(self: *ChunkWorker, job: GenerationJob) !void {
+    pub inline fn submitGenerationJob(self: *ChunkWorker, coord: ChunkSliceCoord) !void {
         if (DEBUG_SINGLE_THREADED) {
-            const result = try self.terrain_generator.fillChunkVoxels(self.allocator, job);
-            try self.generation_result_buffer.push(result);
+            const result = try self.terrain_generator.fillChunkSliceVoxels(self.allocator, coord);
+            for (0..result.len) |i| try self.generation_result_buffer.push(result[i]);
         } else {
             self.mutex.lock();
             defer self.mutex.unlock();
 
-            try self.generation_job_buffer.push(job);
+            try self.generation_job_buffer.push(coord);
             self.cond.signal();
         }
     }
 
-    pub inline fn pollGenerationResult(self: *ChunkWorker) ?GenerationResult {
-        return self.generation_result_buffer.pop();
-    }
-
-    fn pushGenerationResultRetry(self: *ChunkWorker, result: GenerationResult) void {
-        while (true) {
-            self.generation_result_buffer.push(result) catch |err| switch (err) {
-                error.Full => {
-                    std.Thread.yield() catch {};
-                    continue;
-                },
-                // else => {
-                //     self.allocator.free(result.voxels);
-                //     self.allocator.destroy(result.bitfield_views);
-                //     return;
-                // },
-            };
-            break;
+    fn pushGenerationResultRetry(self: *ChunkWorker, result: []GenerationResult) void {
+        blk: while (true) {
+            for (0..result.len) |i| {
+                self.generation_result_buffer.push(result[i]) catch |err| switch (err) {
+                    error.Full => {
+                        std.Thread.yield() catch {};
+                        continue;
+                    },
+                };
+                break :blk;
+            }
         }
     }
 
@@ -134,11 +129,6 @@ pub const ChunkWorker = struct {
                     std.Thread.yield() catch {};
                     continue;
                 },
-                // else => {
-                //     result.mesh.deinit(self.allocator);
-                //     self.allocator.destroy(result.mesh);
-                //     return;
-                // },
             };
             break;
         }
@@ -159,7 +149,7 @@ pub const ChunkWorker = struct {
             if (should_stop) return;
 
             while (self.generation_job_buffer.pop()) |job| {
-                const result = self.terrain_generator.fillChunkVoxels(self.allocator, job) catch |err| {
+                const result = self.terrain_generator.fillChunkSliceVoxels(self.allocator, job) catch |err| {
                     std.log.err("fillChunkVoxels failed for {any}: {s}", .{ job.coord, @errorName(err) });
                     continue;
                 };

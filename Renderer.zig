@@ -602,7 +602,7 @@ fn emitBucket(
     renderer: *Renderer,
 ) !void {
 
-    // POSITIVE AXIS (box is chunk)
+    // POSITIVE AXIS (box is chunk):
     //             ┌───┐
     //  -  ────────┼───┼───────▶  +
     //             └───┘

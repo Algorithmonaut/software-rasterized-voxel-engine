@@ -1,3 +1,9 @@
+- ( ) Reword the terrain generator:
+-- (x) For lightning, make the terrain generator generate an entire chunk vertical slice rather than 
+       than invidual chunks.
+-- (x) First step of lighting.
+-- ( ) More advanced terrain generation.
+-- ( ) Generate bitfields in the fill function directly.
 - (x) Recompute frustum planes once per frame instead of reconstructing them per 
       chunk in `isChunkInFrustum`.
 - ( ) Reimplement triangle may overlap tile, but this time add a case if the triangle is fully
@@ -5,20 +11,19 @@
 - (x) Maybe do not use usize for binning.
 - ( ) For far enough triangles, trivially rasterize as a single color.
 - ( ) Color tile differently in debug view: in bbox: red, eliminated thanks to barycentric: green
-- ( ) Replace `renderer.init` chunk entry estimate (`view_distance / 2` cubed 
+- (x) Replace `renderer.init` chunk entry estimate (`view_distance / 2` cubed 
       is the wrong scale); use chunks in radius.
-- ( ) Replace chunk booleans with an enum:
+- (x) Replace chunk booleans with an enum:
       `const ChunkState = enum {generating, needs_mesh, queued_for_mesh, meshing, ready };`
 - ( ) Remove hardcoded 32s from collision, centralize chunk size in `Chunk.zig`.
 - ( ) Use lookup tables for block properties and face textures rather than scattered logic.
-- ( ) `RenderWorld` is doing too much (chunk discovery, chunk creation, frustum test, sort
+- (x) `RenderWorld` is doing too much (chunk discovery, chunk creation, frustum test, sort
       mesh-to-world conversion, quad clipping, triangle emission)
 - ( ) Make "missing chunk collision policy" explicit (cf `unknow` is treated as solid).
-- ( ) Limit vertical chunk range.
+- (x) Limit vertical chunk range.
 - ( ) Cache triangle-to-tile overlap results instead of calling `triangleMayOverlapTile`
       twice.
 - ( ) Use barycentric linearity in `triangleMayOverlapTile`.
-- ( ) Replace repeated array copies with `@memcpy` where appropriate.
 - ( ) Implement texture arrays rather than a texture atlas, and re-implement mipmapping
       correctly.
 - ( ) Review and prepare the rasterization hot loop.
@@ -33,6 +38,8 @@
 - ( ) Try to not fully remesh chunk when placing a block.
 - ( ) Review player physics.
 - ( ) Fix extreme ring buffer alloc
+- ( ) Use an arena alloc
+- ( ) Implement a no texture mode
 
 * (x) Precompute visible chunk offsets
   For a fixed chunk view radius, precompute all relative chunk offset once, 

@@ -46,7 +46,7 @@ const engine_config = EngineConfig{
         .width = 1920,
         .height = 1080,
         .scale = 1,
-        .tile_dimensions = 8,
+        .tile_dimensions = 8, // as John Ousterhout said, voo-doo constants
     },
     .atlas_config = .{
         .width = 96,
@@ -84,7 +84,6 @@ const engine_config = EngineConfig{
 };
 
 var engine: Engine = undefined;
-
 var total_frame_ns: u64 = 0;
 
 pub fn main() !void {
@@ -179,12 +178,6 @@ pub fn main() !void {
             engine.renderer.frame_materials.items,
             engine.renderer.frame_vertices.items,
         );
-
-        // engine.text.printText(10, 10, "HELLO WORLD hello world 12345 / . ; :", 0xFFFFFFFF, &frame.framebuffer);
-        // var buf: [128]u8 = undefined;
-        // const primitive_count = try std.fmt.bufPrint(&buf, "hello world PRIMITIVES: {}", .{engine.renderer.frame_primitives.items.len});
-        //
-        // engine.text2.printText(40, 60, primitive_count, 0xFFFFFFFF, &frame.framebuffer);
 
         try debug_overlay.render(&engine.text, &frame.framebuffer);
         debug_overlay.renderGizmo(&frame.framebuffer, engine.player.camera.from, engine.player.camera.to);

@@ -256,7 +256,7 @@ inline fn renderTriangleInTile(
             const tex_idx: usize = std.math.clamp(
                 u + v * atlas_width,
                 0,
-                atlas_width * atlas_height,
+                atlas_width * atlas_height - 1,
             );
 
             const texel = texels[tex_idx];

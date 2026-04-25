@@ -5,11 +5,17 @@ const BlockId = Block.BlockId;
 
 const WorldConfig = @import("../EngineConfig.zig").EngineConfig.WorldConfig;
 
-const ChunkCoord = @import("../math/types.zig").ChunkCoord;
+const types = @import("../math/types.zig");
+const ChunkCoord = types.ChunkCoord;
+const ChunkSliceCoord = types.ChunkSliceCoord;
+const Voxel = @import("Chunk.zig").Voxel;
+
+const helpers = @import("../helpers.zig");
 
 const BitfieldViews = @import("Chunk.zig").BitfieldViews;
 
 const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
+const VOXEL_COUNT = @import("Chunk.zig").VOXEL_COUNT;
 
 //// DETERMINISTIC HASHING ////
 
@@ -108,8 +114,14 @@ pub const TerrainGenerator = struct {
 
     min_world_y: i32,
     max_world_y: i32,
+    chunk_min_y: i32,
+    chunk_max_y: i32,
+    chunk_y_count: usize,
 
     pub fn init(conf: WorldConfig) TerrainGenerator {
+        const chunk_size_f: f32 = @floatFromInt(CHUNK_SIZE);
+        const chunk_min_y: i32 = @intFromFloat(@floor(conf.min_world_y / chunk_size_f));
+        const chunk_max_y: i32 = @intFromFloat(@ceil(conf.max_world_y / chunk_size_f));
         return .{
             .seed = conf.seed,
             .octaves = conf.octaves,
@@ -123,6 +135,9 @@ pub const TerrainGenerator = struct {
             .mountain_scale = conf.mountain_scale,
             .min_world_y = conf.min_world_y,
             .max_world_y = conf.max_world_y - 1,
+            .chunk_min_y = chunk_min_y,
+            .chunk_max_y = chunk_max_y,
+            .chunk_y_count = chunk_max_y - chunk_min_y,
         };
     }
 
@@ -137,27 +152,29 @@ pub const TerrainGenerator = struct {
         // Replace by a valid seed
         const h = fbm2(nx, nz, self.octaves, self.gain, self.lacunarity, self.seed);
         // TODO: Move to conf
-        const base_height: f32 = 32.0;
+        const base_height: f32 = 0.0;
         const amplitude: f32 = 24.0;
 
         return @intFromFloat(base_height + h * amplitude);
     }
 
-    inline fn generateChunkBitfieldViews(voxels: []BlockId, bitfield_views: *BitfieldViews) void {
-        for (0..CHUNK_SIZE) |x_u| {
+    inline fn generateChunkBitfieldViews(voxels: []Voxel, bitfield_views: *BitfieldViews) void {
+        const size = CHUNK_SIZE;
+
+        for (0..size) |x_u| {
             const x: u5 = @intCast(x_u);
             const mx: u32 = @as(u32, 1) << x;
 
-            for (0..CHUNK_SIZE) |y_u| {
+            for (0..size) |y_u| {
                 const y: u5 = @intCast(y_u);
                 const my: u32 = @as(u32, 1) << y;
 
-                for (0..CHUNK_SIZE) |z_u| {
+                for (0..size) |z_u| {
                     const z: u5 = @intCast(z_u);
                     const mz: u32 = @as(u32, 1) << z;
 
-                    const idx = x_u + y_u * CHUNK_SIZE + z_u * CHUNK_SIZE * CHUNK_SIZE;
-                    if (voxels[idx] == .air) continue;
+                    const idx = helpers.voxelIndex(size, x_u, y_u, z_u);
+                    if (voxels[idx].id == .air) continue;
 
                     bitfield_views.solid_x[y_u][z_u] |= mx;
                     bitfield_views.solid_y[x_u][z_u] |= my;
@@ -167,75 +184,72 @@ pub const TerrainGenerator = struct {
         }
     }
 
-    pub fn fillChunkVoxels(
-        self: *TerrainGenerator,
+    pub fn fillChunkSliceVoxels(
+        self: *const TerrainGenerator,
         allocator: std.mem.Allocator,
-        job: GenerationJob,
-    ) !GenerationResult {
+        coord: ChunkSliceCoord,
+    ) ![]GenerationResult {
         const size = CHUNK_SIZE;
 
-        const voxels = try allocator.alloc(BlockId, size * size * size);
+        const results = try allocator.alloc(GenerationResult, self.chunk_y_count);
+        errdefer allocator.free(results);
 
-        const bitfield_views = try allocator.create(BitfieldViews);
-        bitfield_views.* = std.mem.zeroInit(BitfieldViews, .{});
+        var initialized: usize = 0;
+        errdefer for (results[0..initialized]) |result| result.deinit(allocator);
 
-        const chunk_min_y = job.coord[1] * size;
-        const chunk_max_y = chunk_min_y + size;
+        for (0..self.chunk_y_count) |i| {
+            const chunk_y = self.chunk_min_y + @as(i32, @intCast(i));
 
-        if (chunk_max_y <= self.min_world_y or chunk_min_y > self.max_world_y) {
-            @memset(voxels, .air);
+            const voxels = try allocator.alloc(Voxel, VOXEL_COUNT);
+            errdefer allocator.free(voxels);
 
-            return .{
-                .coord = job.coord,
+            const bitfield_views = try allocator.create(BitfieldViews);
+            errdefer allocator.destroy(bitfield_views);
+
+            @memset(voxels, .{ .id = .air, .light_level = 15 });
+            bitfield_views.* = std.mem.zeroes(BitfieldViews);
+
+            results[i] = .{
+                .coord = .{ coord[0], chunk_y, coord[1] },
                 .voxels = voxels,
                 .bitfield_views = bitfield_views,
             };
+            initialized += 1;
         }
 
         for (0..size) |z| {
             for (0..size) |x| {
-                const world_x = job.coord[0] * size + @as(i32, @intCast(x));
-                const world_z = job.coord[2] * size + @as(i32, @intCast(z));
+                const world_x = coord[0] * size + @as(i32, @intCast(x));
+                const world_z = coord[1] * size + @as(i32, @intCast(z));
                 const h_unclamped = self.terrainHeight(world_x, world_z);
                 const h = std.math.clamp(h_unclamped, self.min_world_y, self.max_world_y);
 
-                for (0..size) |y| {
-                    const world_y = job.coord[1] * size + @as(i32, @intCast(y));
-                    const idx = x + y * size + z * size * size;
+                var y: i32 = self.min_world_y;
+                while (y <= h) : (y += 1) {
+                    const chunk_y = @divFloor(y, size);
+                    const chunk_index: usize = @intCast(chunk_y - self.chunk_min_y);
+                    const local_y = @mod(y, size);
+                    const idx = helpers.voxelIndex(size, x, local_y, z);
 
-                    if (world_y < self.min_world_y) {
-                        voxels[idx] = .air;
-                    } else if (world_y >= self.max_world_y) {
-                        voxels[idx] = .air;
-                    } else if (world_y > h) {
-                        voxels[idx] = .air;
-                    } else if (world_y == h) {
-                        voxels[idx] = .grass;
-                    } else if (world_y >= h - 3) {
-                        voxels[idx] = .dirt;
+                    if (y == h) {
+                        results[chunk_index].voxels[idx] = .{ .id = .grass, .light_level = 15 };
+                    } else if (y >= h - 3) {
+                        results[chunk_index].voxels[idx] = .{ .id = .dirt, .light_level = 0 };
                     } else {
-                        voxels[idx] = .stone;
+                        results[chunk_index].voxels[idx] = .{ .id = .stone, .light_level = 0 };
                     }
                 }
             }
         }
 
-        generateChunkBitfieldViews(voxels, bitfield_views);
+        for (results) |result| generateChunkBitfieldViews(result.voxels, result.bitfield_views);
 
-        return .{
-            .coord = job.coord,
-            .voxels = voxels,
-            .bitfield_views = bitfield_views,
-        };
+        return results;
     }
-};
-
-pub const GenerationJob = struct {
-    coord: ChunkCoord,
 };
 
 pub const GenerationResult = struct {
     coord: ChunkCoord,
-    voxels: []BlockId,
+    voxels: []Voxel,
     bitfield_views: *BitfieldViews,
 };

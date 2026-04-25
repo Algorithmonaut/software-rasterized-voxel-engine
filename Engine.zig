@@ -1,5 +1,3 @@
-// NOTE: Refactored: YES
-
 const std = @import("std");
 
 const Text = @import("UI/Text.zig").Text;

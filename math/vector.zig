@@ -3,8 +3,8 @@
 
 const std = @import("std");
 
-pub const Float = @import("types.zig").Float; // TODO: Replace with usingnamespace
-pub const Vec3f = @import("types.zig").Vec3f; // TODO: Replace with usingnamespace
+pub const Float = @import("types.zig").Float;
+pub const Vec3f = @import("types.zig").Vec3f;
 
 pub inline fn length_squared(v: Vec3f) Float {
     const p = v * v;
