@@ -547,7 +547,7 @@ fn emitRenderQuad(
     // Quad trivially inside
 
     const tex_u: u16 = @intFromEnum(kind) * TEX_SIZE;
-    const tex_v: u16 = @intFromEnum(rq.block_id) * TEX_SIZE;
+    const tex_v: u16 = @intFromEnum(rq.voxel.id) * TEX_SIZE;
 
     if (or_code == 0) {
         renderer.emitQuad(&verts_coord, &verts_uv, tex_u, tex_v);

@@ -120,8 +120,11 @@ pub const TerrainGenerator = struct {
 
     pub fn init(conf: WorldConfig) TerrainGenerator {
         const chunk_size_f: f32 = @floatFromInt(CHUNK_SIZE);
-        const chunk_min_y: i32 = @intFromFloat(@floor(conf.min_world_y / chunk_size_f));
-        const chunk_max_y: i32 = @intFromFloat(@ceil(conf.max_world_y / chunk_size_f));
+        const min_world_y_f: f32 = @floatFromInt(conf.min_world_y);
+        const max_world_y_f: f32 = @floatFromInt(conf.max_world_y);
+
+        const chunk_min_y: i32 = @intFromFloat(@floor(min_world_y_f / chunk_size_f));
+        const chunk_max_y: i32 = @intFromFloat(@ceil(max_world_y_f / chunk_size_f));
         return .{
             .seed = conf.seed,
             .octaves = conf.octaves,
@@ -137,7 +140,7 @@ pub const TerrainGenerator = struct {
             .max_world_y = conf.max_world_y - 1,
             .chunk_min_y = chunk_min_y,
             .chunk_max_y = chunk_max_y,
-            .chunk_y_count = chunk_max_y - chunk_min_y,
+            .chunk_y_count = @intCast(chunk_max_y - chunk_min_y),
         };
     }
 
@@ -193,9 +196,7 @@ pub const TerrainGenerator = struct {
 
         const results = try allocator.alloc(GenerationResult, self.chunk_y_count);
         errdefer allocator.free(results);
-
         var initialized: usize = 0;
-        errdefer for (results[0..initialized]) |result| result.deinit(allocator);
 
         for (0..self.chunk_y_count) |i| {
             const chunk_y = self.chunk_min_y + @as(i32, @intCast(i));
@@ -228,7 +229,7 @@ pub const TerrainGenerator = struct {
                 while (y <= h) : (y += 1) {
                     const chunk_y = @divFloor(y, size);
                     const chunk_index: usize = @intCast(chunk_y - self.chunk_min_y);
-                    const local_y = @mod(y, size);
+                    const local_y: usize = @intCast(@mod(y, size));
                     const idx = helpers.voxelIndex(size, x, local_y, z);
 
                     if (y == h) {

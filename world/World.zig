@@ -87,7 +87,7 @@ pub const World = struct {
         if (self.getChunkSlot(chunk_pos)) |chunk_slot| {
             if (chunk_slot.current) |cur| return cur.voxels[
                 helpers.voxelIndex(CHUNK_SIZE, local_pos[0], local_pos[1], local_pos[2])
-            ];
+            ].id;
         }
         return .unknown;
     }

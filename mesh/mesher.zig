@@ -10,6 +10,8 @@ const BlockId = Block.BlockId;
 const Face = Block.Face;
 const UV = Block.UV;
 
+const Voxel = @import("../world/Chunk.zig").Voxel;
+
 const Bitfields = @import("../world/Chunk.zig").Bitfields;
 const ChunkVersion = @import("../world/Chunk.zig").ChunkVersion;
 
@@ -230,7 +232,7 @@ inline fn cellToVoxel(
 fn greedyMergePlane(
     mesh: *Mesh,
     allocator: std.mem.Allocator,
-    voxels: []const BlockId,
+    voxels: []const Voxel,
     comptime kind: PlaneKind,
     plane_index: usize,
     plane_in: [32]u32,
@@ -252,7 +254,7 @@ fn greedyMergePlane(
             while (c < col + width) : (c += 1) {
                 const xyz = cellToVoxel(kind, plane_index, row, c);
                 const id = voxels[voxelIndex(size, xyz.x, xyz.y, xyz.z)];
-                if (id != id0) {
+                if (!std.meta.eql(id, id0)) {
                     width = c - col;
                     break;
                 }
@@ -271,7 +273,7 @@ fn greedyMergePlane(
                 while (c < col + width) : (c += 1) {
                     const xyz = cellToVoxel(kind, plane_index, row + height, c);
                     const id = voxels[voxelIndex(size, xyz.x, xyz.y, xyz.z)];
-                    if (id != id0) {
+                    if (!std.meta.eql(id, id0)) {
                         ok = false;
                         break;
                     }
@@ -282,7 +284,7 @@ fn greedyMergePlane(
             }
 
             try mesh.appendRenderQuad(allocator, kind, .{
-                .block_id = id0,
+                .voxel = id0,
                 // TODO: Maybe remove type casting
                 .col = @intCast(col),
                 .row = @intCast(row),

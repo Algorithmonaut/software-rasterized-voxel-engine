@@ -6,9 +6,9 @@ const main = @import("../main.zig");
 const F4 = types.Vec4f;
 const F3 = types.Vec3f;
 const ChunkCoord = types.ChunkCoord;
-const ChunkSliceCoord = types.ChunkSliceCoord;
 const WorldCoord = types.WorldCoord;
 const World = @import("World.zig").World;
+const ChunkSliceCoord = types.ChunkSliceCoord;
 const ChunkSlot = @import("Chunk.zig").ChunkSlot;
 const Mat4f = @import("../math/matrix.zig").Mat4f;
 const ChunkVersion = @import("Chunk.zig").ChunkVersion;
@@ -23,7 +23,6 @@ const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
 const VOXEL_COUNT = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 const BATCH_SIZE = 16;
 
-pub const AtomicU32 = std.atomic.Value(u32);
 pub const AtomicUsize = std.atomic.Value(usize);
 
 //// HELPERS ///////////////////////////////////////////////////////////////////
@@ -93,20 +92,22 @@ fn generationWorker(
         std.debug.print("GENERATING, REMAINING: {}\n", .{total - base});
 
         for (0..BATCH_SIZE) |incr| {
-            const chunk_coord_i = base + incr;
-            if (chunk_coord_i >= chunk_slice_coords.len) break;
-            const coord = chunk_slice_coords[chunk_coord_i];
+            const chunk_slice_i = base + incr;
+            if (chunk_slice_i >= chunk_slice_coords.len) break;
+            const coord = chunk_slice_coords[chunk_slice_i];
 
-            const result = terrain_generator.fillChunkVoxels(
+            const results = terrain_generator.fillChunkSliceVoxels(
                 allocator,
-                .{ .coord = coord },
+                coord,
             ) catch |err| {
                 std.debug.panic("fillChunkVoxels failed: {s}", .{@errorName(err)});
             };
+            defer allocator.free(results);
 
-            world.publishGenerationResult(allocator, world, result) catch |err| {
-                std.debug.panic("fillChunkVoxels failed: {s}", .{@errorName(err)});
-            };
+            for (results) |result|
+                world.publishGenerationResult(allocator, world, result) catch |err| {
+                    std.debug.panic("fillChunkVoxels failed: {s}", .{@errorName(err)});
+                };
         }
     }
 }
@@ -218,18 +219,21 @@ pub const ChunkManager = struct {
 
         var chunk_coords = try std.ArrayList(ChunkCoord).initCapacity(allocator, count);
         defer chunk_coords.deinit(allocator);
-        var chunk_slice_coords = try allocator.alloc(ChunkSliceCoord, slice_count);
-        defer allocator.free(chunk_slice_coords);
+
+        var chunk_slice_coords = try std.ArrayList(ChunkSliceCoord).initCapacity(allocator, slice_count);
+        defer chunk_slice_coords.deinit(allocator);
 
         var cz = -self.chunk_load_distance;
         while (cz <= self.chunk_load_distance) : (cz += 1) {
-            var cy = self.chunk_min_y;
-            while (cy <= self.chunk_max_y) : (cy += 1) {
-                var cx = -self.chunk_load_distance;
-                while (cx <= self.chunk_load_distance) : (cx += 1) {
-                    if (cx * cx + cy * cy + cz * cz >
-                        self.chunk_load_distance * self.chunk_load_distance) continue;
+            var cx = -self.chunk_load_distance;
+            while (cx <= self.chunk_load_distance) : (cx += 1) {
+                if (cx * cx + cz * cz >
+                    self.chunk_load_distance * self.chunk_load_distance) continue;
 
+                chunk_slice_coords.appendAssumeCapacity(.{ cx, cz });
+
+                var cy = self.chunk_min_y;
+                while (cy < self.chunk_max_y) : (cy += 1) {
                     const coord = ChunkCoord{ cx, cy, cz };
                     chunk_coords.appendAssumeCapacity(coord);
                     _ = try world.getOrPutChunkSlot(allocator, coord);
@@ -237,18 +241,14 @@ pub const ChunkManager = struct {
             }
         }
 
-        const chunk_y_count = self.chunk_max_y - self.chunk_min_y;
-        for (0..chunk_slice_coords.len) |i|
-            chunk_slice_coords[i] = chunk_coords[i * chunk_y_count];
-
         var next = AtomicUsize.init(0);
 
         if (DEBUG_SINGLE_THREADED) {
             generationWorker(
                 &next,
-                count,
+                slice_count,
                 allocator,
-                chunk_slice_coords,
+                chunk_slice_coords.items,
                 world,
                 terrain_generator,
             );
@@ -275,18 +275,16 @@ pub const ChunkManager = struct {
         for (0..worker_count) |i| {
             threads[i] = try std.Thread.spawn(.{}, generationWorker, .{
                 &next,
-                count,
+                slice_count,
                 allocator,
-                chunk_coords.items,
+                chunk_slice_coords.items,
                 world,
                 terrain_generator,
             });
             spawned += 1;
         }
 
-        for (threads[0..spawned]) |t| {
-            t.join();
-        }
+        for (threads[0..spawned]) |t| t.join();
 
         // meshing
         next.store(0, .monotonic);
@@ -302,8 +300,23 @@ pub const ChunkManager = struct {
             spawned += 1;
         }
 
-        for (threads[0..spawned]) |t| {
-            t.join();
+        for (threads[0..spawned]) |t| t.join();
+    }
+
+    fn submitSliceGenerationJob(
+        self: *ChunkManager,
+        allocator: std.mem.Allocator,
+        world: *World,
+        chunk_worker: *ChunkWorker,
+        slice_coord: ChunkSliceCoord,
+    ) !void {
+        try chunk_worker.submitGenerationJob(slice_coord);
+
+        var cy = self.chunk_min_y;
+        while (cy < self.chunk_max_y) : (cy += 1) {
+            const coord = ChunkCoord{ slice_coord[0], cy, slice_coord[1] };
+            const slot = try world.getOrPutChunkSlot(allocator, coord);
+            if (slot.state == .absent) slot.state = .generating;
         }
     }
 
@@ -337,25 +350,33 @@ pub const ChunkManager = struct {
 
         var cz = player_chunk[2] - self.chunk_load_distance;
         while (cz <= player_chunk[2] + self.chunk_load_distance) : (cz += 1) {
-            var cy = self.chunk_min_y;
-            while (cy <= self.chunk_max_y) : (cy += 1) {
-                var cx = player_chunk[0] - self.chunk_load_distance;
-                while (cx <= player_chunk[0] + self.chunk_load_distance) : (cx += 1) {
-                    const dx = cx - player_chunk[0];
-                    const dy = cy;
-                    const dz = cz - player_chunk[2];
+            var cx = player_chunk[0] - self.chunk_load_distance;
+            while (cx <= player_chunk[0] + self.chunk_load_distance) : (cx += 1) {
+                const dx = cx - player_chunk[0];
+                const dz = cz - player_chunk[2];
 
-                    if ((dx * dx) + (dy * dy) + (dz * dz) >
-                        self.chunk_load_distance * self.chunk_load_distance) continue;
+                if (dx * dx + dz * dz >
+                    self.chunk_load_distance * self.chunk_load_distance) continue;
 
+                const slice_coord = ChunkSliceCoord{ cx, cz };
+
+                var cy = self.chunk_min_y;
+                while (cy < self.chunk_max_y) : (cy += 1) {
                     const coord = ChunkCoord{ cx, cy, cz };
                     const slot = try world.getOrPutChunkSlot(allocator, coord);
 
                     switch (slot.state) {
                         .absent => {
-                            try chunk_worker.submitGenerationJob(.{ .coord = coord });
-                            slot.state = .generating;
+                            try self.submitSliceGenerationJob(
+                                allocator,
+                                world,
+                                chunk_worker,
+                                slice_coord,
+                            );
+
+                            generating_counter += @intCast(self.chunk_max_y - self.chunk_min_y);
                         },
+
                         .generated => {
                             if (mesher.makeMeshJob(world, coord)) |job| {
                                 errdefer job.deinit(allocator);
@@ -363,6 +384,7 @@ pub const ChunkManager = struct {
                                 slot.state = .meshing;
                             }
                         },
+
                         .ready => {
                             if (slot.mesh_dirty) {
                                 if (mesher.makeMeshJob(world, coord)) |job| {
@@ -373,18 +395,21 @@ pub const ChunkManager = struct {
                                 }
                             }
                         },
+
                         .generating => generating_counter += 1,
                         .meshing => meshing_counter += 1,
                     }
 
                     self.loaded.appendAssumeCapacity(slot);
 
-                    if ((dx * dx) + (dy * dy) + (dz * dz) <=
+                    if (dx * dx + dz * dz <=
                         self.chunk_render_distance * self.chunk_render_distance)
+                    {
                         self.active.appendAssumeCapacity(.{
                             .slot = slot,
                             .dist2 = dist2ToPlayer(player_pos, slot),
                         });
+                    }
                 }
             }
         }

@@ -1,5 +1,6 @@
 const std = @import("std");
 const BlockId = @import("../world/Block.zig").BlockId;
+const Voxel = @import("../world/Chunk.zig").Voxel;
 
 /// Ordered by vertical index in the texture atlas
 pub const PlaneKind = enum(u8) {
@@ -17,7 +18,7 @@ pub const RenderQuad = struct {
     col: u8, // second varying coordinate
     width: u8,
     height: u8,
-    block_id: BlockId,
+    voxel: Voxel,
 };
 
 pub const Mesh = struct {

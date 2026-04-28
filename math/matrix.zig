@@ -2,7 +2,6 @@
 //       Matrices are row-major
 
 const std = @import("std");
-const ctx = @import("../context.zig");
 const vec = @import("vector.zig");
 const Camera = @import("../game/Camera.zig").Camera;
 

@@ -108,6 +108,10 @@ pub const ChunkWorker = struct {
         }
     }
 
+    pub inline fn pollGenerationResult(self: *ChunkWorker) ?GenerationResult {
+        return self.generation_result_buffer.pop();
+    }
+
     fn pushGenerationResultRetry(self: *ChunkWorker, result: []GenerationResult) void {
         blk: while (true) {
             for (0..result.len) |i| {
@@ -150,7 +154,7 @@ pub const ChunkWorker = struct {
 
             while (self.generation_job_buffer.pop()) |job| {
                 const result = self.terrain_generator.fillChunkSliceVoxels(self.allocator, job) catch |err| {
-                    std.log.err("fillChunkVoxels failed for {any}: {s}", .{ job.coord, @errorName(err) });
+                    std.log.err("fillChunkVoxels failed for {any}: {s}", .{ job, @errorName(err) });
                     continue;
                 };
                 self.pushGenerationResultRetry(result);
