@@ -1,33 +1,29 @@
-// NOTE: Vectors are column-major
-//       Matrices are row-major
-
 const std = @import("std");
+const types = @import("../types.zig");
 
-pub const Float = @import("types.zig").Float;
-pub const Vec3f = @import("types.zig").Vec3f;
+const F3 = types.F3;
 
-pub inline fn length_squared(v: Vec3f) Float {
+pub inline fn length_squared(v: F3) f32 {
     const p = v * v;
     return @reduce(.Add, p);
 }
 
-pub inline fn length(v: Vec3f) Float {
+pub inline fn length(v: F3) f32 {
     return std.math.sqrt(length_squared(v));
 }
 
-pub inline fn normalize(v: Vec3f) Vec3f {
+pub inline fn normalize(v: F3) F3 {
     const lsq = length_squared(v);
 
-    return v / @as(Vec3f, @splat(std.math.sqrt(lsq)));
+    return v / @as(F3, @splat(std.math.sqrt(lsq)));
 }
 
-pub inline fn dot_product(v1: Vec3f, v2: Vec3f) Float {
-    const prod = v1 * v2; // lane wise multiply
-    return @reduce(.Add, prod); // return the sum of the lanes
+pub inline fn dot_product(v1: F3, v2: F3) f32 {
+    const prod = v1 * v2;
+    return @reduce(.Add, prod);
 }
 
-// NOTE: Already implemented for homogeneous coordinates
-pub inline fn cross_product(a: Vec3f, b: Vec3f) Vec3f {
+pub inline fn cross_product(a: F3, b: F3) F3 {
     const ax = a[0];
     const ay = a[1];
     const az = a[2];
@@ -43,20 +39,6 @@ pub inline fn cross_product(a: Vec3f, b: Vec3f) Vec3f {
     };
 }
 
-pub inline fn add(a: Vec3f, b: Vec3f) Vec3f {
-    return .{
-        .v = a + b,
-    };
-}
-
-pub inline fn sub(a: Vec3f, b: Vec3f) Vec3f {
-    return .{
-        .v = a - b,
-    };
-}
-
-pub inline fn scale(a: Vec3f, scalar: Float) Vec3f {
-    return .{
-        .v = a * @as(Vec3f, @splat(scalar)),
-    };
+pub inline fn scale(a: F3, scalar: f32) F3 {
+    return a * @as(F3, @splat(scalar));
 }

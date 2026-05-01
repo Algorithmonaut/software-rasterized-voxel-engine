@@ -1,52 +1,32 @@
 const std = @import("std");
 const main = @import("main.zig");
-
-const World = @import("world/World.zig").World;
-const Camera = @import("game/Camera.zig").Camera;
-const TerrainGenerator = @import("world/TerrainGenerator.zig").TerrainGenerator;
-
-const ChunkSlot = @import("world/Chunk.zig").ChunkSlot;
-const RenderQuad = @import("mesh/Mesh.zig").RenderQuad;
-
-const CHUNK_SIZE = @import("world/Chunk.zig").CHUNK_SIZE;
-const TEX_SIZE = @import("Atlas.zig").TEX_SIZE;
-
-const PlaneKind = @import("mesh/Mesh.zig").PlaneKind;
-
-const types = @import("math/types.zig");
-const F3 = types.Vec3f;
-const F4 = types.Vec4f;
-const I3 = types.Vec3i;
-const WorldCoord = types.WorldCoord;
-const ChunkCoord = types.ChunkCoord;
-
-const ChunkWorker = @import("world/ChunkWorker.zig").ChunkWorker;
-
-const Block = @import("world/Block.zig");
-const WorldQuad = Block.WorldQuad;
-const WorldVertex = Block.WorldVertex;
-const Vertex = Block.Vertex;
-
-const Vec2fx = types.Vec2fx;
-const SUBPIXEL_BITS = types.SUBPIXEL_BITS;
-const SUBPIXEL_SCALE = types.SUBPIXEL_SCALE;
-const SUBPIXEL_MASK = (1 << SUBPIXEL_BITS) - 1;
-
-const VOXEL_COUNT = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
+const types = @import("types.zig");
+const chunk = @import("world/chunk.zig");
+const constants = @import("constants.zig");
 
 const Mat4f = @import("math/matrix.zig").Mat4f;
-
+const PlaneKind = @import("mesh/Mesh.zig").PlaneKind;
+const ChunkSlot = chunk.ChunkSlot;
+const RenderQuad = @import("mesh/Mesh.zig").RenderQuad;
 const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
 
-const createBitfields = @import("world/Chunk.zig").createBitfields;
+const UV = types.UV;
+const F3 = types.F3;
+const F4 = types.F4;
+const FX2 = types.FX2;
+const WorldVertex = types.WorldVertex;
+
+const TEX_SIZE = constants.TEX_SIZE;
+const CHUNK_SIZE = constants.CHUNK_SIZE;
+const SUBPIXEL_SCALE = constants.SUBPIXEL_SCALE;
+const SUBPIXEL_MASK = (1 << constants.SUBPIXEL_BITS) - 1;
 
 // TODO: Centralize this
-const UV = @Vector(2, f32);
 
 const eps: f32 = 0.0001;
 
 pub const Renderer = struct {
-    pub const ProjectedVertex = struct { xy: Vec2fx, q: f32, uv: UV };
+    pub const ProjectedVertex = struct { xy: FX2, q: f32, uv: UV };
     pub const MaterialRef = struct { tex_u: u16, tex_v: u16 };
     pub const PrimitiveRef = struct {
         base_vertex: u32 = undefined,
@@ -112,7 +92,7 @@ pub const Renderer = struct {
         y_ndc: f32,
         fb_width: usize,
         fb_height: usize,
-    ) Vec2fx {
+    ) FX2 {
         const fw: f32 = @floatFromInt(fb_width);
         const fh: f32 = @floatFromInt(fb_height);
 
@@ -124,14 +104,6 @@ pub const Renderer = struct {
             @intFromFloat(@floor(sy * SUBPIXEL_SCALE)),
         };
     }
-
-    // inline fn floorFixed(x: i32) i32 {
-    //     return x >> SUBPIXEL_BITS;
-    // }
-    //
-    // inline fn ceilFixed(x: i32) i32 {
-    //     return (x + SUBPIXEL_MASK) >> SUBPIXEL_BITS;
-    // }
 
     inline fn floorFixed(x: i32) i32 {
         return @intCast(@divFloor(@as(i64, x), SUBPIXEL_SCALE));
@@ -520,10 +492,10 @@ fn emitRenderQuad(
     };
 
     // World → raster
-    verts_coord[0] = combined_mat.mul_vec(verts_coord[0]);
-    verts_coord[1] = combined_mat.mul_vec(verts_coord[1]);
-    verts_coord[2] = combined_mat.mul_vec(verts_coord[2]);
-    verts_coord[3] = combined_mat.mul_vec(verts_coord[3]);
+    verts_coord[0] = combined_mat.mulVec(verts_coord[0]);
+    verts_coord[1] = combined_mat.mulVec(verts_coord[1]);
+    verts_coord[2] = combined_mat.mulVec(verts_coord[2]);
+    verts_coord[3] = combined_mat.mulVec(verts_coord[3]);
 
     const c0 = clipCode(verts_coord[0]);
     const c1 = clipCode(verts_coord[1]);

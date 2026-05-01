@@ -1,21 +1,15 @@
 const std = @import("std");
+const types = @import("../types.zig");
+const helpers = @import("../helpers.zig");
+const constants = @import("../constants.zig");
 
-const Block = @import("Block.zig");
-const BlockId = Block.BlockId;
-
-const WorldConfig = @import("../EngineConfig.zig").EngineConfig.WorldConfig;
-
-const types = @import("../math/types.zig");
+const Block = types.Block;
 const ChunkCoord = types.ChunkCoord;
 const ChunkSliceCoord = types.ChunkSliceCoord;
-const Voxel = @import("Chunk.zig").Voxel;
+const BitfieldViews = types.BitfieldViews;
+const WorldConfig = @import("../EngineConfig.zig").EngineConfig.WorldConfig;
 
-const helpers = @import("../helpers.zig");
-
-const BitfieldViews = @import("Chunk.zig").BitfieldViews;
-
-const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
-const VOXEL_COUNT = @import("Chunk.zig").VOXEL_COUNT;
+const CHUNK_SIZE = constants.CHUNK_SIZE;
 
 //// DETERMINISTIC HASHING ////
 
@@ -161,7 +155,7 @@ pub const TerrainGenerator = struct {
         return @intFromFloat(base_height + h * amplitude);
     }
 
-    inline fn generateChunkBitfieldViews(voxels: []Voxel, bitfield_views: *BitfieldViews) void {
+    inline fn generateChunkBitfieldViews(voxels: []Block, bitfield_views: *BitfieldViews) void {
         const size = CHUNK_SIZE;
 
         for (0..size) |x_u| {
@@ -201,7 +195,7 @@ pub const TerrainGenerator = struct {
         for (0..self.chunk_y_count) |i| {
             const chunk_y = self.chunk_min_y + @as(i32, @intCast(i));
 
-            const voxels = try allocator.alloc(Voxel, VOXEL_COUNT);
+            const voxels = try allocator.alloc(Block, CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
             errdefer allocator.free(voxels);
 
             const bitfield_views = try allocator.create(BitfieldViews);
@@ -251,6 +245,6 @@ pub const TerrainGenerator = struct {
 
 pub const GenerationResult = struct {
     coord: ChunkCoord,
-    voxels: []Voxel,
+    voxels: []Block,
     bitfield_views: *BitfieldViews,
 };

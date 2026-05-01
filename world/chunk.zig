@@ -1,18 +1,14 @@
 const std = @import("std");
+const types = @import("../types.zig");
+const constants = @import("../constants.zig");
 
-const ChunkCoord = @import("../math/types.zig").ChunkCoord;
+const Block = types.Block;
+const BlockId = types.BlockId;
+const ChunkCoord = types.ChunkCoord;
+const ChunkState = types.ChunkState;
 const World = @import("World.zig").World;
-
-const Block = @import("Block.zig");
-const BlockId = Block.BlockId;
+const BitfieldViews = types.BitfieldViews;
 const Mesh = @import("../mesh/Mesh.zig").Mesh;
-
-pub const CHUNK_SIZE = 32;
-pub const VOXEL_COUNT = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
-
-inline fn voxelIndex(size: usize, x: usize, y: usize, z: usize) usize {
-    return x + y * size + z * size * size;
-}
 
 pub const AtomicU8 = std.atomic.Value(u8);
 pub const AtomicU32 = std.atomic.Value(u32);
@@ -20,30 +16,7 @@ pub const LodLevel = u8;
 
 pub const AtomicUsize = std.atomic.Value(usize);
 
-pub const Voxel = struct {
-    id: BlockId,
-    /// 4 bits for block light, 4 bits for sky light  (0..15)
-    light_level: u8,
-};
-
-//// CHUNKS ////////////////////////////////////////////////////////////////////
-
-pub const ChunkState = enum(u8) {
-    absent,
-    generating,
-    generated,
-    meshing,
-    ready,
-};
-
-pub const Bitfield = u32;
-pub const Bitfields = [CHUNK_SIZE][CHUNK_SIZE]Bitfield;
-
-pub const BitfieldViews = struct {
-    solid_x: Bitfields, // [y][z], bits are x
-    solid_y: Bitfields, // [x][z], bits are y
-    solid_z: Bitfields, // [x][y], bits are z
-};
+const CHUNK_SIZE = constants.CHUNK_SIZE;
 
 /// Stable identity stored in World's hashmap
 pub const ChunkSlot = struct {
@@ -101,7 +74,7 @@ pub const ChunkVersion = struct {
     refs: AtomicU32 = AtomicU32.init(1), // one published reference held by the slot
     gen: usize,
 
-    voxels: []const Voxel,
+    voxels: []const Block,
     // TODO: Rename to bitfieldViews
     bitfields: *const BitfieldViews,
 
@@ -117,27 +90,4 @@ pub const ChunkVersion = struct {
             allocator.destroy(self);
         }
     }
-};
-
-//// CHUNK LODS ////////////////////////////////////////////////////////////////
-
-pub const LodTileCoord = @Vector(2, i32);
-
-pub const LodTileVersion = struct {
-    refs: AtomicU32 = AtomicU32.init(1),
-    level: u8, // 0, 1, 2...
-    coord: LodTileCoord,
-
-    heights: []const i16, // grid vertices: (N + 1) * (N + 1)
-    meterials: []const u8, // dominant/top material per cell N * N
-
-    mesh: ?*Mesh = null,
-};
-
-pub const LodTileSlot = struct {
-    level: u8,
-    coord: LodTileCoord,
-    current: ?*LodTileVersion = null,
-    state: ChunkState = .absent,
-    mesh_dirty: bool = false,
 };

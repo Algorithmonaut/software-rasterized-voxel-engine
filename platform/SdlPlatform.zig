@@ -1,16 +1,17 @@
-// NOTE: Refactored: YES
-
-const main = @import("../main.zig");
-const std = @import("std");
 const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");
     @cInclude("SDL2/SDL.h");
 });
+
+const std = @import("std");
+const main = @import("../main.zig");
 const vec = @import("../math/vector.zig");
+const types = @import("../types.zig");
+
 const SdlGraphics = @import("SdlGraphics.zig").SdlGraphics;
 const Player = @import("../game/Player.zig").Player;
 
-const Vec3f = @import("../math/types.zig").Vec3f;
+const F3 = types.F3;
 
 pub const SdlPlatform = struct {
     freq: u64, // tick counter

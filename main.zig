@@ -1,22 +1,20 @@
 const std = @import("std");
+const constants = @import("constants.zig");
+const sky_gradient = @import("sky-gradient.zig");
+
 const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", "1");
     @cInclude("SDL2/SDL.h");
 });
-const mat = @import("math/matrix.zig");
 
-const Engine = @import("Engine.zig").Engine;
-const Atlas = @import("Atlas.zig").Atlas;
-const Camera = @import("game/Camera.zig").Camera;
-const EngineConfig = @import("EngineConfig.zig").EngineConfig;
-const Framebuffer = @import("Framebuffer.zig").Framebuffer;
-const Renderer = @import("Renderer.zig").Renderer;
+const mat = @import("math/matrix.zig");
 const renderer = @import("Renderer.zig");
+const Engine = @import("Engine.zig").Engine;
+const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const DebugOverlay = @import("UI/DebugOverlay.zig").DebugOverlay;
 
-const CHUNK_SIZE = @import("world/Chunk.zig").CHUNK_SIZE;
-
 pub const DEBUG_SINGLE_THREADED = false;
+const CHUNK_SIZE = constants.CHUNK_SIZE;
 
 pub const ENABLE_DEBUG_OVERLAY = true;
 pub var debug_overlay = DebugOverlay{};
@@ -103,6 +101,9 @@ pub fn main() !void {
         engine_config,
     );
 
+    const sky_rows = try allocator.alloc(u32, engine_config.framebuffer_config.height);
+    defer allocator.free(sky_rows);
+
     var pool: std.Thread.Pool = undefined;
     try pool.init(.{ .allocator = allocator });
 
@@ -119,7 +120,7 @@ pub fn main() !void {
 
         var frame_timer = try std.time.Timer.start();
 
-        var frame = try engine.beginFrame();
+        var frame = try engine.beginFrame(sky_rows);
         defer engine.endFrame(&frame);
 
         engine.platform.process_inputs(
@@ -130,7 +131,7 @@ pub fn main() !void {
 
         try engine.player.update(&engine.world);
 
-        engine.player.camera.view_mat = mat.create_view(
+        engine.player.camera.view_mat = mat.createViewMat(
             engine.player.camera.from,
             engine.player.camera.to,
         );
@@ -138,6 +139,8 @@ pub fn main() !void {
         engine.player.camera.combined_mat = engine.player.camera.proj_mat.mul(
             engine.player.camera.view_mat,
         );
+
+        sky_gradient.buildSkyRowsForCamera(sky_rows, &engine.player.camera);
 
         try engine.chunk_manager.updateChunks(
             allocator,
@@ -177,6 +180,7 @@ pub fn main() !void {
             engine.renderer.frame_primitives.items,
             engine.renderer.frame_materials.items,
             engine.renderer.frame_vertices.items,
+            sky_rows,
         );
 
         try debug_overlay.render(&engine.text, &frame.framebuffer);

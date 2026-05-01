@@ -1,13 +1,14 @@
 const std = @import("std");
+const types = @import("types.zig");
 
+const F3 = types.F3;
+const FrameContext = types.FrameContext;
 const Text = @import("UI/Text.zig").Text;
 const Atlas = @import("Atlas.zig").Atlas;
-const Vec3f = @import("math/types.zig").Vec3f;
 const TilePool = @import("tile.zig").TilePool;
 const World = @import("world/World.zig").World;
 const Player = @import("game/Player.zig").Player;
 const Renderer = @import("Renderer.zig").Renderer;
-const FrameContext = @import("FrameContext.zig").FrameContext;
 const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const Rasterizer = @import("renderer/Rasterizer.zig").Rasterizer;
 const ChunkWorker = @import("world/ChunkWorker.zig").ChunkWorker;
@@ -84,23 +85,14 @@ pub const Engine = struct {
     }
 
     pub fn deinit(self: *Engine) void {
-        self.mesher.stop();
-        self.mesher.deinit();
-        self.world.deinit();
-
-        self.renderer.deinit(self.allocator);
-        self.platform.deinit();
-        self.graphics.deinit();
-        self.atlas.deinit(self.allocator);
-        self.triangle_rasterizer.deinit(self.allocator);
-        self.terrain_generator.deinit();
+        _ = self;
     }
 
-    pub fn beginFrame(self: *Engine) !FrameContext {
+    pub fn beginFrame(self: *Engine, sky_rows: []u32) !FrameContext {
         self.renderer.beginFrame();
         const dt = self.platform.begin_frame();
         const framebuffer = try self.graphics.begin_frame();
-        framebuffer.clear_black();
+        framebuffer.clearGradient(sky_rows);
 
         return .{
             .dt = dt,

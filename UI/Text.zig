@@ -128,11 +128,11 @@ pub const Text = struct {
                     const bit = (row >> @intCast(shift)) & 1;
 
                     if (bit == 0) {
-                        fb.set_pixel(start_x + x_offset + x, start_y + y, 0xFF000000);
+                        fb.setPixel(start_x + x_offset + x, start_y + y, 0xFF000000);
                         continue;
                     }
 
-                    fb.set_pixel(start_x + x_offset + x, start_y + y, color);
+                    fb.setPixel(start_x + x_offset + x, start_y + y, color);
                 }
             }
 

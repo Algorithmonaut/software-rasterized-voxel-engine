@@ -1,4 +1,6 @@
 const std = @import("std");
+const types = @import("../types.zig");
+const constants = @import("../constants.zig");
 
 const Renderer = @import("../Renderer.zig").Renderer;
 const ProjectedVertex = Renderer.ProjectedVertex;
@@ -9,12 +11,11 @@ const Tile = @import("../tile.zig").Tile;
 const Atlas = @import("../Atlas.zig").Atlas;
 const TilePool = @import("../tile.zig").TilePool;
 
-const types = @import("../math/types.zig");
-const Vec2fx = types.Vec2fx;
-const SUBPIXEL_BITS = types.SUBPIXEL_BITS;
-const SUBPIXEL_SCALE = types.SUBPIXEL_SCALE;
-const HALF_SUBPIXEL = types.HALF_SUBPIXEL;
-const I3 = types.Vec3i;
+const I3 = types.I3;
+const FX2 = types.FX2;
+const SUBPIXEL_BITS = constants.SUBPIXEL_BITS;
+const SUBPIXEL_SCALE = constants.SUBPIXEL_SCALE;
+const HALF_SUBPIXEL = constants.HALF_SUBPIXEL;
 
 // TODO: Centralize this
 const TEX_TILE_SIZE = 16;
@@ -108,9 +109,9 @@ inline fn makeEdge(a: @Vector(2, i32), b: @Vector(2, i32)) Edge {
 //// TRIANGLE SETUP ////////////////////////////////////////////////////////////
 
 const LocalTriangle = struct {
-    v0: Vec2fx,
-    v1: Vec2fx,
-    v2: Vec2fx,
+    v0: FX2,
+    v1: FX2,
+    v2: FX2,
 
     q0: f32,
     q1: f32,

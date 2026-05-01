@@ -2,26 +2,6 @@ const std = @import("std");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const AtlasConfig = @import("EngineConfig.zig").EngineConfig.AtlasConfig;
 
-const Block = @import("world/Block.zig");
-const Face = Block.Face;
-const BlockId = Block.BlockId;
-
-pub const TEX_SIZE = 16;
-
-pub const BlockTypes = enum(u8) {
-    dirt = 0,
-    stone = 1,
-    grass = 2,
-    void = 255,
-};
-
-pub const QuadUV = struct {
-    bl: @Vector(2, usize),
-    tl: @Vector(2, usize),
-    tr: @Vector(2, usize),
-    br: @Vector(2, usize),
-};
-
 pub const Atlas = struct {
     atlas: []u32,
 

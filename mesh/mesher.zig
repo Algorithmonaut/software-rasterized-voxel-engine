@@ -1,30 +1,21 @@
 const std = @import("std");
+const types = @import("../types.zig");
+const constants = @import("../constants.zig");
 
+const I3 = types.I3;
+const Block = types.Block;
+const Bitfields = types.Bitfields;
+const ChunkCoord = types.ChunkCoord;
+const Mesh = @import("Mesh.zig").Mesh;
 const Atlas = @import("../Atlas.zig").Atlas;
+const PlaneKind = @import("Mesh.zig").PlaneKind;
 const World = @import("../world/World.zig").World;
-const ChunkCoord = @import("../math/types.zig").ChunkCoord;
-
-const Block = @import("../world/Block.zig");
-const Quad = Block.Quad;
-const BlockId = Block.BlockId;
-const Face = Block.Face;
-const UV = Block.UV;
-
-const Voxel = @import("../world/Chunk.zig").Voxel;
-
-const Bitfields = @import("../world/Chunk.zig").Bitfields;
-const ChunkVersion = @import("../world/Chunk.zig").ChunkVersion;
-
-const types = @import("../math/types.zig");
-const Vec3i = types.Vec3i;
-const PosVec = @Vector(3, usize);
+const ChunkVersion = @import("../world/chunk.zig").ChunkVersion;
 
 const PlaneSet = [32][32]u32;
+const PosVec = @Vector(3, usize);
 
-const PlaneKind = @import("Mesh.zig").PlaneKind;
-const Mesh = @import("Mesh.zig").Mesh;
-
-const CHUNK_SIZE = @import("../world/Chunk.zig").CHUNK_SIZE;
+const CHUNK_SIZE = constants.CHUNK_SIZE;
 
 // BINARY CULLED MESHER | GENERATE PLANES //////////////////////////////////////
 
@@ -232,7 +223,7 @@ inline fn cellToVoxel(
 fn greedyMergePlane(
     mesh: *Mesh,
     allocator: std.mem.Allocator,
-    voxels: []const Voxel,
+    voxels: []const Block,
     comptime kind: PlaneKind,
     plane_index: usize,
     plane_in: [32]u32,

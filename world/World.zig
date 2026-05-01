@@ -1,18 +1,20 @@
 const std = @import("std");
+const chunk = @import("chunk.zig");
+const types = @import("../types.zig");
+const constants = @import("../constants.zig");
 const helpers = @import("../helpers.zig");
-const types = @import("../math/types.zig");
 
-const I3 = types.Vec3i;
+const I3 = types.I3;
+const BlockId = types.BlockId;
 const ChunkCoord = types.ChunkCoord;
+const ChunkSlot = chunk.ChunkSlot;
+const ChunkVersion = chunk.ChunkVersion;
 const AtomicU32 = std.atomic.Value(u32);
-const BlockId = @import("Block.zig").BlockId;
-const ChunkSlot = @import("Chunk.zig").ChunkSlot;
-const ChunkVersion = @import("Chunk.zig").ChunkVersion;
 const MeshResult = @import("../mesh/mesher.zig").MeshResult;
 const GenerationResult = @import("TerrainGenerator.zig").GenerationResult;
 const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
 
-const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
+const CHUNK_SIZE = constants.CHUNK_SIZE;
 
 pub const World = struct {
     // When AutoHashMap grows or rehashes, its values can move, so we need ptr

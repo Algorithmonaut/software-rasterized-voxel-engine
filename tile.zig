@@ -3,10 +3,8 @@ const std = @import("std");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
 
-const Float = @import("math/types.zig").Float;
-
 pub const Tile = struct {
-    z_buf: []Float,
+    z_buf: []f32,
     buf: []u32,
     pos: [2]usize,
     was_occupied: bool,
@@ -14,7 +12,7 @@ pub const Tile = struct {
 
     pub fn init(allocator: std.mem.Allocator, x: usize, y: usize, size: usize) !Tile {
         return .{
-            .z_buf = try allocator.alloc(Float, size * size),
+            .z_buf = try allocator.alloc(f32, size * size),
             .buf = try allocator.alloc(u32, size * size),
             .pos = .{ x, y },
             .was_occupied = false,
@@ -22,14 +20,29 @@ pub const Tile = struct {
         };
     }
 
-    pub fn clear(self: *Tile) void {
-        const buf_slice = self.buf[0..];
-        const z_buf_slice = self.z_buf[0..];
-        @memset(buf_slice, 0);
-        @memset(z_buf_slice, -std.math.floatMax(Float));
+    pub fn clearGradient(self: *Tile, sky_rows: []const u32) void {
+        const dim = self.dimensions;
+
+        @memset(self.z_buf[0..], -std.math.floatMax(f32));
+
+        const tile_y: usize = @intCast(self.pos[1]);
+
+        std.debug.assert(tile_y + dim <= sky_rows.len);
+        std.debug.assert(self.buf.len >= dim * dim);
+        std.debug.assert(self.z_buf.len >= dim * dim);
+
+        for (0..dim) |row| {
+            const global_y = tile_y + row;
+            const color = sky_rows[global_y];
+
+            const row_start = row * dim;
+            const row_end = row_start + dim;
+
+            @memset(self.buf[row_start..row_end], color);
+        }
     }
 
-    pub fn write_to_fb(self: *Tile, buf: Framebuffer) void {
+    pub fn writeToFb(self: *Tile, buf: Framebuffer) void {
         const x0 = self.pos[0];
         const y0 = self.pos[1];
 
@@ -39,7 +52,7 @@ pub const Tile = struct {
         var y: usize = 0;
         while (y < copy_h) : (y += 1) {
             const src = self.buf[y * self.dimensions .. y * self.dimensions + copy_w];
-            const dst = buf.get_scanline(y0 + y)[x0 .. x0 + copy_w];
+            const dst = buf.getScanline(y0 + y)[x0 .. x0 + copy_w];
             @memcpy(dst, src);
         }
     }
@@ -74,7 +87,7 @@ pub const TilePool = struct {
         };
     }
 
-    pub fn debug_show_tiles_border(self: *TilePool, buf: Framebuffer) void {
+    pub fn debugShowTileBorder(self: *TilePool, buf: Framebuffer) void {
         const color: u32 = 0xF0FF0000;
         for (self.tiles) |*tile| {
             if (tile.was_occupied) {
@@ -87,15 +100,15 @@ pub const TilePool = struct {
                 // Top/bottom edge
                 var x: usize = x0;
                 while (x <= x1) : (x += 1) {
-                    buf.set_pixel_blend(x, y0, color);
-                    buf.set_pixel_blend(x, y1, color);
+                    buf.setPixelBlend(x, y0, color);
+                    buf.setPixelBlend(x, y1, color);
                 }
 
                 // Left/bottom edge (skip y0 & y1 to avoid double-blending top corners)
                 var y: usize = y0 + 1;
                 while (y < y1) : (y += 1) {
-                    buf.set_pixel_blend(x0, y, color);
-                    buf.set_pixel_blend(x1, y, color);
+                    buf.setPixelBlend(x0, y, color);
+                    buf.setPixelBlend(x1, y, color);
                 }
 
                 tile.was_occupied = false; // FIX: prob not clean to put this here

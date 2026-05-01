@@ -1,4 +1,6 @@
-const WorldCoord = @import("math/types.zig").WorldCoord;
+const types = @import("types.zig");
+
+const WorldCoord = types.WorldCoord;
 
 pub const EngineConfig = struct {
     pub const CameraConfig = struct {

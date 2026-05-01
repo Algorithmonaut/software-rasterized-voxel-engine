@@ -1,15 +1,13 @@
 const std = @import("std");
-
-const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
-const GenerationResult = @import("TerrainGenerator.zig").GenerationResult;
-
-const SpscRingBuffer = @import("../DS/SpscRingBuffer.zig").SpscRingBuffer;
+const types = @import("../types.zig");
 const mesher = @import("../mesh/mesher.zig");
+
 const MeshJob = mesher.MeshJob;
 const MeshResult = mesher.MeshResult;
-
-const types = @import("../math/types.zig");
 const ChunkSliceCoord = types.ChunkSliceCoord;
+const SpscRingBuffer = @import("../DS/SpscRingBuffer.zig").SpscRingBuffer;
+const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
+const GenerationResult = @import("TerrainGenerator.zig").GenerationResult;
 
 const DEBUG_SINGLE_THREADED = @import("../main.zig").DEBUG_SINGLE_THREADED;
 

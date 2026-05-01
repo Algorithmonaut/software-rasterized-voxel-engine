@@ -1,19 +1,16 @@
+const types = @import("../types.zig");
+const vec = @import("../math/vector.zig");
+
+const F3 = types.F3;
+const BlockId = types.BlockId;
 const Camera = @import("Camera.zig").Camera;
+const World = @import("../world/World.zig").World;
 const CameraConfig = @import("../EngineConfig.zig").EngineConfig.CameraConfig;
 const PlayerConfig = @import("../EngineConfig.zig").EngineConfig.PlayerConfig;
 
-const World = @import("../world/World.zig").World;
-
-const BlockId = @import("../world/Block.zig").BlockId;
-
-const types = @import("../math/types.zig");
-const Vec3f = types.Vec3f;
-
-const vec = @import("../math/vector.zig");
-
 const AABB = struct {
-    min: Vec3f,
-    max: Vec3f,
+    min: F3,
+    max: F3,
 
     fn overlaps(a: AABB, b: AABB) bool {
         return a.max[0] > b.min[0] and a.min[0] < b.max[0] and
@@ -38,15 +35,15 @@ pub const FrameInputs = struct {
 
 pub const Player = struct {
     /// Feet position
-    velocity: Vec3f = .{ 0.0, 0.0, 0.0 },
+    velocity: F3 = .{ 0.0, 0.0, 0.0 },
     grounded: bool = false,
 
     camera: Camera,
 
     frame_inputs: FrameInputs,
 
-    position: Vec3f,
-    half_size: Vec3f,
+    position: F3,
+    half_size: F3,
 
     speed: f32,
 
@@ -103,8 +100,8 @@ pub const Player = struct {
         };
     }
 
-    fn approachHorizontal(current: Vec3f, target: Vec3f, max_delta: f32) Vec3f {
-        const delta = Vec3f{
+    fn approachHorizontal(current: F3, target: F3, max_delta: f32) F3 {
+        const delta = F3{
             target[0] - current[0],
             0,
             target[2] - current[2],
@@ -128,12 +125,12 @@ pub const Player = struct {
 
     inline fn getBlockAABB(x: i32, y: i32, z: i32) AABB {
         return .{
-            .min = Vec3f{
+            .min = F3{
                 @floatFromInt(x),
                 @floatFromInt(y),
                 @floatFromInt(z),
             },
-            .max = Vec3f{
+            .max = F3{
                 @floatFromInt(x + 1),
                 @floatFromInt(y + 1),
                 @floatFromInt(z + 1),
@@ -290,10 +287,10 @@ pub const Player = struct {
         // TODO: Move speed from camera to player
 
         // Compute desired horizontal velocity from input
-        const world_up = Vec3f{ 0, 1, 0 };
+        const world_up = F3{ 0, 1, 0 };
 
         // Already normalized
-        const forward = Vec3f{
+        const forward = F3{
             @cos(self.camera.pitch) * @sin(self.camera.yaw),
             @sin(self.camera.pitch),
             @cos(self.camera.pitch) * @cos(self.camera.yaw),
@@ -305,7 +302,7 @@ pub const Player = struct {
 
         const right = vec.cross_product(fwd_move, world_up);
 
-        var wish = Vec3f{ 0, 0, 0 };
+        var wish = F3{ 0, 0, 0 };
         if (self.frame_inputs.forward) wish += fwd_move;
         if (self.frame_inputs.back) wish -= fwd_move;
         if (self.frame_inputs.right) wish += right;
@@ -316,7 +313,7 @@ pub const Player = struct {
         // Normalize wish so diagonals aren't faster
         const wish_len2 = vec.dot_product(wish, wish);
         if (wish_len2 > 0)
-            wish = wish / @as(Vec3f, @splat(@sqrt(wish_len2)));
+            wish = wish / @as(F3, @splat(@sqrt(wish_len2)));
 
         const has_input = wish_len2 > 0.0;
 
@@ -326,7 +323,7 @@ pub const Player = struct {
             (if (self.grounded) self.ground_decel else self.air_decel);
 
         // desired_velocity is a velocity in units per second
-        const desired_velocity = wish * @as(Vec3f, @splat(self.speed));
+        const desired_velocity = wish * @as(F3, @splat(self.speed));
 
         var new_vel = approachHorizontal(
             self.velocity,
@@ -343,7 +340,7 @@ pub const Player = struct {
 
         self.velocity = new_vel;
 
-        const delta = self.velocity * @as(Vec3f, @splat(self.frame_inputs.dt));
+        const delta = self.velocity * @as(F3, @splat(self.frame_inputs.dt));
 
         self.grounded = false;
         try self.moveX(world, delta[0]);
@@ -351,7 +348,7 @@ pub const Player = struct {
         try self.moveZ(world, delta[2]);
 
         // self.position += new_vel * @as(Vec3f, @splat(self.frame_inputs.dt));
-        const camera_height = Vec3f{ 0, 1.8, 0 };
+        const camera_height = F3{ 0, 1.8, 0 };
         self.camera.from = self.position + camera_height; // set camera position
         self.camera.to = self.camera.from + forward; // set camera target
     }

@@ -1,27 +1,23 @@
 const std = @import("std");
-const types = @import("../math/types.zig");
-const mesher = @import("../mesh/mesher.zig");
 const main = @import("../main.zig");
+const types = @import("../types.zig");
+const mesher = @import("../mesh/mesher.zig");
+const constants = @import("../constants.zig");
 
-const F4 = types.Vec4f;
-const F3 = types.Vec3f;
+const F4 = types.F4;
+const F3 = types.F3;
 const ChunkCoord = types.ChunkCoord;
 const WorldCoord = types.WorldCoord;
 const World = @import("World.zig").World;
 const ChunkSliceCoord = types.ChunkSliceCoord;
-const ChunkSlot = @import("Chunk.zig").ChunkSlot;
+const ChunkSlot = @import("chunk.zig").ChunkSlot;
 const Mat4f = @import("../math/matrix.zig").Mat4f;
-const ChunkVersion = @import("Chunk.zig").ChunkVersion;
 const ChunkWorker = @import("ChunkWorker.zig").ChunkWorker;
-const MeshResult = @import("../mesh/mesher.zig").MeshResult;
-const DebugOverlay = @import("../UI/DebugOverlay.zig").DebugOverlay;
 const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
-const GenerationResult = @import("TerrainGenerator.zig").GenerationResult;
 
-const DEBUG_SINGLE_THREADED = @import("../main.zig").DEBUG_SINGLE_THREADED;
-const CHUNK_SIZE = @import("Chunk.zig").CHUNK_SIZE;
-const VOXEL_COUNT = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 const BATCH_SIZE = 16;
+const CHUNK_SIZE = constants.CHUNK_SIZE;
+const DEBUG_SINGLE_THREADED = @import("../main.zig").DEBUG_SINGLE_THREADED;
 
 pub const AtomicUsize = std.atomic.Value(usize);
 
@@ -57,7 +53,7 @@ fn chunkCountInSphericalSegment(
     return acc;
 }
 
-pub fn worldToChunkCoord(coord: WorldCoord) ChunkCoord {
+fn worldToChunkCoord(coord: WorldCoord) ChunkCoord {
     return .{
         @divFloor(@as(i32, @intFromFloat(@floor(coord[0]))), CHUNK_SIZE),
         @divFloor(@as(i32, @intFromFloat(@floor(coord[1]))), CHUNK_SIZE),
@@ -65,7 +61,7 @@ pub fn worldToChunkCoord(coord: WorldCoord) ChunkCoord {
     };
 }
 
-pub fn dist2ToPlayer(player_coord: WorldCoord, slot: *const ChunkSlot) f32 {
+fn dist2ToPlayer(player_coord: WorldCoord, slot: *const ChunkSlot) f32 {
     // Find chunk center
     const world_min: F3 = @floatFromInt(slot.world_min);
     const world_max: F3 = @floatFromInt(slot.world_max);

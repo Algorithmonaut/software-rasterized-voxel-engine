@@ -28,6 +28,7 @@ fn tileWorker(
     frame_primitives: []const PrimitiveRef,
     frame_materials: []const MaterialRef,
     frame_vertices: []const ProjectedVertex,
+    sky_rows: []u32,
 ) void {
     while (true) {
         const tile_base = next.fetchAdd(BATCH_SIZE, .monotonic);
@@ -42,7 +43,7 @@ fn tileWorker(
             if (start == end) continue;
 
             var t = &tile_pool.tiles[tile_i];
-            t.clear();
+            t.clearGradient(sky_rows);
 
             for (tile_refs[start..end]) |prim_i_u| {
                 const prim_i: usize = @intCast(prim_i_u);
@@ -77,7 +78,7 @@ fn tileWorker(
                     );
             }
 
-            t.write_to_fb(buf);
+            t.writeToFb(buf);
         }
     }
 }
@@ -133,6 +134,7 @@ pub const Rasterizer = struct {
         frame_primitives: []const PrimitiveRef,
         frame_materials: []const MaterialRef,
         frame_vertices: []const ProjectedVertex,
+        sky_rows: []u32,
     ) !void {
         // std.debug.print("Primitive count: {}.\n", .{frame_primitives.len});
 
@@ -190,6 +192,7 @@ pub const Rasterizer = struct {
                 frame_primitives,
                 frame_materials,
                 frame_vertices,
+                sky_rows,
             );
         } else {
             // TODO: Move this to engine and only set it once
@@ -207,6 +210,7 @@ pub const Rasterizer = struct {
                     frame_primitives,
                     frame_materials,
                     frame_vertices,
+                    sky_rows,
                 });
             }
 

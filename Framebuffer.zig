@@ -5,37 +5,73 @@ const c = @cImport({
 });
 
 pub const Framebuffer = struct {
-    base: [*]u8, // ptr to the first byte of pixels
+    base: [*]u8,
     pitch: usize, // bytes per row (maybe aligned)
     width: usize,
     height: usize,
 
     /// NOTE: Please do not use this shit
-    pub inline fn set_pixel(self: *const Framebuffer, x: usize, y: usize, color: u32) void {
+    pub inline fn setPixel(self: *const Framebuffer, x: usize, y: usize, color: u32) void {
         const row_ptr: [*]u8 = self.base + @as(usize, @intCast(y)) * self.pitch;
         const row_u32: [*]u32 = @ptrCast(@alignCast(row_ptr));
 
         row_u32[@as(usize, @intCast(x))] = color;
     }
 
-    pub inline fn get_pixel(self: *const Framebuffer, x: usize, y: usize) u32 {
+    pub inline fn getPixel(self: *const Framebuffer, x: usize, y: usize) u32 {
         const row_ptr: [*]u8 = self.base + @as(usize, @intCast(y)) * self.pitch;
         const row_u32: [*]u32 = @ptrCast(@alignCast(row_ptr));
 
         return row_u32[@as(usize, @intCast(x))];
     }
 
-    pub inline fn get_scanline(self: *const Framebuffer, y: usize) [*]u32 {
+    pub inline fn getScanline(self: *const Framebuffer, y: usize) [*]u32 {
         const row_ptr: [*]u8 = self.base + @as(usize, @intCast(y)) * self.pitch;
         const row_u32: [*]u32 = @ptrCast(@alignCast(row_ptr));
 
         return row_u32;
     }
 
-    pub inline fn clear_black(self: *const Framebuffer) void {
+    pub inline fn clearBlack(self: *const Framebuffer) void {
         const row_ptr: [*]u8 = self.base;
         const bytes = self.pitch * self.height;
         @memset(row_ptr[0..bytes], 0);
+    }
+
+    pub inline fn clearColor(self: *const Framebuffer, col: u32) void {
+        const row_ptr: [*]u8 = self.base;
+        const bytes = self.pitch * self.height;
+
+        const pixels: []u32 = std.mem.bytesAsSlice(
+            u32,
+            @as([]align(@alignOf(u32)) u8, @alignCast(row_ptr[0..bytes])),
+        );
+
+        @memset(pixels, col);
+    }
+
+    pub inline fn clearGradient(self: *const Framebuffer, sky_rows: []const u32) void {
+        std.debug.assert(sky_rows.len >= self.height);
+        std.debug.assert(self.pitch % @sizeOf(u32) == 0);
+
+        const row_pixel_count = self.pitch / @sizeOf(u32);
+
+        for (0..self.height) |y| {
+            const row_offset = y * self.pitch;
+
+            const row_bytes_unaligned: []u8 =
+                self.base[row_offset .. row_offset + self.pitch];
+
+            const row_bytes: []align(@alignOf(u32)) u8 =
+                @alignCast(row_bytes_unaligned);
+
+            const row_pixels: []u32 =
+                std.mem.bytesAsSlice(u32, row_bytes);
+
+            std.debug.assert(row_pixels.len == row_pixel_count);
+
+            @memset(row_pixels, sky_rows[y]);
+        }
     }
 
     pub fn drawLine(
@@ -64,7 +100,7 @@ pub const Framebuffer = struct {
 
         while (true) {
             if (x0 >= 0 and x0 < width_i32 and y0 >= 0 and y0 < height_i32) {
-                self.set_pixel(@intCast(x0), @intCast(y0), color);
+                self.setPixel(@intCast(x0), @intCast(y0), color);
             }
 
             if (x0 == x1 and y0 == y1) break;
@@ -121,12 +157,12 @@ pub const Framebuffer = struct {
         y: usize,
         src_col: u32,
     ) void {
-        const dst_col = self.get_pixel(x, y);
+        const dst_col = self.getPixel(x, y);
 
         const a: u8 = @truncate((src_col >> 24));
         if (a == 0) return;
         if (a == 0xFF) {
-            self.set_pixel(x, y, src_col);
+            self.setPixel(x, y, src_col);
             return;
         }
 
@@ -151,6 +187,6 @@ pub const Framebuffer = struct {
 
         const argb: u32 = (0xFF << 24) | (r << 16) | (g << 8) | b;
 
-        self.set_pixel(x, y, argb);
+        self.setPixel(x, y, argb);
     }
 };
