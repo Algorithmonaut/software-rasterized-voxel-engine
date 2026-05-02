@@ -25,6 +25,8 @@ pub const SdlPlatform = struct {
     mouse_capture: bool,
     ev: c.SDL_Event,
 
+    prev_mouse_buttons: u32 = 0,
+
     pub fn init() SdlPlatform {
         const freq = c.SDL_GetPerformanceFrequency();
         const now = c.SDL_GetPerformanceCounter();
@@ -72,11 +74,19 @@ pub const SdlPlatform = struct {
         }
     }
 
-    pub fn process_inputs(
+    fn pressedThisFrame(
+        keys: [*c]const u8,
+        prev_keys: *const [c.SDL_NUM_SCANCODES]u8,
+        scancode: usize,
+    ) bool {
+        return keys[scancode] != 0 and prev_keys[scancode] == 0;
+    }
+
+    // This should return the struct rather than getting Player
+    pub fn processInputs(
         self: *SdlPlatform,
         dt: f32,
         player: *Player,
-        sdl_gfx: *SdlGraphics,
     ) void {
         while (c.SDL_PollEvent(&self.ev) != 0) {
             switch (self.ev.type) {
@@ -91,20 +101,7 @@ pub const SdlPlatform = struct {
                         _ = c.SDL_SetRelativeMouseMode(if (self.mouse_capture) c.SDL_TRUE else c.SDL_FALSE);
 
                         if (self.mouse_capture) self.drop_next_mouse_delta = true;
-
-                        _ = sdl_gfx;
-                        // if (!self.mouse_capture) {
-                        //     const w: c_int = sdl_gfx.width * sdl_gfx.scale;
-                        //     const h: c_int = sdl_gfx.height * sdl_gfx.scale;
-                        //     c.SDL_WarpMouseInWindow(@as(?*c.SDL_Window, sdl_gfx.window), w / 2, h / 2);
-                        // }
                     }
-                    // const scancode = self.ev.key.keysym.scancode;
-
-                    // if (self.ev.key.repeat == 0 and scancode == c.SDL_SCANCODE_Z) {
-                    //     triangle_rasterizer.render_wireframe = !triangle_rasterizer.render_wireframe;
-                    //     std.debug.print("wireframe = {}\n", .{triangle_rasterizer.render_wireframe});
-                    // }
                 },
 
                 else => {},
@@ -125,7 +122,14 @@ pub const SdlPlatform = struct {
                 }
             }
 
+            const mouse_buttons: u32 = c.SDL_GetMouseState(null, null);
             const keys = c.SDL_GetKeyboardState(null);
+
+            const left_down_now = (mouse_buttons & c.SDL_BUTTON_LMASK) != 0;
+            const left_down_before = (self.prev_mouse_buttons & c.SDL_BUTTON_LMASK) != 0;
+
+            const right_down_now = (mouse_buttons & c.SDL_BUTTON_RMASK) != 0;
+            const right_down_before = (self.prev_mouse_buttons & c.SDL_BUTTON_RMASK) != 0;
 
             player.frame_inputs = .{
                 .forward = keys[c.SDL_SCANCODE_W] != 0,
@@ -134,13 +138,17 @@ pub const SdlPlatform = struct {
                 .left = keys[c.SDL_SCANCODE_A] != 0,
                 .up = keys[c.SDL_SCANCODE_SPACE] != 0,
                 .down = keys[c.SDL_SCANCODE_E] != 0,
-                .break_block = keys[c.SDL_SCANCODE_R] != 0,
 
                 .mouse_dx = dx,
                 .mouse_dy = dy,
 
+                .break_block = right_down_now and !right_down_before,
+                .place_block = left_down_now and !left_down_before,
+
                 .dt = dt,
             };
+
+            self.prev_mouse_buttons = mouse_buttons;
         }
     }
 };

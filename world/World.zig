@@ -5,6 +5,8 @@ const constants = @import("../constants.zig");
 const helpers = @import("../helpers.zig");
 
 const I3 = types.I3;
+const Block = types.Block;
+const BitfieldViews = types.BitfieldViews;
 const BlockId = types.BlockId;
 const ChunkCoord = types.ChunkCoord;
 const ChunkSlot = chunk.ChunkSlot;
@@ -15,6 +17,35 @@ const GenerationResult = @import("TerrainGenerator.zig").GenerationResult;
 const TerrainGenerator = @import("TerrainGenerator.zig").TerrainGenerator;
 
 const CHUNK_SIZE = constants.CHUNK_SIZE;
+
+// NOTE: This shouldn't be here
+inline fn generateChunkBitfieldViews(voxels: []Block, bitfield_views: *BitfieldViews) void {
+    bitfield_views.* = std.mem.zeroes(BitfieldViews);
+
+    const size = CHUNK_SIZE;
+
+    for (0..size) |x_u| {
+        const x: u5 = @intCast(x_u);
+        const mx: u32 = @as(u32, 1) << x;
+
+        for (0..size) |y_u| {
+            const y: u5 = @intCast(y_u);
+            const my: u32 = @as(u32, 1) << y;
+
+            for (0..size) |z_u| {
+                const z: u5 = @intCast(z_u);
+                const mz: u32 = @as(u32, 1) << z;
+
+                const idx = helpers.voxelIndex(size, x_u, y_u, z_u);
+                if (voxels[idx].id == .air) continue;
+
+                bitfield_views.solid_x[y_u][z_u] |= mx;
+                bitfield_views.solid_y[x_u][z_u] |= my;
+                bitfield_views.solid_z[x_u][y_u] |= mz;
+            }
+        }
+    }
+}
 
 pub const World = struct {
     // When AutoHashMap grows or rehashes, its values can move, so we need ptr
@@ -101,14 +132,18 @@ pub const World = struct {
         const local_pos: @Vector(3, usize) = @intCast(@mod(coord, chunk_size_vec));
 
         if (self.getChunkSlot(chunk_pos)) |chunk_slot| {
-            if (chunk_slot.current) |cur| cur.voxels[
-                helpers.voxelIndex(
-                    CHUNK_SIZE,
-                    local_pos[0],
-                    local_pos[1],
-                    local_pos[2],
-                )
-            ] = .{ .id = id, .light_level = 0 };
+            if (chunk_slot.current) |cur| {
+                cur.voxels[
+                    helpers.voxelIndex(
+                        CHUNK_SIZE,
+                        local_pos[0],
+                        local_pos[1],
+                        local_pos[2],
+                    )
+                ] = .{ .id = id, .light_level = 0 };
+
+                generateChunkBitfieldViews(cur.voxels, cur.bitfields);
+            }
 
             chunk_slot.state = .generated;
         }

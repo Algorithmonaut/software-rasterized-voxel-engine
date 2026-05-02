@@ -123,10 +123,9 @@ pub fn main() !void {
         var frame = try engine.beginFrame(sky_rows);
         defer engine.endFrame(&frame);
 
-        engine.platform.process_inputs(
+        engine.platform.processInputs(
             frame.dt,
             &engine.player,
-            &engine.graphics,
         );
 
         try engine.player.update(&engine.world);

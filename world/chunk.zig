@@ -74,9 +74,9 @@ pub const ChunkVersion = struct {
     refs: AtomicU32 = AtomicU32.init(1), // one published reference held by the slot
     gen: usize,
 
-    voxels: []Block,
+    voxels: []Block, // This should be const ??
     // TODO: Rename to bitfieldViews
-    bitfields: *const BitfieldViews,
+    bitfields: *BitfieldViews, // This should be const??
 
     pub fn retainVersion(self: *ChunkVersion) void {
         _ = self.refs.fetchAdd(1, .acq_rel);

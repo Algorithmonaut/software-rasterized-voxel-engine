@@ -1,14 +1,15 @@
 const std = @import("std");
 const types = @import("../types.zig");
 const vec = @import("../math/vector.zig");
+const constants = @import("../constants.zig");
 
 const F3 = types.F3;
 const BlockId = types.BlockId;
+const DDA = @import("../DDA.zig");
 const Camera = @import("Camera.zig").Camera;
 const World = @import("../world/World.zig").World;
 const CameraConfig = @import("../EngineConfig.zig").EngineConfig.CameraConfig;
 const PlayerConfig = @import("../EngineConfig.zig").EngineConfig.PlayerConfig;
-const DDA = @import("../DDA.zig");
 
 const AABB = struct {
     min: F3,
@@ -359,7 +360,7 @@ pub const Player = struct {
         if (self.frame_inputs.break_block) {
             std.debug.print("break block", .{});
             self.frame_inputs.break_block = false;
-            const dir_normalized = -vec.normalize(self.camera.to);
+            const dir_normalized = -vec.normalize(self.camera.from - self.camera.to);
             const result = DDA.raycastVoxel(self.camera.from, dir_normalized, 80000, world);
             if (result) |res| {
                 std.debug.print("\n\npos: {any}\n", .{res.cell});
