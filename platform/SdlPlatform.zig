@@ -142,8 +142,8 @@ pub const SdlPlatform = struct {
                 .mouse_dx = dx,
                 .mouse_dy = dy,
 
-                .break_block = right_down_now and !right_down_before,
-                .place_block = left_down_now and !left_down_before,
+                .place_block = right_down_now and !right_down_before,
+                .break_block = left_down_now and !left_down_before,
 
                 .dt = dt,
             };

@@ -145,7 +145,8 @@ pub const World = struct {
                 generateChunkBitfieldViews(cur.voxels, cur.bitfields);
             }
 
-            chunk_slot.state = .generated;
+            chunk_slot.mesh_dirty = true;
+            chunk_slot.markAdjacentChunkAsDirty(self);
         }
     }
 

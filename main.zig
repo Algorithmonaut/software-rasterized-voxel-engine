@@ -191,6 +191,22 @@ pub fn main() !void {
 
         if (engine_config.debug_config.show_fps) engine.platform.fps_counter_update();
 
+        const size: usize = 16;
+        const pixel_center =
+            @Vector(2, usize){ frame.framebuffer.width / 2, frame.framebuffer.height / 2 };
+
+        for (pixel_center[0] - size..pixel_center[0] + size) |x| {
+            frame.framebuffer.set_pixel_blend(x, pixel_center[1], 0xA0FFFFFF);
+            frame.framebuffer.set_pixel_blend(x, pixel_center[1] - 1, 0xA0FFFFFF);
+            frame.framebuffer.set_pixel_blend(x, pixel_center[1] + 1, 0xA0FFFFFF);
+        }
+
+        for (pixel_center[1] - size..pixel_center[1] + size) |y| {
+            frame.framebuffer.set_pixel_blend(pixel_center[0], y, 0xA0FFFFFF);
+            frame.framebuffer.set_pixel_blend(pixel_center[0] - 1, y, 0xA0FFFFFF);
+            frame.framebuffer.set_pixel_blend(pixel_center[0] + 1, y, 0xA0FFFFFF);
+        }
+
         total_frame_ns += frame_timer.read();
     }
 }

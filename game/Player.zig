@@ -357,14 +357,23 @@ pub const Player = struct {
         self.camera.from = self.position + camera_height; // set camera position
         self.camera.to = self.camera.from + forward; // set camera target
 
+        const dir_normalized = -vec.normalize(self.camera.from - self.camera.to);
+
         if (self.frame_inputs.break_block) {
-            std.debug.print("break block", .{});
             self.frame_inputs.break_block = false;
-            const dir_normalized = -vec.normalize(self.camera.from - self.camera.to);
             const result = DDA.raycastVoxel(self.camera.from, dir_normalized, 80000, world);
             if (result) |res| {
                 std.debug.print("\n\npos: {any}\n", .{res.cell});
                 world.setBlockIdFromWorldCoordinates(res.cell, .air);
+            }
+        }
+
+        if (self.frame_inputs.place_block) {
+            self.frame_inputs.place_block = false;
+            const result = DDA.raycastVoxel(self.camera.from, dir_normalized, 80000, world);
+            if (result) |res| {
+                std.debug.print("\n\npos: {any}\n", .{res.cell});
+                world.setBlockIdFromWorldCoordinates(res.cell + res.normal, .stone);
             }
         }
     }
