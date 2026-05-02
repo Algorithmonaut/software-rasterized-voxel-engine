@@ -362,18 +362,21 @@ pub const Player = struct {
         if (self.frame_inputs.break_block) {
             self.frame_inputs.break_block = false;
             const result = DDA.raycastVoxel(self.camera.from, dir_normalized, 80000, world);
-            if (result) |res| {
-                std.debug.print("\n\npos: {any}\n", .{res.cell});
-                world.setBlockIdFromWorldCoordinates(res.cell, .air);
-            }
+
+            if (result) |res| world.setBlockIdFromWorldCoordinates(res.cell, .air);
         }
 
         if (self.frame_inputs.place_block) {
             self.frame_inputs.place_block = false;
             const result = DDA.raycastVoxel(self.camera.from, dir_normalized, 80000, world);
+
             if (result) |res| {
-                std.debug.print("\n\npos: {any}\n", .{res.cell});
-                world.setBlockIdFromWorldCoordinates(res.cell + res.normal, .stone);
+                const coord = res.cell + res.normal;
+
+                var box = self.playerAABB();
+                if (box.overlaps(getBlockAABB(coord[0], coord[1], coord[2]))) return;
+
+                world.setBlockIdFromWorldCoordinates(coord, .stone);
             }
         }
     }

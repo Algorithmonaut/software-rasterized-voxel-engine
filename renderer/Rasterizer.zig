@@ -138,8 +138,6 @@ pub const Rasterizer = struct {
         frame_vertices: []const ProjectedVertex,
         sky_rows: []u32,
     ) !void {
-        // std.debug.print("Primitive count: {}.\n", .{frame_primitives.len});
-
         @memset(self.tile_counts, 0);
 
         //// FIRST PASS | COUNT THE PRIMITIVES FOR EACH TILE ////

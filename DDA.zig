@@ -53,8 +53,6 @@ pub fn raycastVoxel(origin: F3, dir: F3, max_distance: f32, world: *World) ?stru
     cell: I3,
     normal: I3,
 } {
-    std.debug.print("\n\n dir: {}\n\n", .{dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]});
-
     var cell: I3 = @intFromFloat(@floor(origin));
 
     const step = I3{ signStep(dir[0]), signStep(dir[1]), signStep(dir[2]) };
