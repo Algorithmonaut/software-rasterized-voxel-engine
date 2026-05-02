@@ -12,6 +12,7 @@ pub const FX2 = @Vector(2, i32);
 pub const UV = @Vector(2, f32);
 
 pub const WorldCoord = @Vector(3, f32);
+pub const WorldVoxelCoord = @Vector(3, i32);
 
 pub const ChunkCoord = @Vector(3, i32);
 pub const ChunkSliceCoord = @Vector(2, i32); // x, z
@@ -52,3 +53,5 @@ pub const FrameContext = struct {
     dt: f32,
     framebuffer: Framebuffer.Framebuffer,
 };
+
+pub const Face = enum(u8) { left, right, back, front, bottom, top };

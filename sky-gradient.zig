@@ -9,10 +9,6 @@ const Camera = @import("game/Camera.zig").Camera;
 // Doing this per pixel is way to expansive.
 // Instead we proceed with a camera-pitch-dependant row LUT
 
-inline fn clamp01(x: f32) f32 {
-    return @max(0.0, @min(x, 1.0));
-}
-
 inline fn lerpU8(a: u8, b: u8, t: f32) u8 {
     const af: f32 = @floatFromInt(a);
     const bf: f32 = @floatFromInt(b);
@@ -31,7 +27,7 @@ pub fn skyColorFromDirY(dir_y: f32) u32 {
     const top_g: u8 = 0x90;
     const top_b: u8 = 0xFF;
 
-    const t = clamp01(dir_y);
+    const t = helpers.clamp01(dir_y);
     // Make the darker top color appear before looking perfectly straight up.
     // t = clamp01(t / 0.75);
 

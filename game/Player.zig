@@ -1,3 +1,4 @@
+const std = @import("std");
 const types = @import("../types.zig");
 const vec = @import("../math/vector.zig");
 
@@ -7,6 +8,7 @@ const Camera = @import("Camera.zig").Camera;
 const World = @import("../world/World.zig").World;
 const CameraConfig = @import("../EngineConfig.zig").EngineConfig.CameraConfig;
 const PlayerConfig = @import("../EngineConfig.zig").EngineConfig.PlayerConfig;
+const DDA = @import("../DDA.zig");
 
 const AABB = struct {
     min: F3,
@@ -26,6 +28,8 @@ pub const FrameInputs = struct {
     left: bool = false,
     up: bool = false,
     down: bool = false,
+    break_block: bool = false,
+    place_block: bool = false,
 
     mouse_dx: i32 = 0,
     mouse_dy: i32 = 0,
@@ -351,5 +355,16 @@ pub const Player = struct {
         const camera_height = F3{ 0, 1.8, 0 };
         self.camera.from = self.position + camera_height; // set camera position
         self.camera.to = self.camera.from + forward; // set camera target
+
+        if (self.frame_inputs.break_block) {
+            std.debug.print("break block", .{});
+            self.frame_inputs.break_block = false;
+            const dir_normalized = -vec.normalize(self.camera.to);
+            const result = DDA.raycastVoxel(self.camera.from, dir_normalized, 80000, world);
+            if (result) |res| {
+                std.debug.print("\n\npos: {any}\n", .{res.cell});
+                world.setBlockIdFromWorldCoordinates(res.cell, .air);
+            }
+        }
     }
 };

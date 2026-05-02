@@ -1,7 +1,9 @@
 const std = @import("std");
 const types = @import("../types.zig");
+const helpers = @import("../helpers.zig");
 const constants = @import("../constants.zig");
 
+const UV = types.UV;
 const Renderer = @import("../Renderer.zig").Renderer;
 const ProjectedVertex = Renderer.ProjectedVertex;
 const MaterialRef = Renderer.MaterialRef;
@@ -17,11 +19,12 @@ const SUBPIXEL_BITS = constants.SUBPIXEL_BITS;
 const SUBPIXEL_SCALE = constants.SUBPIXEL_SCALE;
 const HALF_SUBPIXEL = constants.HALF_SUBPIXEL;
 
+// TODO: This should not be here
+
 // TODO: Centralize this
 const TEX_TILE_SIZE = 16;
 
 // TODO: Centralize this
-const UV = @Vector(2, f32);
 
 // Effectively mip = floor(log2(rho))
 // TODO: Understand this code
@@ -65,6 +68,46 @@ inline fn triangleFullyOutsideTile(
 
     return false;
 }
+
+// const Fog = struct {
+//     start: f32,
+//     end: f32,
+//
+//     pub inline fn amount(self: Fog, d: f32) f32 {
+//         const denom = self.end - self.start;
+//         if (denom <= 0.0) return 1.0;
+//
+//         return helpers.clamp01((d - self.start) / denom);
+//     }
+// };
+
+// const fog = Fog{ .start = 600, .end = 700 };
+
+// inline fn lerpU8(a: u8, b: u8, t: f32) u8 {
+//     const af: f32 = @floatFromInt(a);
+//     const bf: f32 = @floatFromInt(b);
+//     return @intFromFloat(af + (bf - af) * t);
+// }
+//
+// inline fn blendFogARGB8(src: u32, fog_color: u32, t: f32) u32 {
+//     const src_a: u8 = @intCast((src >> 24) & 0xff);
+//     const src_r: u8 = @intCast((src >> 16) & 0xff);
+//     const src_g: u8 = @intCast((src >> 8) & 0xff);
+//     const src_b: u8 = @intCast(src & 0xff);
+//
+//     const fog_r: u8 = @intCast((fog_color >> 16) & 0xff);
+//     const fog_g: u8 = @intCast((fog_color >> 8) & 0xff);
+//     const fog_b: u8 = @intCast(fog_color & 0xff);
+//
+//     const r = lerpU8(src_r, fog_r, t);
+//     const g = lerpU8(src_g, fog_g, t);
+//     const b = lerpU8(src_b, fog_b, t);
+//
+//     return (@as(u32, src_a) << 24) |
+//         (@as(u32, r) << 16) |
+//         (@as(u32, g) << 8) |
+//         @as(u32, b);
+// }
 
 //// EDGE //////////////////////////////////////////////////////////////////////
 
@@ -176,7 +219,10 @@ inline fn rasterLocalTriangle(
     triangle: *const LocalTriangle,
     tile: *Tile,
     atlas: *Atlas,
+    sky_rows: []u32,
 ) void {
+    _ = sky_rows;
+
     const e0 = triangle.e0;
     const e1 = triangle.e1;
     const e2 = triangle.e2;
@@ -307,6 +353,8 @@ inline fn rasterLocalTriangle(
         var u_num: f32 = u_num_row;
         var v_num: f32 = v_num_row;
 
+        // const fog_color = sky_rows[tile.pos[1] + y];
+
         var x: usize = 0;
         while (x < tile_size) : ({
             x += 1;
@@ -353,6 +401,18 @@ inline fn rasterLocalTriangle(
             color_buf[idx] = texels[tex_idx];
 
             // const texel = texels[tex_idx];
+            //
+            // const view_z: f32 = 1.0 / inv_z;
+            // const fog_t: f32 = fog.amount(view_z);
+            //
+            // color_buf[idx] = if (fog_t <= 0.0)
+            //     texel
+            // else if (fog_t >= 1.0)
+            //     fog_color
+            // else
+            //     blendFogARGB8(texel, fog_color, fog_t);
+
+            // const texel = texels[tex_idx];
             // color_buf[idx] = if (f >= 1.0) texel else fog.blendFogARGB8(texel, f);
         }
     }
@@ -364,6 +424,7 @@ pub inline fn renderQuadInTile(
     vertices: []const ProjectedVertex,
     tile: *Tile,
     atlas: *Atlas,
+    sky_rows: []u32,
 ) void {
     const tri0 = setupLocalTriangle(
         vertices[0],
@@ -380,8 +441,8 @@ pub inline fn renderQuadInTile(
         material.tex_v,
     );
 
-    if (!triangleFullyOutsideTile(&tri0, tile)) rasterLocalTriangle(&tri0, tile, atlas);
-    if (!triangleFullyOutsideTile(&tri1, tile)) rasterLocalTriangle(&tri1, tile, atlas);
+    if (!triangleFullyOutsideTile(&tri0, tile)) rasterLocalTriangle(&tri0, tile, atlas, sky_rows);
+    if (!triangleFullyOutsideTile(&tri1, tile)) rasterLocalTriangle(&tri1, tile, atlas, sky_rows);
 }
 
 pub inline fn renderPolygonInTile(
@@ -389,6 +450,7 @@ pub inline fn renderPolygonInTile(
     vertices: []const ProjectedVertex,
     tile: *Tile,
     atlas: *Atlas,
+    sky_rows: []u32,
 ) void {
     std.debug.assert(vertices.len >= 3);
     std.debug.assert(vertices.len <= 9);
@@ -404,6 +466,6 @@ pub inline fn renderPolygonInTile(
             material.tex_v,
         );
 
-        if (!triangleFullyOutsideTile(&tri, tile)) rasterLocalTriangle(&tri, tile, atlas);
+        if (!triangleFullyOutsideTile(&tri, tile)) rasterLocalTriangle(&tri, tile, atlas, sky_rows);
     }
 }

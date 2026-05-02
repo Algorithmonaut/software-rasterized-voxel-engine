@@ -68,6 +68,7 @@ fn tileWorker(
                         frame_vertices[vert_start..vert_end],
                         t,
                         atlas,
+                        sky_rows,
                     )
                 else
                     rasterization.renderPolygonInTile(
@@ -75,6 +76,7 @@ fn tileWorker(
                         frame_vertices[vert_start..vert_end],
                         t,
                         atlas,
+                        sky_rows,
                     );
             }
 

@@ -94,6 +94,26 @@ pub const World = struct {
         return .unknown;
     }
 
+    pub inline fn setBlockIdFromWorldCoordinates(self: *World, coord: I3, id: BlockId) void {
+        const chunk_size_vec: I3 = @splat(CHUNK_SIZE);
+
+        const chunk_pos: I3 = @divFloor(coord, chunk_size_vec);
+        const local_pos: @Vector(3, usize) = @intCast(@mod(coord, chunk_size_vec));
+
+        if (self.getChunkSlot(chunk_pos)) |chunk_slot| {
+            if (chunk_slot.current) |cur| cur.voxels[
+                helpers.voxelIndex(
+                    CHUNK_SIZE,
+                    local_pos[0],
+                    local_pos[1],
+                    local_pos[2],
+                )
+            ] = .{ .id = id, .light_level = 0 };
+
+            chunk_slot.state = .generated;
+        }
+    }
+
     pub fn publishGenerationResult(
         self: *World,
         allocator: std.mem.Allocator,

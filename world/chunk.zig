@@ -74,7 +74,7 @@ pub const ChunkVersion = struct {
     refs: AtomicU32 = AtomicU32.init(1), // one published reference held by the slot
     gen: usize,
 
-    voxels: []const Block,
+    voxels: []Block,
     // TODO: Rename to bitfieldViews
     bitfields: *const BitfieldViews,
 

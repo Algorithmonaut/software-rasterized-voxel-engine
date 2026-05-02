@@ -1,3 +1,4 @@
+- ( ) Find out how to set blocks properly (properly multithreaded)
 - ( ) Reword the terrain generator:
 -- (x) For lightning, make the terrain generator generate an entire chunk vertical slice rather than 
        than invidual chunks.

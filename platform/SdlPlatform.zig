@@ -134,6 +134,7 @@ pub const SdlPlatform = struct {
                 .left = keys[c.SDL_SCANCODE_A] != 0,
                 .up = keys[c.SDL_SCANCODE_SPACE] != 0,
                 .down = keys[c.SDL_SCANCODE_E] != 0,
+                .break_block = keys[c.SDL_SCANCODE_R] != 0,
 
                 .mouse_dx = dx,
                 .mouse_dy = dy,
