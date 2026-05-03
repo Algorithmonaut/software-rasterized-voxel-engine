@@ -17,9 +17,10 @@ pub const ChunkWorker = struct {
 
     thread: ?std.Thread = null,
 
-    mutex: std.Thread.Mutex = .{},
-    cond: std.Thread.Condition = .{},
+    mutex: std.Io.Mutex = .init,
+    cond: std.Io.Condition = .init,
     stopping: bool = false,
+    io: std.Io,
 
     mesh_job_buffer: SpscRingBuffer(MeshJob),
     mesh_result_buffer: SpscRingBuffer(MeshResult),
@@ -30,6 +31,7 @@ pub const ChunkWorker = struct {
         allocator: std.mem.Allocator,
         comptime ring_buffer_capacity: usize,
         terrain_generator: *TerrainGenerator,
+        io: std.Io,
     ) !ChunkWorker {
         const cap = ring_buffer_capacity;
 
@@ -40,6 +42,8 @@ pub const ChunkWorker = struct {
             .generation_result_buffer = try SpscRingBuffer(GenerationResult).init(allocator, cap),
             .allocator = allocator,
             .terrain_generator = terrain_generator,
+
+            .io = io,
         };
     }
 
@@ -58,10 +62,10 @@ pub const ChunkWorker = struct {
     pub fn stop(self: *ChunkWorker) void {
         if (DEBUG_SINGLE_THREADED) return;
 
-        self.mutex.lock();
+        self.mutex.lock(self.io) catch unreachable;
         self.stopping = true;
-        self.cond.signal();
-        self.mutex.unlock();
+        self.cond.signal(self.io);
+        self.mutex.unlock(self.io);
 
         if (self.thread) |t| {
             t.join();
@@ -81,11 +85,11 @@ pub const ChunkWorker = struct {
 
             try self.mesh_result_buffer.push(result);
         } else {
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            self.mutex.lock(self.io) catch unreachable; // TODO: Not sure if unreachable is the right sol here
+            defer self.mutex.unlock(self.io);
 
             try self.mesh_job_buffer.push(job);
-            self.cond.signal();
+            self.cond.signal(self.io);
         }
     }
 
@@ -98,11 +102,11 @@ pub const ChunkWorker = struct {
             const result = try self.terrain_generator.fillChunkSliceVoxels(self.allocator, coord);
             for (0..result.len) |i| try self.generation_result_buffer.push(result[i]);
         } else {
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            self.mutex.lock(self.io) catch unreachable;
+            defer self.mutex.unlock(self.io);
 
             try self.generation_job_buffer.push(coord);
-            self.cond.signal();
+            self.cond.signal(self.io);
         }
     }
 
@@ -138,15 +142,15 @@ pub const ChunkWorker = struct {
 
     fn workerMain(self: *ChunkWorker) void {
         while (true) {
-            self.mutex.lock();
+            self.mutex.lock(self.io) catch unreachable;
             while (self.mesh_job_buffer.isEmpty() and
                 self.generation_job_buffer.isEmpty() and
                 !self.stopping)
             {
-                self.cond.wait(&self.mutex);
+                self.cond.wait(self.io, &self.mutex) catch unreachable; // TODO: here too
             }
             const should_stop = self.stopping;
-            self.mutex.unlock();
+            self.mutex.unlock(self.io);
 
             if (should_stop) return;
 

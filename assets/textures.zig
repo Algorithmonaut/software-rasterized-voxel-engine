@@ -1,19 +1,13 @@
 const std = @import("std");
+const types = @import("../types.zig");
+const constants = @import("../constants.zig");
 
-const TEX_SIZE = 16;
+const BlockId = types.BlockId;
+const Face = types.Face;
+
+const TEX_SIZE = constants.TEX_SIZE;
 const TEXELS_PER_TEX = TEX_SIZE * TEX_SIZE;
-
-const FACE_COUNT = 6;
-
-const Face = enum(u8) {
-    pub const count = @typeInfo(BlockId).@"enum".fields.len;
-    left,
-    right,
-    back,
-    front,
-    bottom,
-    top,
-};
+const FACE_COUNT = constants.FACE_COUNT;
 
 //// MIP CHAIN ////
 
@@ -139,33 +133,6 @@ const TextureId = enum(usize) {
     ice,
 
     const count = @typeInfo(TextureId).@"enum".fields.len;
-
-    fn index(self: BlockId) usize {
-        return @intFromEnum(self);
-    }
-};
-
-const BlockId = enum(u8) {
-    air = 0,
-
-    dirt = 1,
-    stone = 2,
-    grass = 3,
-    sand = 4,
-    snow = 5,
-    cobblestone = 6,
-    stone_bricks = 7,
-    bricks = 8,
-    oak_plank = 9,
-    oak_log = 10,
-    oak_leaves = 11,
-    coal_ore = 12,
-    iron_ore = 13,
-    deepslate = 14,
-    glass = 15,
-    ice = 16,
-
-    const count = @typeInfo(BlockId).@"enum".fields.len;
 
     fn index(self: BlockId) usize {
         return @intFromEnum(self);

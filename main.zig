@@ -48,12 +48,6 @@ const engine_config = EngineConfig{
         .scale = 1,
         .tile_dimensions = 8, // as John Ousterhout said, voo-doo constants
     },
-    .atlas_config = .{
-        .width = 96,
-        .height = 48 * 5,
-        .tex_w = 16,
-        .tex_h = 16,
-    },
     .debug_config = .{
         .show_fps = true,
         .show_occupied_tiles = false,
@@ -84,20 +78,19 @@ const engine_config = EngineConfig{
 };
 
 var engine: Engine = undefined;
-var total_frame_ns: u64 = 0;
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     @setFloatMode(.optimized);
 
     var allocator = std.heap.smp_allocator;
 
-    engine = try Engine.init(allocator, engine_config);
+    engine = try Engine.init(allocator, engine_config, init.io);
 
     const sky_rows = try allocator.alloc(u32, engine_config.framebuffer_config.height);
     defer allocator.free(sky_rows);
 
-    var pool: std.Thread.Pool = undefined;
-    try pool.init(.{ .allocator = allocator });
+    var group: std.Io.Group = .init;
+    defer group.cancel(init.io);
 
     try engine.chunk_manager.bootstrapInitialChunks(
         allocator,
@@ -109,8 +102,6 @@ pub fn main() !void {
 
     while (engine.platform.running) : (t += 1) {
         try engine.chunk_manager.drainWorkerResults(allocator, &engine.world, engine.chunk_worker);
-
-        var frame_timer = try std.time.Timer.start();
 
         var frame = try engine.beginFrame(sky_rows);
         defer engine.endFrame(&frame);
@@ -164,21 +155,21 @@ pub fn main() !void {
 
         try engine.rasterizer.render(
             allocator,
-            &pool,
             &engine.tile_pool,
             frame.framebuffer,
-            &engine.atlas,
             engine.renderer.frame_primitives.items,
             engine.renderer.frame_materials.items,
             engine.renderer.frame_vertices.items,
             sky_rows,
+            &group,
+            init.io,
         );
 
-        try debug_overlay.render(&engine.text, &frame.framebuffer);
+        try debug_overlay.render(&frame.framebuffer);
         debug_overlay.renderGizmo(&frame.framebuffer, engine.player.camera.from, engine.player.camera.to);
         debug_overlay.frameReset();
 
-        if (engine_config.debug_config.show_tex_atlas) engine.atlas.debugShowAtlas(&frame.framebuffer);
+        // if (engine_config.debug_config.show_tex_atlas) engine.atlas.debugShowAtlas(&frame.framebuffer);
         if (engine_config.debug_config.show_occupied_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);
 
         if (engine_config.debug_config.show_fps) engine.platform.fps_counter_update();
@@ -201,74 +192,72 @@ pub fn main() !void {
             frame.framebuffer.set_pixel_blend(pixel_center[0] + 1, y, 0xA0FFFFFF);
         }
 
-        total_frame_ns += frame_timer.read();
-
         // Draw the item selector
-        const padding = 4;
-        const scale = 3; // try 2, 3, or 4
-
-        const tex_w = engine.atlas.tex_w;
-        const tex_h = engine.atlas.tex_h;
-
-        const scaled_tex_w = tex_w * scale;
-        const scaled_tex_h = tex_h * scale;
-        const scaled_padding = padding * scale;
-
-        const total_width =
-            engine.atlas.block_count * scaled_tex_w +
-            (engine.atlas.block_count + 1) * scaled_padding;
-
-        const start_x = pixel_center[0] - total_width / 2;
-        const start_y = frame.framebuffer.height - scaled_tex_h - scaled_padding * 2;
-
-        // Pick which face column to show in the atlas.
-        // 0 = neg_z, 1 = pos_z, 2 = neg_x, etc. based on PlaneKind.
-        const preview_face_x = 0 * tex_w;
-
-        const selected_block_i: usize = 1; // replace with your actual selected index
-        const border_color: u32 = 0xFFFABD2F;
-        const border_thickness = 2;
-
-        for (0..engine.atlas.block_count) |block_i| {
-            const src_y0 = block_i * tex_h;
-            const dst_x0 = start_x + scaled_padding + block_i * (scaled_tex_w + scaled_padding);
-
-            for (0..tex_h) |src_y| {
-                const src_i = helpers.pixelIndex(
-                    engine.atlas.width,
-                    preview_face_x,
-                    src_y0 + src_y,
-                );
-
-                const src_row = engine.atlas.atlas[src_i .. src_i + tex_w];
-
-                for (0..scale) |repeat_y| {
-                    const dst_y = start_y + src_y * scale + repeat_y;
-                    const dst_row = frame.framebuffer.getScanline(dst_y);
-
-                    for (0..tex_w) |src_x| {
-                        const color = src_row[src_x];
-                        const dst_px = dst_x0 + src_x * scale;
-
-                        for (0..scale) |repeat_x| {
-                            dst_row[dst_px + repeat_x] = color;
-                        }
-                    }
-                }
-            }
-
-            if (block_i == selected_block_i) {
-                drawRectBorder(
-                    &frame.framebuffer,
-                    dst_x0 - border_thickness,
-                    start_y - border_thickness,
-                    scaled_tex_w + border_thickness * 2,
-                    scaled_tex_h + border_thickness * 2,
-                    border_thickness,
-                    border_color,
-                );
-            }
-        }
+        // const padding = 4;
+        // const scale = 3; // try 2, 3, or 4
+        //
+        // const tex_w = engine.atlas.tex_w;
+        // const tex_h = engine.atlas.tex_h;
+        //
+        // const scaled_tex_w = tex_w * scale;
+        // const scaled_tex_h = tex_h * scale;
+        // const scaled_padding = padding * scale;
+        //
+        // const total_width =
+        //     engine.atlas.block_count * scaled_tex_w +
+        //     (engine.atlas.block_count + 1) * scaled_padding;
+        //
+        // const start_x = pixel_center[0] - total_width / 2;
+        // const start_y = frame.framebuffer.height - scaled_tex_h - scaled_padding * 2;
+        //
+        // // Pick which face column to show in the atlas.
+        // // 0 = neg_z, 1 = pos_z, 2 = neg_x, etc. based on PlaneKind.
+        // const preview_face_x = 0 * tex_w;
+        //
+        // const selected_block_i: usize = 1; // replace with your actual selected index
+        // const border_color: u32 = 0xFFFABD2F;
+        // const border_thickness = 2;
+        //
+        // for (0..engine.atlas.block_count) |block_i| {
+        //     const src_y0 = block_i * tex_h;
+        //     const dst_x0 = start_x + scaled_padding + block_i * (scaled_tex_w + scaled_padding);
+        //
+        //     for (0..tex_h) |src_y| {
+        //         const src_i = helpers.pixelIndex(
+        //             engine.atlas.width,
+        //             preview_face_x,
+        //             src_y0 + src_y,
+        //         );
+        //
+        //         const src_row = engine.atlas.atlas[src_i .. src_i + tex_w];
+        //
+        //         for (0..scale) |repeat_y| {
+        //             const dst_y = start_y + src_y * scale + repeat_y;
+        //             const dst_row = frame.framebuffer.getScanline(dst_y);
+        //
+        //             for (0..tex_w) |src_x| {
+        //                 const color = src_row[src_x];
+        //                 const dst_px = dst_x0 + src_x * scale;
+        //
+        //                 for (0..scale) |repeat_x| {
+        //                     dst_row[dst_px + repeat_x] = color;
+        //                 }
+        //             }
+        //         }
+        //     }
+        //
+        //     if (block_i == selected_block_i) {
+        //         drawRectBorder(
+        //             &frame.framebuffer,
+        //             dst_x0 - border_thickness,
+        //             start_y - border_thickness,
+        //             scaled_tex_w + border_thickness * 2,
+        //             scaled_tex_h + border_thickness * 2,
+        //             border_thickness,
+        //             border_color,
+        //         );
+        //     }
+        // }
     }
 }
 

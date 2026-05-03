@@ -6,7 +6,7 @@ pub fn SafeAutoHashMap(comptime K: type, comptime V: type) type {
         const Map = std.AutoHashMap(K, V);
 
         map: Map,
-        mutex: std.Thread.Mutex = .{},
+        mutex: std.Io.Mutex = .init,
 
         pub fn init(allocator: std.mem.Allocator) Self {
             return .{

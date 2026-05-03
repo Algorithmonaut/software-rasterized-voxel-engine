@@ -32,13 +32,6 @@ pub const EngineConfig = struct {
         tile_dimensions: usize, // should be 2^n
     };
 
-    pub const AtlasConfig = struct {
-        width: usize,
-        height: usize,
-        tex_w: usize,
-        tex_h: usize,
-    };
-
     pub const DebugConfig = struct {
         show_fps: bool,
         show_tex_atlas: bool,
@@ -83,7 +76,6 @@ pub const EngineConfig = struct {
     camera_config: CameraConfig,
     player_config: PlayerConfig,
     framebuffer_config: FramebufferConfig,
-    atlas_config: AtlasConfig,
     world_config: WorldConfig,
     debug_config: DebugConfig,
 };

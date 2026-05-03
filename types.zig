@@ -19,14 +19,6 @@ pub const ChunkSliceCoord = @Vector(2, i32); // x, z
 
 pub const WorldVertex = struct { pos: F4, uv: UV };
 
-pub const BlockId = enum(u8) {
-    air = 254,
-    unknown = 255,
-    dirt = 0,
-    stone = 1,
-    grass = 2,
-};
-
 pub const Block = struct {
     id: BlockId,
     /// 4 bits for block light, 4 bits for sky light  (0..15)
@@ -55,12 +47,41 @@ pub const FrameContext = struct {
 };
 
 pub const Face = enum(u8) {
-    pub const count = @typeInfo(BlockId).@"enum".fields.len;
-
     left,
     right,
     back,
     front,
     bottom,
     top,
+
+    pub const count = @typeInfo(BlockId).@"enum".fields.len;
+};
+
+pub const BlockId = enum(u8) {
+    air = 0,
+
+    dirt = 1,
+    stone = 2,
+    grass = 3,
+    sand = 4,
+    snow = 5,
+    cobblestone = 6,
+    stone_bricks = 7,
+    bricks = 8,
+    oak_plank = 9,
+    oak_log = 10,
+    oak_leaves = 11,
+    coal_ore = 12,
+    iron_ore = 13,
+    deepslate = 14,
+    glass = 15,
+    ice = 16,
+
+    unknown = 255,
+
+    const count = @typeInfo(BlockId).@"enum".fields.len;
+
+    fn index(self: BlockId) usize {
+        return @intFromEnum(self);
+    }
 };

@@ -3,7 +3,6 @@ const types = @import("types.zig");
 
 const F3 = types.F3;
 const FrameContext = types.FrameContext;
-const Atlas = @import("Atlas.zig").Atlas;
 const TilePool = @import("tile.zig").TilePool;
 const World = @import("world/World.zig").World;
 const Player = @import("game/Player.zig").Player;
@@ -23,7 +22,6 @@ pub const Engine = struct {
     platform: SdlPlatform,
     graphics: SdlGraphics,
     tile_pool: TilePool,
-    atlas: Atlas,
     world: World,
     rasterizer: Rasterizer,
     terrain_generator: *TerrainGenerator,
@@ -31,11 +29,10 @@ pub const Engine = struct {
     chunk_worker: *ChunkWorker,
     chunk_manager: ChunkManager,
 
-    pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
+    pub fn init(allocator: std.mem.Allocator, conf: EngineConfig, io: std.Io) !Engine {
         const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
         const platform = SdlPlatform.init();
         const graphics = try SdlGraphics.init(conf.framebuffer_config);
-        const atlas = try Atlas.init(allocator, conf.atlas_config);
         const world = World.init(allocator);
         const rasterizer = try Rasterizer.init(allocator, tile_pool.count);
 
@@ -43,7 +40,7 @@ pub const Engine = struct {
         terrain_generator.* = TerrainGenerator.init(conf.world_config);
 
         const chunk_worker = try allocator.create(ChunkWorker);
-        chunk_worker.* = try ChunkWorker.init(allocator, 320_000, terrain_generator);
+        chunk_worker.* = try ChunkWorker.init(allocator, 320_000, terrain_generator, io);
         try chunk_worker.start();
 
         const player = Player.init(
@@ -68,7 +65,6 @@ pub const Engine = struct {
             .platform = platform,
             .graphics = graphics,
             .tile_pool = tile_pool,
-            .atlas = atlas,
             .world = world,
             .rasterizer = rasterizer,
             .terrain_generator = terrain_generator,

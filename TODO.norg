@@ -1,3 +1,4 @@
+- ( ) Re-enable mipmaps
 - ( ) Document half size technique
 - (x) Fix the meshing issue when placing blocking a block
 - ( ) Find out how to set blocks properly (properly multithreaded)

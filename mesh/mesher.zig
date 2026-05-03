@@ -7,7 +7,6 @@ const Block = types.Block;
 const Bitfields = types.Bitfields;
 const ChunkCoord = types.ChunkCoord;
 const Mesh = @import("Mesh.zig").Mesh;
-const Atlas = @import("../Atlas.zig").Atlas;
 const PlaneKind = @import("Mesh.zig").PlaneKind;
 const World = @import("../world/World.zig").World;
 const ChunkVersion = @import("../world/chunk.zig").ChunkVersion;

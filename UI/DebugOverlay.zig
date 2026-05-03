@@ -49,8 +49,8 @@ pub const DebugOverlay = struct {
         color: u32,
         padding: usize,
     ) usize {
-        text.printText(x + padding * text.glyph_width, y, line, color, fb);
-        return text.glyph_height;
+        text.printText(x + padding * text.embedded_source.glyph_width, y, line, color, fb);
+        return text.embedded_source.glyph_height;
     }
 
     inline fn printSectionHeader(
@@ -59,7 +59,7 @@ pub const DebugOverlay = struct {
         y: usize,
         label: []const u8,
     ) usize {
-        return printRawLine(text, fb, x, y, label, header_color, 0);
+        return printRawLine(fb, x, y, label, header_color, 0);
     }
 
     inline fn printFmtLine(
@@ -71,7 +71,7 @@ pub const DebugOverlay = struct {
         args: anytype,
     ) usize {
         const line = std.fmt.bufPrint(buf, fmt, args) catch unreachable;
-        return printRawLine(text, fb, x, y, line, text_color, 3);
+        return printRawLine(fb, x, y, line, text_color, 3);
     }
 
     inline fn printFmtComment(
@@ -83,7 +83,7 @@ pub const DebugOverlay = struct {
         args: anytype,
     ) usize {
         const line = std.fmt.bufPrint(buf, fmt, args) catch unreachable;
-        return printRawLine(text, fb, x, y, line, comment_color, 6);
+        return printRawLine(fb, x, y, line, comment_color, 6);
     }
 
     inline fn addBlankLine() usize {

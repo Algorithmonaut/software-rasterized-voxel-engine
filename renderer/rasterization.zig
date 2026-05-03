@@ -2,15 +2,17 @@ const std = @import("std");
 const types = @import("../types.zig");
 const helpers = @import("../helpers.zig");
 const constants = @import("../constants.zig");
+const textures = @import("../assets/textures.zig");
 
 const UV = types.UV;
+const Face = types.Face;
+const BlockId = types.BlockId;
 const Renderer = @import("../Renderer.zig").Renderer;
 const ProjectedVertex = Renderer.ProjectedVertex;
 const MaterialRef = Renderer.MaterialRef;
 const PrimitiveRef = Renderer.PrimitiveRef;
 
 const Tile = @import("../tile.zig").Tile;
-const Atlas = @import("../Atlas.zig").Atlas;
 const TilePool = @import("../tile.zig").TilePool;
 
 const I3 = types.I3;
@@ -170,8 +172,8 @@ const LocalTriangle = struct {
     area: i32,
     inv_area: f32,
 
-    tex_u: u16,
-    tex_v: u16,
+    id: BlockId,
+    face: Face,
 };
 
 inline fn setupLocalTriangle(
@@ -218,7 +220,6 @@ inline fn setupLocalTriangle(
 inline fn rasterLocalTriangle(
     triangle: *const LocalTriangle,
     tile: *Tile,
-    atlas: *Atlas,
     sky_rows: []u32,
 ) void {
     _ = sky_rows;
@@ -243,33 +244,26 @@ inline fn rasterLocalTriangle(
 
     const tile_size = tile.dimensions;
 
-    // P: Edge values at tile origin, without fill-rule bias
+    // Edge values at tile origin, without fill-rule bias
     const w0_origin: i32 = e0.eval(tx0_fx, ty0_fx);
     const w1_origin: i32 = e1.eval(tx0_fx, ty0_fx);
     const w2_origin: i32 = e2.eval(tx0_fx, ty0_fx);
 
-    // P: Integer edge stepping FOR coverage
+    // Integer edge stepping FOR coverage
     const px_step: i32 = 1 << SUBPIXEL_BITS; // 16
     const right_inc = I3{ e0.A * px_step, e1.A * px_step, e2.A * px_step };
     const down_inc = I3{ e0.B * px_step, e1.B * px_step, e2.B * px_step };
 
     var w_row = I3{ w0_origin, w1_origin, w2_origin };
 
-    // P: Reciprocal depth at vertices.
+    // Reciprocal depth at vertices.
     const q0: f32 = triangle.q0;
     const q1: f32 = triangle.q1;
     const q2: f32 = triangle.q2;
 
     // const avg_rec_depth: f32 = (q0 + q1 + q2) / 3.0;
 
-    const tex_u: usize = @intCast(triangle.tex_u);
-    var tex_v: usize = @intCast(triangle.tex_v);
-
-    // P: Wireframe thickness
-    // const base_thickness: f32 = @floatFromInt(50000 << SUBPIXEL_BITS);
-    // const thickness: i32 = @intFromf32(base_thickness * avg_rec_depth);
-
-    // P: Attribute values multiplied by reciprocal depth
+    // Attribute values multiplied by reciprocal depth
     const uv0: UV = triangle.uv0;
     const uv1: UV = triangle.uv1;
     const uv2: UV = triangle.uv2;
@@ -282,7 +276,7 @@ inline fn rasterLocalTriangle(
     const vq1: f32 = uv1[1] * q1;
     const vq2: f32 = uv2[1] * q2;
 
-    // P: Evaluate depth/uv interpolants once at tile origin
+    // Evaluate depth/uv interpolants once at tile origin
     // This is a 'base' for incremental stepping
     const w0_origin_f: f32 = @floatFromInt(w0_origin);
     const w1_origin_f: f32 = @floatFromInt(w1_origin);
@@ -294,7 +288,7 @@ inline fn rasterLocalTriangle(
     var u_num_row: f32 = w0_origin_f * uq0 + w1_origin_f * uq1 + w2_origin_f * uq2;
     var v_num_row: f32 = w0_origin_f * vq0 + w1_origin_f * vq1 + w2_origin_f * vq2;
 
-    // P: Incremental values (constant x/y derivatives) (for depth/uv + mip level)
+    // Incremental values (constant x/y derivatives) (for depth/uv + mip level)
     const e0_a_f: f32 = @floatFromInt(e0.A);
     const e1_a_f: f32 = @floatFromInt(e1.A);
     const e2_a_f: f32 = @floatFromInt(e2.A);
@@ -313,30 +307,33 @@ inline fn rasterLocalTriangle(
     const v_num_dx: f32 = (e0_a_f * vq0 + e1_a_f * vq1 + e2_a_f * vq2) * px_step_f;
     const v_num_dy: f32 = (e0_b_f * vq0 + e1_b_f * vq1 + e2_b_f * vq2) * px_step_f;
 
-    // P: Mip level selection
-    const du_over_dx = (u_num_dx * den_row - u_num_row * den_dx) /
-        (den_row * den_row);
-    const du_over_dy = (u_num_dy * den_row - u_num_row * den_dy) /
-        (den_row * den_row);
-    const dv_over_dx = (v_num_dx * den_row - v_num_row * den_dx) /
-        (den_row * den_row);
-    const dv_over_dy = (v_num_dy * den_row - v_num_row * den_dy) /
-        (den_row * den_row);
+    // Mip level selection
 
-    const rho_x_2 = du_over_dx * du_over_dx + dv_over_dx * dv_over_dx;
-    const rho_y_2 = du_over_dy * du_over_dy + dv_over_dy * dv_over_dy;
-    const rho = std.math.sqrt(@max(rho_x_2, rho_y_2));
-    const mip = mipFromRho(rho, 4);
+    // const du_over_dx = (u_num_dx * den_row - u_num_row * den_dx) /
+    //     (den_row * den_row);
+    // const du_over_dy = (u_num_dy * den_row - u_num_row * den_dy) /
+    //     (den_row * den_row);
+    // const dv_over_dx = (v_num_dx * den_row - v_num_row * den_dx) /
+    //     (den_row * den_row);
+    // const dv_over_dy = (v_num_dy * den_row - v_num_row * den_dy) /
+    //     (den_row * den_row);
+    //
+    // const rho_x_2 = du_over_dx * du_over_dx + dv_over_dx * dv_over_dx;
+    // const rho_y_2 = du_over_dy * du_over_dy + dv_over_dy * dv_over_dy;
+    // const rho = std.math.sqrt(@max(rho_x_2, rho_y_2));
+    // const mip = mipFromRho(rho, 4);
 
-    tex_v += mip * atlas.tex_h * atlas.block_count;
+    // tex_v += mip * atlas.tex_h * atlas.block_count;
 
     const color_buf = tile.buf;
     const z_buf = tile.z_buf;
-    const texels = atlas.atlas;
-    const atlas_width = atlas.width;
-    const atlas_height = atlas.height;
+    // const texels = atlas.atlas;
+    // const atlas_width = atlas.width;
+    // const atlas_height = atlas.height;
 
-    // P: Stepping
+    const texels = textures.getTextureData(triangle.id, triangle.face, 0);
+
+    // Stepping
     var y: usize = 0;
     while (y < tile_size) : ({
         y += 1;
@@ -389,16 +386,16 @@ inline fn rasterLocalTriangle(
             const u_tile: usize = @intCast(u_i & mask_i);
             const v_tile: usize = @intCast(v_i & mask_i);
 
-            const u: usize = tex_u + u_tile;
-            const v: usize = tex_v + v_tile;
+            const u: usize = u_tile;
+            const v: usize = v_tile;
 
-            const tex_idx: usize = std.math.clamp(
-                u + v * atlas_width,
+            // Avoid magic number
+            const pixel_idx: usize = std.math.clamp(
+                u + v * 16,
                 0,
-                atlas_width * atlas_height - 1,
+                16 * 16 - 1,
             );
-
-            color_buf[idx] = texels[tex_idx];
+            color_buf[idx] = texels[pixel_idx];
 
             // const texel = texels[tex_idx];
             //
@@ -419,11 +416,11 @@ inline fn rasterLocalTriangle(
 }
 
 //// PRIMITIVE RASTERIZATION ///////////////////////////////////////////////////
+
 pub inline fn renderQuadInTile(
     material: MaterialRef,
     vertices: []const ProjectedVertex,
     tile: *Tile,
-    atlas: *Atlas,
     sky_rows: []u32,
 ) void {
     const tri0 = setupLocalTriangle(
@@ -441,15 +438,14 @@ pub inline fn renderQuadInTile(
         material.tex_v,
     );
 
-    if (!triangleFullyOutsideTile(&tri0, tile)) rasterLocalTriangle(&tri0, tile, atlas, sky_rows);
-    if (!triangleFullyOutsideTile(&tri1, tile)) rasterLocalTriangle(&tri1, tile, atlas, sky_rows);
+    if (!triangleFullyOutsideTile(&tri0, tile)) rasterLocalTriangle(&tri0, tile, sky_rows);
+    if (!triangleFullyOutsideTile(&tri1, tile)) rasterLocalTriangle(&tri1, tile, sky_rows);
 }
 
 pub inline fn renderPolygonInTile(
     material: MaterialRef,
     vertices: []const ProjectedVertex,
     tile: *Tile,
-    atlas: *Atlas,
     sky_rows: []u32,
 ) void {
     std.debug.assert(vertices.len >= 3);
@@ -466,6 +462,6 @@ pub inline fn renderPolygonInTile(
             material.tex_v,
         );
 
-        if (!triangleFullyOutsideTile(&tri, tile)) rasterLocalTriangle(&tri, tile, atlas, sky_rows);
+        if (!triangleFullyOutsideTile(&tri, tile)) rasterLocalTriangle(&tri, tile, sky_rows);
     }
 }

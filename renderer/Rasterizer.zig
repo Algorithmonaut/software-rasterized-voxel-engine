@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const Tile = @import("../tile.zig").Tile;
-const Atlas = @import("../Atlas.zig").Atlas;
 const TilePool = @import("../tile.zig").TilePool;
 const Framebuffer = @import("../Framebuffer.zig").Framebuffer;
 
@@ -22,7 +21,6 @@ fn tileWorker(
     next: *AtomicUsize,
     tile_pool: *TilePool,
     buf: Framebuffer,
-    atlas: *Atlas,
     tile_offsets: []const u32,
     tile_refs: []const u32,
     frame_primitives: []const PrimitiveRef,
@@ -67,7 +65,6 @@ fn tileWorker(
                         frame_materials[prim_i],
                         frame_vertices[vert_start..vert_end],
                         t,
-                        atlas,
                         sky_rows,
                     )
                 else
@@ -75,7 +72,6 @@ fn tileWorker(
                         frame_materials[prim_i],
                         frame_vertices[vert_start..vert_end],
                         t,
-                        atlas,
                         sky_rows,
                     );
             }
@@ -129,14 +125,14 @@ pub const Rasterizer = struct {
     pub fn render(
         self: *Rasterizer,
         allocator: std.mem.Allocator,
-        pool: *std.Thread.Pool,
         tile_pool: *TilePool,
         fb: Framebuffer,
-        atlas: *Atlas,
         frame_primitives: []const PrimitiveRef,
         frame_materials: []const MaterialRef,
         frame_vertices: []const ProjectedVertex,
         sky_rows: []u32,
+        group: *std.Io.Group,
+        io: std.Io,
     ) !void {
         @memset(self.tile_counts, 0);
 
@@ -186,7 +182,6 @@ pub const Rasterizer = struct {
                 &next,
                 tile_pool,
                 fb,
-                atlas,
                 self.tile_offsets,
                 self.tile_primitive_indices,
                 frame_primitives,
@@ -197,14 +192,12 @@ pub const Rasterizer = struct {
         } else {
             // TODO: Move this to engine and only set it once
             const worker_count = try std.Thread.getCpuCount();
-            var wg = std.Thread.WaitGroup{};
 
             for (0..worker_count) |_| {
-                pool.spawnWg(&wg, tileWorker, .{
+                group.async(io, tileWorker, .{
                     &next,
                     tile_pool,
                     fb,
-                    atlas,
                     self.tile_offsets,
                     self.tile_primitive_indices,
                     frame_primitives,
@@ -214,7 +207,7 @@ pub const Rasterizer = struct {
                 });
             }
 
-            wg.wait();
+            try group.await(io);
         }
     }
 };

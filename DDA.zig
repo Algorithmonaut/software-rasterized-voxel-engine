@@ -40,8 +40,15 @@ fn computeTDelta(dir_axis: f32) f32 {
 }
 
 fn makeNormal(axis: usize, step: I3) I3 {
-    var normal = I3{ 0, 0, 0 };
-    normal[axis] = -step[axis];
+    var normal: I3 = @splat(0);
+
+    switch (axis) {
+        0 => normal[0] = -step[0],
+        1 => normal[1] = -step[1],
+        2 => normal[2] = -step[2],
+        else => unreachable,
+    }
+
     return normal;
 }
 

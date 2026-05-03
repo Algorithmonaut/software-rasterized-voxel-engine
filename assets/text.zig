@@ -31,14 +31,12 @@ const SourceText = struct {
 
     fn create() !SourceText {
         // TODO: Make the file name more obvious
-        const data = @embedFile("assets/font.bdf");
+        const data = @embedFile("font.bdf");
         var it = std.mem.splitScalar(u8, data, '\n');
 
         var text = std.mem.zeroes(SourceText);
 
-        while (it.next()) |raw_line| {
-            const line = std.mem.trimRight(u8, raw_line, "\r");
-
+        while (it.next()) |line| {
             if (std.mem.startsWith(u8, line, "FONTBOUNDINGBOX")) {
                 const numbers = extractNumbers(line);
                 text.glyph_width = @intCast(numbers[0]);
@@ -51,9 +49,7 @@ const SourceText = struct {
         var bitmap_idx: usize = 0;
         var current_glyph_idx: ?usize = null;
 
-        while (it.next()) |raw_line| {
-            const line = std.mem.trimRight(u8, raw_line, "\r");
-
+        while (it.next()) |line| {
             if (std.mem.startsWith(u8, line, "ENCODING")) {
                 const encoding = extractNumbers(line)[0];
 
@@ -102,8 +98,13 @@ const SourceText = struct {
     }
 };
 
-const embedded_source: SourceText = SourceText.create() catch |err|
-    @compileError("failed to parse embedded font: " ++ @errorName(err));
+pub const embedded_source: SourceText = blk: {
+    @setEvalBranchQuota(1_000_000);
+
+    break :blk SourceText.create() catch |err| {
+        @compileError(@errorName(err));
+    };
+};
 
 pub inline fn printText(
     start_x: usize,
