@@ -1,4 +1,5 @@
-- ( ) Fix the meshing issue when placing blocking a block
+- ( ) Document half size technique
+- (x) Fix the meshing issue when placing blocking a block
 - ( ) Find out how to set blocks properly (properly multithreaded)
 - ( ) Reword the terrain generator:
 -- (x) For lightning, make the terrain generator generate an entire chunk vertical slice rather than 

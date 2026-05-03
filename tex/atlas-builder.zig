@@ -122,6 +122,10 @@ fn setLogicalPixelReplicated(
 }
 
 fn average4(p0: u32, p1: u32, p2: u32, p3: u32) u32 {
+    // Without (+2): integer division by 4 with truncation
+    // With (+2): approximately sum / 4 rounded to nearest
+    const a = (((p0 >> 24) & 0xFF) + ((p1 >> 24) & 0xFF) +
+        ((p2 >> 24) & 0xFF) + ((p3 >> 24) & 0xFF) + 2) >> 2;
     const r = (((p0 >> 16) & 0xFF) + ((p1 >> 16) & 0xFF) +
         ((p2 >> 16) & 0xFF) + ((p3 >> 16) & 0xFF) + 2) >> 2;
     const g = (((p0 >> 8) & 0xFF) + ((p1 >> 8) & 0xFF) +
@@ -129,7 +133,7 @@ fn average4(p0: u32, p1: u32, p2: u32, p3: u32) u32 {
     const b = (((p0 >> 0) & 0xFF) + ((p1 >> 0) & 0xFF) +
         ((p2 >> 0) & 0xFF) + ((p3 >> 0) & 0xFF) + 2) >> 2;
 
-    return (0xFF << 24) | (r << 16) | (g << 8) | b;
+    return (a << 24) | (r << 16) | (g << 8) | b;
 }
 
 fn generateNextMip(

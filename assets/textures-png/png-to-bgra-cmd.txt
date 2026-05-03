@@ -1,0 +1,4 @@
+for f in *.png
+    set out (string replace -r '\.png$' '.argb' -- $f)
+    magick $f -depth 8 BGRA:$out
+end

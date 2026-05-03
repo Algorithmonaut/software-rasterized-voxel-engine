@@ -3,7 +3,7 @@ const vec = @import("../math/vector.zig");
 const types = @import("../types.zig");
 
 const F3 = types.F3;
-const Text = @import("Text.zig").Text;
+const text = @import("../assets/text.zig");
 const Mat4f = @import("../math/matrix.zig").Mat4f;
 const Framebuffer = @import("../Framebuffer.zig").Framebuffer;
 
@@ -42,7 +42,6 @@ pub const DebugOverlay = struct {
     fps: f64 = 0,
 
     inline fn printRawLine(
-        text: *Text,
         fb: *Framebuffer,
         x: usize,
         y: usize,
@@ -55,7 +54,6 @@ pub const DebugOverlay = struct {
     }
 
     inline fn printSectionHeader(
-        text: *Text,
         fb: *Framebuffer,
         x: usize,
         y: usize,
@@ -65,7 +63,6 @@ pub const DebugOverlay = struct {
     }
 
     inline fn printFmtLine(
-        text: *Text,
         fb: *Framebuffer,
         x: usize,
         y: usize,
@@ -78,7 +75,6 @@ pub const DebugOverlay = struct {
     }
 
     inline fn printFmtComment(
-        text: *Text,
         fb: *Framebuffer,
         x: usize,
         y: usize,
@@ -90,8 +86,8 @@ pub const DebugOverlay = struct {
         return printRawLine(text, fb, x, y, line, comment_color, 6);
     }
 
-    inline fn addBlankLine(text: *Text) usize {
-        return text.glyph_height;
+    inline fn addBlankLine() usize {
+        return text.embedded_source.glyph_height;
     }
 
     inline fn boolStr(v: bool) []const u8 {
@@ -195,7 +191,7 @@ pub const DebugOverlay = struct {
         }
     }
 
-    pub fn render(self: *DebugOverlay, text: *Text, fb: *Framebuffer) !void {
+    pub fn render(self: *DebugOverlay, fb: *Framebuffer) !void {
         if (!self.enabled) return;
 
         if (self.clear_black) {
@@ -208,42 +204,42 @@ pub const DebugOverlay = struct {
         var buf: [128]u8 = undefined;
         var nbuf: [32]u8 = undefined;
 
-        y += printSectionHeader(text, fb, margin_x, y, " CHUNKS: ");
-        y += printFmtLine(text, fb, margin_x, y, &buf, " LOADED: {s} ", .{fmtUsizeStep(&nbuf, self.chunk_loaded)});
-        y += printFmtLine(text, fb, margin_x, y, &buf, " ACTIVE: {s} ", .{fmtUsizeStep(&nbuf, self.chunk_active)});
-        y += printFmtLine(text, fb, margin_x, y, &buf, " VISIBLE: {s} ", .{fmtUsizeStep(&nbuf, self.chunk_visible)});
-        y += printFmtLine(text, fb, margin_x, y, &buf, " GENERATING: {s} ", .{fmtUsizeStep(&nbuf, self.chunk_generating)});
-        y += printFmtLine(text, fb, margin_x, y, &buf, " MESHING: {s} ", .{fmtUsizeStep(&nbuf, self.chunk_meshing)});
-        y += addBlankLine(text);
+        y += printSectionHeader(fb, margin_x, y, " CHUNKS: ");
+        y += printFmtLine(fb, margin_x, y, &buf, " LOADED: {s} ", .{fmtUsizeStep(&nbuf, self.chunk_loaded)});
+        y += printFmtLine(fb, margin_x, y, &buf, " ACTIVE: {s} ", .{fmtUsizeStep(&nbuf, self.chunk_active)});
+        y += printFmtLine(fb, margin_x, y, &buf, " VISIBLE: {s} ", .{fmtUsizeStep(&nbuf, self.chunk_visible)});
+        y += printFmtLine(fb, margin_x, y, &buf, " GENERATING: {s} ", .{fmtUsizeStep(&nbuf, self.chunk_generating)});
+        y += printFmtLine(fb, margin_x, y, &buf, " MESHING: {s} ", .{fmtUsizeStep(&nbuf, self.chunk_meshing)});
+        y += addBlankLine();
 
         const initial = self.visible_chunk_triangles;
         const bucket_culled = self.triangles_after_bucket_cull;
         const clipped = self.triangles_after_clipping;
-        y += printSectionHeader(text, fb, margin_x, y, " TRIANGLES: ");
-        y += printFmtLine(text, fb, margin_x, y, &buf, " VISIBLE CHUNK TRIANGLES: {s} ", .{fmtUsizeStep(&nbuf, initial)});
-        y += printFmtLine(text, fb, margin_x, y, &buf, " AFTER BUCKET CULL: {s} ", .{fmtUsizeStep(&nbuf, bucket_culled)});
-        y += printFmtComment(text, fb, margin_x, y, &buf, " remaining: {d:.2}% ", .{remainingPerc(initial, bucket_culled)});
-        y += printFmtComment(text, fb, margin_x, y, &buf, " eliminated: {d:.2}% ", .{eliminatedPerc(initial, bucket_culled)});
-        y += printFmtLine(text, fb, margin_x, y, &buf, " AFTER CLIPPING: {s} ", .{fmtUsizeStep(&nbuf, clipped)});
-        y += printFmtComment(text, fb, margin_x, y, &buf, " remaining: {d:.2}% ", .{remainingPerc(initial, clipped)});
-        y += printFmtComment(text, fb, margin_x, y, &buf, " eliminated: {d:.2}% ", .{eliminatedPerc(initial, clipped)});
-        y += printFmtComment(text, fb, margin_x, y, &buf, " eliminated since bucket cull: {d:.2}% ", .{eliminatedPerc(bucket_culled, clipped)});
-        y += addBlankLine(text);
+        y += printSectionHeader(fb, margin_x, y, " TRIANGLES: ");
+        y += printFmtLine(fb, margin_x, y, &buf, " VISIBLE CHUNK TRIANGLES: {s} ", .{fmtUsizeStep(&nbuf, initial)});
+        y += printFmtLine(fb, margin_x, y, &buf, " AFTER BUCKET CULL: {s} ", .{fmtUsizeStep(&nbuf, bucket_culled)});
+        y += printFmtComment(fb, margin_x, y, &buf, " remaining: {d:.2}% ", .{remainingPerc(initial, bucket_culled)});
+        y += printFmtComment(fb, margin_x, y, &buf, " eliminated: {d:.2}% ", .{eliminatedPerc(initial, bucket_culled)});
+        y += printFmtLine(fb, margin_x, y, &buf, " AFTER CLIPPING: {s} ", .{fmtUsizeStep(&nbuf, clipped)});
+        y += printFmtComment(fb, margin_x, y, &buf, " remaining: {d:.2}% ", .{remainingPerc(initial, clipped)});
+        y += printFmtComment(fb, margin_x, y, &buf, " eliminated: {d:.2}% ", .{eliminatedPerc(initial, clipped)});
+        y += printFmtComment(fb, margin_x, y, &buf, " eliminated since bucket cull: {d:.2}% ", .{eliminatedPerc(bucket_culled, clipped)});
+        y += addBlankLine();
 
-        y += printSectionHeader(text, fb, margin_x, y, " PLAYER: ");
-        y += printFmtLine(text, fb, margin_x, y, &buf, " POSITION: {d:.2} {d:.2} {d:.2} ", .{ self.player_pos[0], self.player_pos[1], self.player_pos[2] });
-        y += printFmtLine(text, fb, margin_x, y, &buf, " VELOCITY: {d:.2} {d:.2} {d:.2} ", .{ self.player_vel[0], self.player_vel[1], self.player_vel[2] });
-        y += printFmtLine(text, fb, margin_x, y, &buf, " GROUNDED: {s} ", .{boolStr(self.player_grounded)});
-        y += printFmtLine(text, fb, margin_x, y, &buf, " NO CLIP: {s} ", .{boolStr(self.player_noclip)});
+        y += printSectionHeader(fb, margin_x, y, " PLAYER: ");
+        y += printFmtLine(fb, margin_x, y, &buf, " POSITION: {d:.2} {d:.2} {d:.2} ", .{ self.player_pos[0], self.player_pos[1], self.player_pos[2] });
+        y += printFmtLine(fb, margin_x, y, &buf, " VELOCITY: {d:.2} {d:.2} {d:.2} ", .{ self.player_vel[0], self.player_vel[1], self.player_vel[2] });
+        y += printFmtLine(fb, margin_x, y, &buf, " GROUNDED: {s} ", .{boolStr(self.player_grounded)});
+        y += printFmtLine(fb, margin_x, y, &buf, " NO CLIP: {s} ", .{boolStr(self.player_noclip)});
 
-        y += addBlankLine(text);
+        y += addBlankLine();
 
-        y += addBlankLine(text);
-        y += addBlankLine(text);
-        y += addBlankLine(text);
+        y += addBlankLine();
+        y += addBlankLine();
+        y += addBlankLine();
 
-        y += printFmtLine(text, fb, margin_x, y, &buf, " | RENDER MODE: {s} ", .{@tagName(self.render_mode)});
-        y += printFmtLine(text, fb, margin_x, y, &buf, " | FPS: {d:.1} ", .{self.fps});
+        y += printFmtLine(fb, margin_x, y, &buf, " | RENDER MODE: {s} ", .{@tagName(self.render_mode)});
+        y += printFmtLine(fb, margin_x, y, &buf, " | FPS: {d:.1} ", .{self.fps});
     }
 
     pub inline fn frameReset(self: *DebugOverlay) void {

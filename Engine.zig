@@ -3,7 +3,6 @@ const types = @import("types.zig");
 
 const F3 = types.F3;
 const FrameContext = types.FrameContext;
-const Text = @import("UI/Text.zig").Text;
 const Atlas = @import("Atlas.zig").Atlas;
 const TilePool = @import("tile.zig").TilePool;
 const World = @import("world/World.zig").World;
@@ -31,12 +30,8 @@ pub const Engine = struct {
     player: Player,
     chunk_worker: *ChunkWorker,
     chunk_manager: ChunkManager,
-    text: Text,
-    text2: Text,
 
     pub fn init(allocator: std.mem.Allocator, conf: EngineConfig) !Engine {
-        const text = try Text.init("font.bdf");
-        const text2 = try Text.init("font2.bdf");
         const tile_pool = try TilePool.init(allocator, conf.framebuffer_config);
         const platform = SdlPlatform.init();
         const graphics = try SdlGraphics.init(conf.framebuffer_config);
@@ -79,8 +74,6 @@ pub const Engine = struct {
             .terrain_generator = terrain_generator,
             .chunk_worker = chunk_worker,
             .chunk_manager = chunk_manager,
-            .text = text,
-            .text2 = text2,
         };
     }
 

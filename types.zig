@@ -54,4 +54,13 @@ pub const FrameContext = struct {
     framebuffer: Framebuffer.Framebuffer,
 };
 
-pub const Face = enum(u8) { left, right, back, front, bottom, top };
+pub const Face = enum(u8) {
+    pub const count = @typeInfo(BlockId).@"enum".fields.len;
+
+    left,
+    right,
+    back,
+    front,
+    bottom,
+    top,
+};
