@@ -454,7 +454,7 @@ pub const ChunkManager = struct {
                 }
             }
 
-            if (inside and entry.slot.state == .ready)
+            if (inside and entry.slot.mesh != null)
                 if (inside) self.visible.appendAssumeCapacity(entry.slot);
         }
 

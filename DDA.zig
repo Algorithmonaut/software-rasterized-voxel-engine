@@ -49,6 +49,8 @@ fn makeNormal(axis: usize, step: I3) I3 {
 // step: whether the ray moves +1, -1, 0 along that axis
 // t_max: the t value where the ray crosses a grid boundary along that axis
 // t_delta: how much t_max increases every time we cross one voxel along that axis
+
+/// Implements digital differencial analysis (DDA)
 pub fn raycastVoxel(origin: F3, dir: F3, max_distance: f32, world: *World) ?struct {
     cell: I3,
     normal: I3,
