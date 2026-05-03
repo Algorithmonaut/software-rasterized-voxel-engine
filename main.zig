@@ -24,11 +24,11 @@ const engine_config = EngineConfig{
         .fov = 90.0,
         .view_distance = 800.0,
         .sensitivity = 0.0025,
-        .near = 0.1,
+        .near = 0.01,
     },
     .player_config = .{
         .initial_position = .{ 0.0, 300.0, 0.0 },
-        .half_size = .{ 0.3, 0.9, 0.3 },
+        .half_size = .{ 0.3, 0.905, 0.3 },
         .speed = 8.0,
 
         .air_accel = 20,

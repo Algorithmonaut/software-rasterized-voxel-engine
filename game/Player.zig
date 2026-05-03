@@ -48,7 +48,7 @@ pub const Player = struct {
     frame_inputs: FrameInputs,
 
     position: F3,
-    half_size: F3,
+    half_size: F3, // full height of the player for collisions
 
     speed: f32,
 
@@ -64,8 +64,6 @@ pub const Player = struct {
         const position = self.position;
         const half_size = self.half_size;
 
-        const height_epsillon = 0.1;
-
         return .{
             .min = .{
                 position[0] - half_size[0],
@@ -75,7 +73,7 @@ pub const Player = struct {
 
             .max = .{
                 position[0] + half_size[0],
-                position[1] + half_size[1] * 2 + height_epsillon,
+                position[1] + half_size[1] * 2,
                 position[2] + half_size[2],
             },
         };
