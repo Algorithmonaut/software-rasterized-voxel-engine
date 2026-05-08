@@ -29,6 +29,7 @@ const MipChain = struct {
             2 => self.l2[0..],
             3 => self.l3[0..],
             4 => self.l4[0..],
+            else => unreachable,
         };
     }
 
@@ -106,6 +107,8 @@ const MipChain = struct {
         generateNextMip(8, &chain.l1, &chain.l2);
         generateNextMip(4, &chain.l2, &chain.l3);
         generateNextMip(2, &chain.l3, &chain.l4);
+
+        return chain;
     }
 };
 
@@ -116,16 +119,16 @@ const TextureId = enum(usize) {
     dirt,
     stone,
     grass_block_side,
-    grass_block_top,
+    grass_block_top_vibrant,
     sand,
     snow,
     cobblestone,
     stone_bricks,
     bricks,
-    oak_plank,
+    oak_planks,
     oak_log_side,
     oak_log_top,
-    oak_leaves,
+    oak_leaves_vibrant,
     coal_ore,
     iron_ore,
     deepslate,
@@ -134,7 +137,7 @@ const TextureId = enum(usize) {
 
     const count = @typeInfo(TextureId).@"enum".fields.len;
 
-    fn index(self: BlockId) usize {
+    fn index(self: TextureId) usize {
         return @intFromEnum(self);
     }
 };
@@ -179,7 +182,7 @@ fn buildBlockDefs() [BlockId.count]BlockDef {
     defs[BlockId.grass.index()] = BlockDef.sideBottomTop(
         .grass_block_side,
         .dirt,
-        .grass_block_top,
+        .grass_block_top_vibrant,
     );
 
     defs[BlockId.sand.index()] = BlockDef.all(.sand);
@@ -188,7 +191,7 @@ fn buildBlockDefs() [BlockId.count]BlockDef {
     defs[BlockId.cobblestone.index()] = BlockDef.all(.cobblestone);
     defs[BlockId.stone_bricks.index()] = BlockDef.all(.stone_bricks);
     defs[BlockId.bricks.index()] = BlockDef.all(.bricks);
-    defs[BlockId.oak_plank.index()] = BlockDef.all(.oak_plank);
+    defs[BlockId.oak_planks.index()] = BlockDef.all(.oak_planks);
 
     defs[BlockId.oak_log.index()] = BlockDef.sideBottomTop(
         .oak_log_side,
@@ -197,7 +200,7 @@ fn buildBlockDefs() [BlockId.count]BlockDef {
     );
 
     defs[BlockId.oak_leaves.index()] = .{
-        .faces = BlockDef.all(.oak_leaves).faces,
+        .faces = BlockDef.all(.oak_leaves_vibrant).faces,
         .transparent = true,
     };
 
@@ -232,12 +235,19 @@ fn buildEmbeddedSource() SourceTextures {
 
         if (tex_id == .air) textures[i] = MipChain.transparent() else {
             // Make this more obvious
-            const path = "assets/textures-argb/" ++ field.name ++ ".argb";
+            const path = "textures-argb/" ++ field.name ++ ".argb";
             textures[i] = MipChain.fromEmbedded(path);
         }
     }
+
+    return textures;
 }
-const embedded_source: SourceTextures = buildEmbeddedSource();
+
+pub const embedded_source: SourceTextures = blk: {
+    @setEvalBranchQuota(100_000);
+    break :blk buildEmbeddedSource();
+};
+// const embedded_source: SourceTextures = buildEmbeddedSource();
 
 pub fn getTextureData(id: BlockId, face: Face, mip_level: usize) []const u32 {
     const tex_id = block_defs[id.index()].faces[@intFromEnum(face)];

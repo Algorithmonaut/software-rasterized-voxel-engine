@@ -180,8 +180,8 @@ inline fn setupLocalTriangle(
     a: ProjectedVertex,
     b: ProjectedVertex,
     c: ProjectedVertex,
-    tex_u: u16,
-    tex_v: u16,
+    id: BlockId,
+    face: Face,
 ) LocalTriangle {
     var tri = LocalTriangle{
         .v0 = a.xy,
@@ -202,8 +202,8 @@ inline fn setupLocalTriangle(
         .area = 0,
         .inv_area = 0,
 
-        .tex_u = tex_u,
-        .tex_v = tex_v,
+        .id = id,
+        .face = face,
     };
 
     tri.e0 = makeEdge(tri.v1, tri.v2);
@@ -427,15 +427,15 @@ pub inline fn renderQuadInTile(
         vertices[0],
         vertices[1],
         vertices[2],
-        material.tex_u,
-        material.tex_v,
+        material.id,
+        material.face,
     );
     const tri1 = setupLocalTriangle(
         vertices[0],
         vertices[2],
         vertices[3],
-        material.tex_u,
-        material.tex_v,
+        material.id,
+        material.face,
     );
 
     if (!triangleFullyOutsideTile(&tri0, tile)) rasterLocalTriangle(&tri0, tile, sky_rows);
@@ -458,8 +458,8 @@ pub inline fn renderPolygonInTile(
             v0,
             vertices[vert_i],
             vertices[vert_i + 1],
-            material.tex_u,
-            material.tex_v,
+            material.id,
+            material.face,
         );
 
         if (!triangleFullyOutsideTile(&tri, tile)) rasterLocalTriangle(&tri, tile, sky_rows);

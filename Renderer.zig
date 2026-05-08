@@ -14,6 +14,8 @@ const UV = types.UV;
 const F3 = types.F3;
 const F4 = types.F4;
 const FX2 = types.FX2;
+const Face = types.Face;
+const BlockId = types.BlockId;
 const WorldVertex = types.WorldVertex;
 
 const TEX_SIZE = constants.TEX_SIZE;
@@ -25,9 +27,18 @@ const SUBPIXEL_MASK = (1 << constants.SUBPIXEL_BITS) - 1;
 
 const eps: f32 = 0.0001;
 
+const plane_kind_to_face_map = [_]Face{
+    .back, // neg_z = 0
+    .front, // pos_z = 1
+    .left, // neg_x = 2
+    .right, // pos_x = 3
+    .bottom, // neg_y = 4
+    .top, // pos_y = 5
+};
+
 pub const Renderer = struct {
     pub const ProjectedVertex = struct { xy: FX2, q: f32, uv: UV };
-    pub const MaterialRef = struct { tex_u: u16, tex_v: u16 };
+    pub const MaterialRef = struct { id: BlockId, face: Face };
     pub const PrimitiveRef = struct {
         base_vertex: u32 = undefined,
         vertex_count: u8 = undefined,
@@ -157,8 +168,8 @@ pub const Renderer = struct {
         self: *Renderer,
         verts_coord: *const [4]F4,
         verts_uv: *const [4]UV,
-        tex_u: u16,
-        tex_v: u16,
+        id: BlockId,
+        face: Face,
     ) void {
         var vertices: [4]ProjectedVertex = undefined;
 
@@ -222,8 +233,8 @@ pub const Renderer = struct {
             .max_ty = tr.max_ty,
         });
         self.frame_materials.appendAssumeCapacity(.{
-            .tex_u = tex_u,
-            .tex_v = tex_v,
+            .id = id,
+            .face = face,
         });
 
         if (self.frame_vertices.items.len != old_vert_len + 4)
@@ -242,8 +253,8 @@ pub const Renderer = struct {
     inline fn emitPolygon(
         self: *Renderer,
         polygon: *ClippedPolygon,
-        tex_u: u16,
-        tex_v: u16,
+        id: BlockId,
+        face: Face,
     ) void {
         const len = polygon.len;
 
@@ -312,8 +323,8 @@ pub const Renderer = struct {
             .max_ty = tr.max_ty,
         });
         self.frame_materials.appendAssumeCapacity(.{
-            .tex_u = tex_u,
-            .tex_v = tex_v,
+            .id = id,
+            .face = face,
         });
 
         if (self.frame_vertices.items.len != old_vert_len + len)
@@ -516,13 +527,11 @@ fn emitRenderQuad(
         .neg_y => .{ .{ v_0, u_0 }, .{ v_1, u_0 }, .{ v_1, u_1 }, .{ v_0, u_1 } },
     };
 
+    const face = plane_kind_to_face_map[@intFromEnum(kind)];
+
     // Quad trivially inside
-
-    const tex_u: u16 = @intFromEnum(kind) * TEX_SIZE;
-    const tex_v: u16 = @intFromEnum(rq.voxel.id) * TEX_SIZE;
-
     if (or_code == 0) {
-        renderer.emitQuad(&verts_coord, &verts_uv, tex_u, tex_v);
+        renderer.emitQuad(&verts_coord, &verts_uv, rq.voxel.id, face);
         return;
     }
 
@@ -558,7 +567,7 @@ fn emitRenderQuad(
         if (clipped_polygon.len < 3) return;
     }
 
-    renderer.emitPolygon(&clipped_polygon, tex_u, tex_v);
+    renderer.emitPolygon(&clipped_polygon, rq.voxel.id, face);
 }
 
 //// TRIVIAL, PLANE NORMAL BASED CULLING | AXIS BUCKET CULL ////////////////////

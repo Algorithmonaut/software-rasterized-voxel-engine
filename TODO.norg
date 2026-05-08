@@ -1,3 +1,4 @@
+- ( ) Move the function to get the texture atlas at the quad/N-gone setup.
 - ( ) Re-enable mipmaps
 - ( ) Document half size technique
 - (x) Fix the meshing issue when placing blocking a block

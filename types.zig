@@ -54,7 +54,7 @@ pub const Face = enum(u8) {
     bottom,
     top,
 
-    pub const count = @typeInfo(BlockId).@"enum".fields.len;
+    pub const count = @typeInfo(Face).@"enum".fields.len;
 };
 
 pub const BlockId = enum(u8) {
@@ -68,7 +68,7 @@ pub const BlockId = enum(u8) {
     cobblestone = 6,
     stone_bricks = 7,
     bricks = 8,
-    oak_plank = 9,
+    oak_planks = 9,
     oak_log = 10,
     oak_leaves = 11,
     coal_ore = 12,
@@ -79,9 +79,9 @@ pub const BlockId = enum(u8) {
 
     unknown = 255,
 
-    const count = @typeInfo(BlockId).@"enum".fields.len;
+    pub const count = @typeInfo(BlockId).@"enum".fields.len;
 
-    fn index(self: BlockId) usize {
+    pub fn index(self: BlockId) usize {
         return @intFromEnum(self);
     }
 };
