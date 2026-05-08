@@ -376,7 +376,7 @@ pub const Player = struct {
                 var box = self.playerAABB();
                 if (box.overlaps(getBlockAABB(coord[0], coord[1], coord[2]))) return;
 
-                world.setBlockIdFromWorldCoordinates(coord, .stone);
+                world.setBlockIdFromWorldCoordinates(coord, .glass);
             }
         }
     }

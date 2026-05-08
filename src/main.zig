@@ -1,15 +1,12 @@
 const std = @import("std");
+const mat = @import("math/matrix.zig");
+const renderer = @import("Renderer.zig");
 const constants = @import("constants.zig");
 const sky_gradient = @import("sky-gradient.zig");
 const helpers = @import("helpers.zig");
 
-const c = @cImport({
-    @cDefine("SDL_MAIN_HANDLED", "1");
-    @cInclude("SDL2/SDL.h");
-});
+const textures = @import("assets/textures.zig");
 
-const mat = @import("math/matrix.zig");
-const renderer = @import("Renderer.zig");
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Engine = @import("Engine.zig").Engine;
 const EngineConfig = @import("EngineConfig.zig").EngineConfig;
@@ -84,6 +81,8 @@ pub fn main(init: std.process.Init) !void {
 
     var allocator = std.heap.smp_allocator;
 
+    const dat = textures.getTextureData(.glass, .back, 0);
+
     engine = try Engine.init(allocator, engine_config, init.io);
 
     const sky_rows = try allocator.alloc(u32, engine_config.framebuffer_config.height);
@@ -97,6 +96,10 @@ pub fn main(init: std.process.Init) !void {
         &engine.world,
         engine.terrain_generator,
     );
+
+    for (dat) |col| {
+        std.debug.print("{x}\n", .{col});
+    }
 
     var t: usize = 0;
 

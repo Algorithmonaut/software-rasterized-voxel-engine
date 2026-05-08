@@ -17,6 +17,7 @@ const TilePool = @import("../tile.zig").TilePool;
 
 const I3 = types.I3;
 const FX2 = types.FX2;
+const TEX_TILE_BITS: usize = 4; // log2(16)
 const SUBPIXEL_BITS = constants.SUBPIXEL_BITS;
 const SUBPIXEL_SCALE = constants.SUBPIXEL_SCALE;
 const HALF_SUBPIXEL = constants.HALF_SUBPIXEL;
@@ -221,6 +222,7 @@ inline fn rasterLocalTriangle(
     triangle: *const LocalTriangle,
     tile: *Tile,
     sky_rows: []u32,
+    // comptime alpha_test: bool,
 ) void {
     _ = sky_rows;
 
@@ -260,8 +262,6 @@ inline fn rasterLocalTriangle(
     const q0: f32 = triangle.q0;
     const q1: f32 = triangle.q1;
     const q2: f32 = triangle.q2;
-
-    // const avg_rec_depth: f32 = (q0 + q1 + q2) / 3.0;
 
     // Attribute values multiplied by reciprocal depth
     const uv0: UV = triangle.uv0;
@@ -308,30 +308,36 @@ inline fn rasterLocalTriangle(
     const v_num_dy: f32 = (e0_b_f * vq0 + e1_b_f * vq1 + e2_b_f * vq2) * px_step_f;
 
     // Mip level selection
+    const du_over_dx = (u_num_dx * den_row - u_num_row * den_dx) /
+        (den_row * den_row);
+    const du_over_dy = (u_num_dy * den_row - u_num_row * den_dy) /
+        (den_row * den_row);
+    const dv_over_dx = (v_num_dx * den_row - v_num_row * den_dx) /
+        (den_row * den_row);
+    const dv_over_dy = (v_num_dy * den_row - v_num_row * den_dy) /
+        (den_row * den_row);
 
-    // const du_over_dx = (u_num_dx * den_row - u_num_row * den_dx) /
-    //     (den_row * den_row);
-    // const du_over_dy = (u_num_dy * den_row - u_num_row * den_dy) /
-    //     (den_row * den_row);
-    // const dv_over_dx = (v_num_dx * den_row - v_num_row * den_dx) /
-    //     (den_row * den_row);
-    // const dv_over_dy = (v_num_dy * den_row - v_num_row * den_dy) /
-    //     (den_row * den_row);
-    //
-    // const rho_x_2 = du_over_dx * du_over_dx + dv_over_dx * dv_over_dx;
-    // const rho_y_2 = du_over_dy * du_over_dy + dv_over_dy * dv_over_dy;
-    // const rho = std.math.sqrt(@max(rho_x_2, rho_y_2));
-    // const mip = mipFromRho(rho, 4);
+    const rho_x_2 = du_over_dx * du_over_dx + dv_over_dx * dv_over_dx;
+    const rho_y_2 = du_over_dy * du_over_dy + dv_over_dy * dv_over_dy;
+    const rho = std.math.sqrt(@max(rho_x_2, rho_y_2));
+    const mip = mipFromRho(rho, 4);
 
-    // tex_v += mip * atlas.tex_h * atlas.block_count;
+    const mip_level: usize = @intCast(mip);
+
+    const mip_shift_i32: std.math.Log2Int(i32) = @intCast(mip_level);
+    const row_shift: std.math.Log2Int(usize) = @intCast(TEX_TILE_BITS - mip_level);
+
+    // mip 0 -> mask 15, row shift 4
+    // mip 1 -> mask 7,  row shift 3
+    // mip 2 -> mask 3,  row shift 2
+    // mip 3 -> mask 1,  row shift 1
+    // mip 4 -> mask 0,  row shift 0
+    const mip_mask_i32: i32 = (@as(i32, TEX_TILE_SIZE) >> mip_shift_i32) - 1;
+
+    const texels = textures.getTextureData(triangle.id, triangle.face, mip);
 
     const color_buf = tile.buf;
     const z_buf = tile.z_buf;
-    // const texels = atlas.atlas;
-    // const atlas_width = atlas.width;
-    // const atlas_height = atlas.height;
-
-    const texels = textures.getTextureData(triangle.id, triangle.face, 0);
 
     // Stepping
     var y: usize = 0;
@@ -366,7 +372,6 @@ inline fn rasterLocalTriangle(
             const idx: usize = row_base + x;
 
             if (inv_z <= z_buf[idx]) continue;
-            z_buf[idx] = inv_z;
 
             // const fog_z: f32 = 1.0 / inv_z;
             // const f: f32 = fog.fogFactor(fog_z);
@@ -376,41 +381,39 @@ inline fn rasterLocalTriangle(
             //     continue;
             // }
 
-            const u_f = u_num / den;
-            const v_f = v_num / den;
+            // One reciprocal instead of two float divisions.
+            const inv_den_for_uv: f32 = 1.0 / den;
 
-            const u_i: i32 = @intFromFloat(@floor(u_f));
-            const v_i: i32 = @intFromFloat(@floor(v_f));
+            // Base-level texel coordinates.
+            const u_base_i: i32 = @intFromFloat(@floor(u_num * inv_den_for_uv));
+            const v_base_i: i32 = @intFromFloat(@floor(v_num * inv_den_for_uv));
 
-            const mask_i: i32 = @intCast(TEX_TILE_SIZE - 1);
-            const u_tile: usize = @intCast(u_i & mask_i);
-            const v_tile: usize = @intCast(v_i & mask_i);
-
-            const u: usize = u_tile;
-            const v: usize = v_tile;
-
-            // Avoid magic number
-            const pixel_idx: usize = std.math.clamp(
-                u + v * 16,
-                0,
-                16 * 16 - 1,
-            );
-            color_buf[idx] = texels[pixel_idx];
-
-            // const texel = texels[tex_idx];
+            // Convert base-level texel coordinate to selected mip coordinate:
             //
-            // const view_z: f32 = 1.0 / inv_z;
-            // const fog_t: f32 = fog.amount(view_z);
-            //
-            // color_buf[idx] = if (fog_t <= 0.0)
-            //     texel
-            // else if (fog_t >= 1.0)
-            //     fog_color
-            // else
-            //     blendFogARGB8(texel, fog_color, fog_t);
+            // mip 0: u >> 0
+            // mip 1: u >> 1
+            // mip 2: u >> 2
+            // mip 3: u >> 3
+            // mip 4: u >> 4
+            const u_mip_i: i32 = u_base_i >> mip_shift_i32;
+            const v_mip_i: i32 = v_base_i >> mip_shift_i32;
 
-            // const texel = texels[tex_idx];
-            // color_buf[idx] = if (f >= 1.0) texel else fog.blendFogARGB8(texel, f);
+            // Power-of-two wrapping inside selected mip.
+            const u: usize = @intCast(u_mip_i & mip_mask_i32);
+            const v: usize = @intCast(v_mip_i & mip_mask_i32);
+
+            // Since mip width is power-of-two:
+            // pixel_idx = u + v * mip_width
+            // becomes:
+            // pixel_idx = u + (v << row_shift)
+            const pixel_idx: usize = u + (v << row_shift);
+
+            const texel = texels[pixel_idx];
+
+            if (((texel >> 24) & 0xFF) == 0) continue;
+
+            color_buf[idx] = texel;
+            z_buf[idx] = inv_z;
         }
     }
 }
