@@ -189,7 +189,7 @@ fn rectMask(start: usize, width: usize) u32 {
     return ((@as(u32, 1) << @intCast(width)) - 1) << @intCast(start);
 }
 
-/// Counts how many consecutive 1 bits appear in mask, starting at bit start
+/// Counts how many consecutive 1 bits appear in mask, starting at bit start.
 fn runWidthFromStart(mask: u32, start: usize) usize {
     const size = CHUNK_SIZE;
 

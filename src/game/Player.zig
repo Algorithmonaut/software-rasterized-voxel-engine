@@ -8,6 +8,8 @@ const BlockId = types.BlockId;
 const DDA = @import("../DDA.zig");
 const Camera = @import("Camera.zig").Camera;
 const World = @import("../world/World.zig").World;
+const ChunkWorker = @import("../world/ChunkWorker.zig").ChunkWorker;
+const ChunkManager = @import("../world/ChunkManager.zig").ChunkManager;
 const CameraConfig = @import("../EngineConfig.zig").EngineConfig.CameraConfig;
 const PlayerConfig = @import("../EngineConfig.zig").EngineConfig.PlayerConfig;
 
@@ -283,7 +285,13 @@ pub const Player = struct {
         }
     }
 
-    pub fn update(self: *Player, world: *World) !void {
+    pub fn update(
+        self: *Player,
+        world: *World,
+        chunk_worker: *ChunkWorker,
+        chunk_manager: *ChunkManager,
+        allocator: std.mem.Allocator,
+    ) !void {
         self.camera.updateCameraTarget(
             self.frame_inputs.mouse_dx,
             self.frame_inputs.mouse_dy,
@@ -364,6 +372,7 @@ pub const Player = struct {
             const result = DDA.raycastVoxel(self.camera.from, dir_normalized, 80000, world);
 
             if (result) |res| world.setBlockIdFromWorldCoordinates(res.cell, .air);
+            try chunk_manager.updateChunks(allocator, world, chunk_worker, self.position, true);
         }
 
         if (self.frame_inputs.place_block) {
@@ -376,7 +385,8 @@ pub const Player = struct {
                 var box = self.playerAABB();
                 if (box.overlaps(getBlockAABB(coord[0], coord[1], coord[2]))) return;
 
-                world.setBlockIdFromWorldCoordinates(coord, .glass);
+                world.setBlockIdFromWorldCoordinates(coord, .ice);
+                try chunk_manager.updateChunks(allocator, world, chunk_worker, self.position, true);
             }
         }
     }

@@ -316,16 +316,17 @@ pub const ChunkManager = struct {
         }
     }
 
-    /// Will run only if player's chunk has changed
+    /// Will run only if player's chunk has changed (and force_update is false)
     pub fn updateChunks(
         self: *ChunkManager,
         allocator: std.mem.Allocator,
         world: *World,
         chunk_worker: *ChunkWorker,
         player_pos: F3,
+        comptime force_update: bool,
     ) !void {
         const player_chunk = worldToChunkCoord(player_pos);
-        // if (@reduce(.And, player_chunk == self.last_player_chunk)) return;
+        if (!force_update and @reduce(.And, player_chunk == self.last_player_chunk)) return;
         self.last_player_chunk = player_chunk;
 
         for (self.loaded.items) |chunk| {

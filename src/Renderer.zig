@@ -72,9 +72,12 @@ pub const Renderer = struct {
 
         return .{
             // TODO: I presume that these are good estimates, but please investigate
-            .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 70_000),
-            .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 70_000),
-            .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 280_000),
+            // .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 70_000),
+            // .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 70_000),
+            // .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 280_000),
+            .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 140_000),
+            .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 140_000),
+            .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 560_000),
 
             .fb_width = conf.width,
             .fb_height = conf.height,
@@ -215,13 +218,6 @@ pub const Renderer = struct {
 
         const tr = self.clampTileRange(min_x, max_x, min_y, max_y);
 
-        const prim_i = self.frame_primitives.items.len;
-        const old_vert_len = self.frame_vertices.items.len;
-        const old_prim_len = self.frame_primitives.items.len;
-        const old_mat_len = self.frame_materials.items.len;
-
-        std.debug.assert(old_prim_len == old_mat_len);
-
         const base: u32 = @intCast(self.frame_vertices.items.len);
         self.frame_vertices.appendSliceAssumeCapacity(&vertices);
         self.frame_primitives.appendAssumeCapacity(.{
@@ -236,18 +232,6 @@ pub const Renderer = struct {
             .id = id,
             .face = face,
         });
-
-        if (self.frame_vertices.items.len != old_vert_len + 4)
-            std.debug.panic(
-                "emitQuad bad append: prim_i={}, old_vert_len={}, new_vert_len={}",
-                .{ prim_i, old_vert_len, self.frame_vertices.items.len },
-            );
-
-        if (self.frame_primitives.items[prim_i].base_vertex != base)
-            std.debug.panic(
-                "emitQuad bad base: prim_i={}, expected={}, got={}",
-                .{ prim_i, base, self.frame_primitives.items[prim_i].base_vertex },
-            );
     }
 
     inline fn emitPolygon(
@@ -305,13 +289,6 @@ pub const Renderer = struct {
 
         const tr = self.clampTileRange(min_x, max_x, min_y, max_y);
 
-        const prim_i = self.frame_primitives.items.len;
-        const old_vert_len = self.frame_vertices.items.len;
-        const old_prim_len = self.frame_primitives.items.len;
-        const old_mat_len = self.frame_materials.items.len;
-
-        std.debug.assert(old_prim_len == old_mat_len);
-
         const base: u32 = @intCast(self.frame_vertices.items.len);
         self.frame_vertices.appendSliceAssumeCapacity(vertices[0..len]);
         self.frame_primitives.appendAssumeCapacity(.{
@@ -326,18 +303,6 @@ pub const Renderer = struct {
             .id = id,
             .face = face,
         });
-
-        if (self.frame_vertices.items.len != old_vert_len + len)
-            std.debug.panic(
-                "emitPolygon bad append: prim_i={}, len={}, old_vert_len={}, new_vert_len={}",
-                .{ prim_i, len, old_vert_len, self.frame_vertices.items.len },
-            );
-
-        if (self.frame_primitives.items[prim_i].base_vertex != base)
-            std.debug.panic(
-                "emitPolygon bad base: prim_i={}, expected={}, got={}",
-                .{ prim_i, base, self.frame_primitives.items[prim_i].base_vertex },
-            );
     }
 };
 
@@ -582,7 +547,6 @@ fn emitBucket(
     combined_mat: Mat4f,
     renderer: *Renderer,
 ) !void {
-
     // POSITIVE AXIS (box is chunk):
     //             ┌───┐
     //  -  ────────┼───┼───────▶  +

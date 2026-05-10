@@ -70,8 +70,11 @@ const MipChain = struct {
                 const avg_b = (((p0 >> 0) & 0xFF) + ((p1 >> 0) & 0xFF) +
                     ((p2 >> 0) & 0xFF) + ((p3 >> 0) & 0xFF) + 2) >> 2;
 
+                // 128 is a bit too low for leafs
+                const out_a: u32 = if (avg_a < 148) 0x00 else 0xFF;
+
                 next[pixelIndex(next_size, x, y)] =
-                    (avg_a << 24) | (avg_r << 16) | (avg_g << 8) | avg_b;
+                    (out_a << 24) | (avg_r << 16) | (avg_g << 8) | avg_b;
             }
         }
     }

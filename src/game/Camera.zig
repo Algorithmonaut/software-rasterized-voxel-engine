@@ -46,8 +46,8 @@ pub const Camera = struct {
                 conf.near,
             ),
 
-            .from = .{ 0, 0, 0 },
-            .to = .{ 0, 0, 1 },
+            .from = .{ 0.0, 300.0, 0.0 },
+            .to = .{ 0.0, 300, 1.0 },
             .yaw = 0.0,
             .pitch = 0.0,
             .view_mat = undefined,

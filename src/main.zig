@@ -4,11 +4,10 @@ const renderer = @import("Renderer.zig");
 const constants = @import("constants.zig");
 const sky_gradient = @import("sky-gradient.zig");
 const helpers = @import("helpers.zig");
-
 const textures = @import("assets/textures.zig");
 
-const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const Engine = @import("Engine.zig").Engine;
+const Framebuffer = @import("Framebuffer.zig").Framebuffer;
 const EngineConfig = @import("EngineConfig.zig").EngineConfig;
 const DebugOverlay = @import("UI/DebugOverlay.zig").DebugOverlay;
 
@@ -40,8 +39,10 @@ const engine_config = EngineConfig{
     },
 
     .framebuffer_config = .{
-        .width = 1920,
-        .height = 1080,
+        // .width = 1920,
+        // .height = 1080,
+        .width = 3440,
+        .height = 1440,
         .scale = 1,
         .tile_dimensions = 8, // as John Ousterhout said, voo-doo constants
     },
@@ -114,7 +115,7 @@ pub fn main(init: std.process.Init) !void {
             &engine.player,
         );
 
-        try engine.player.update(&engine.world);
+        try engine.player.update(&engine.world, engine.chunk_worker, &engine.chunk_manager, allocator);
 
         engine.player.camera.view_mat = mat.createViewMat(
             engine.player.camera.from,
@@ -132,6 +133,7 @@ pub fn main(init: std.process.Init) !void {
             &engine.world,
             engine.chunk_worker,
             engine.player.camera.from,
+            false,
         );
 
         const visible_chunks = engine.chunk_manager.getVisibleActiveChunks(

@@ -143,12 +143,8 @@ pub const ChunkWorker = struct {
     fn workerMain(self: *ChunkWorker) void {
         while (true) {
             self.mutex.lock(self.io) catch unreachable;
-            while (self.mesh_job_buffer.isEmpty() and
-                self.generation_job_buffer.isEmpty() and
-                !self.stopping)
-            {
+            while (self.mesh_job_buffer.isEmpty() and self.generation_job_buffer.isEmpty() and !self.stopping)
                 self.cond.wait(self.io, &self.mutex) catch unreachable; // TODO: here too
-            }
             const should_stop = self.stopping;
             self.mutex.unlock(self.io);
 

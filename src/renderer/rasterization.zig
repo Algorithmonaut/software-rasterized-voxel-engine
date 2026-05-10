@@ -18,16 +18,10 @@ const TilePool = @import("../tile.zig").TilePool;
 const I3 = types.I3;
 const FX2 = types.FX2;
 const TEX_TILE_BITS: usize = 4; // log2(16)
+const TEX_SIZE = constants.TEX_SIZE;
 const SUBPIXEL_BITS = constants.SUBPIXEL_BITS;
 const SUBPIXEL_SCALE = constants.SUBPIXEL_SCALE;
 const HALF_SUBPIXEL = constants.HALF_SUBPIXEL;
-
-// TODO: This should not be here
-
-// TODO: Centralize this
-const TEX_TILE_SIZE = 16;
-
-// TODO: Centralize this
 
 // Effectively mip = floor(log2(rho))
 // TODO: Understand this code
@@ -127,28 +121,33 @@ pub const Edge = struct {
     }
 };
 
+/// Builds the implicit line equation for the directed edge `a -> b`
 inline fn makeEdge(a: @Vector(2, i32), b: @Vector(2, i32)) Edge {
     const x0 = a[0];
     const y0 = a[1];
     const x1 = b[0];
     const y1 = b[1];
-    const dy = y1 - y0;
+
     const dx = x1 - x0;
+    const dy = y1 - y0;
+
+    const A: i32 = dy;
+    const B: i32 = -dx;
+    const C: i32 = y0 * x1 - x0 * y1;
 
     const is_top_left: bool = (dy > 0) or (dy == 0 and dx < 0);
 
-    const eA = y1 - y0;
-    const eB = x0 - x1;
-
-    const tx: i32 = if (eA >= 0) 1 else 0;
-    const ty: i32 = if (eB >= 0) 1 else 0;
+    // This is far from being a good solution, but it is my only solution
+    const conservative_radius: i32 = 1;
+    const conservative_bias: i32 =
+        conservative_radius * @as(i32, @intCast(@abs(A) + @abs(B)));
 
     return .{
-        .A = eA,
-        .B = eB,
-        .C = y0 * x1 - x0 * y1,
+        .A = A,
+        .B = B,
+        .C = C,
         .top_left_bias = if (is_top_left) 0 else -1,
-        .cons_bias = eA * tx + eB * ty,
+        .cons_bias = conservative_bias,
     };
 }
 
@@ -332,7 +331,7 @@ inline fn rasterLocalTriangle(
     // mip 2 -> mask 3,  row shift 2
     // mip 3 -> mask 1,  row shift 1
     // mip 4 -> mask 0,  row shift 0
-    const mip_mask_i32: i32 = (@as(i32, TEX_TILE_SIZE) >> mip_shift_i32) - 1;
+    const mip_mask_i32: i32 = (@as(i32, TEX_SIZE) >> mip_shift_i32) - 1;
 
     const texels = textures.getTextureData(triangle.id, triangle.face, mip);
 
