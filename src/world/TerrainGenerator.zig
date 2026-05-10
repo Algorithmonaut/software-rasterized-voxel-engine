@@ -522,6 +522,8 @@ pub const TerrainGenerator = struct {
     }
 
     inline fn generateChunkBitfieldViews(voxels: []Block, bitfield_views: *BitfieldViews) void {
+        bitfield_views.* = std.mem.zeroes(BitfieldViews);
+
         const size = CHUNK_SIZE;
 
         for (0..size) |x_u| {
@@ -537,11 +539,19 @@ pub const TerrainGenerator = struct {
                     const mz: u32 = @as(u32, 1) << z;
 
                     const idx = helpers.voxelIndex(size, x_u, y_u, z_u);
-                    if (voxels[idx].id == .air) continue;
+                    const voxel = voxels[idx];
 
-                    bitfield_views.solid_x[y_u][z_u] |= mx;
-                    bitfield_views.solid_y[x_u][z_u] |= my;
-                    bitfield_views.solid_z[x_u][y_u] |= mz;
+                    if (voxel.id == .air) continue;
+
+                    bitfield_views.renderable_x[y_u][z_u] |= mx;
+                    bitfield_views.renderable_y[x_u][z_u] |= my;
+                    bitfield_views.renderable_z[x_u][y_u] |= mz;
+
+                    if (!(voxel.id == .glass or voxel.id == .oak_leaves)) {
+                        bitfield_views.occluder_x[y_u][z_u] |= mx;
+                        bitfield_views.occluder_y[x_u][z_u] |= my;
+                        bitfield_views.occluder_z[x_u][y_u] |= mz;
+                    }
                 }
             }
         }

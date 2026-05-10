@@ -36,9 +36,14 @@ pub const ChunkState = enum(u8) {
 pub const Bitfields = [constants.CHUNK_SIZE][constants.CHUNK_SIZE]u32;
 
 pub const BitfieldViews = struct {
-    solid_x: Bitfields, // [y][z], bits are x
-    solid_y: Bitfields, // [x][z], bits are y
-    solid_z: Bitfields, // [x][y], bits are z
+    renderable_x: Bitfields, // [y][z], bits are x
+    renderable_y: Bitfields, // [x][z], bits are y
+    renderable_z: Bitfields, // [x][y], bits are z
+
+    // Used for proper meshing of cutout (pseudo transparent blocks)
+    occluder_x: Bitfields,
+    occluder_y: Bitfields,
+    occluder_z: Bitfields,
 };
 
 pub const FrameContext = struct {

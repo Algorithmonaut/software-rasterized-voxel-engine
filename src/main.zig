@@ -39,10 +39,8 @@ const engine_config = EngineConfig{
     },
 
     .framebuffer_config = .{
-        // .width = 1920,
-        // .height = 1080,
-        .width = 3440,
-        .height = 1440,
+        .width = 1920,
+        .height = 1080,
         .scale = 1,
         .tile_dimensions = 8, // as John Ousterhout said, voo-doo constants
     },
@@ -82,8 +80,6 @@ pub fn main(init: std.process.Init) !void {
 
     var allocator = std.heap.smp_allocator;
 
-    const dat = textures.getTextureData(.glass, .back, 0);
-
     engine = try Engine.init(allocator, engine_config, init.io);
 
     const sky_rows = try allocator.alloc(u32, engine_config.framebuffer_config.height);
@@ -98,12 +94,7 @@ pub fn main(init: std.process.Init) !void {
         engine.terrain_generator,
     );
 
-    for (dat) |col| {
-        std.debug.print("{x}\n", .{col});
-    }
-
     var t: usize = 0;
-
     while (engine.platform.running) : (t += 1) {
         try engine.chunk_manager.drainWorkerResults(allocator, &engine.world, engine.chunk_worker);
 

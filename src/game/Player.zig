@@ -385,7 +385,7 @@ pub const Player = struct {
                 var box = self.playerAABB();
                 if (box.overlaps(getBlockAABB(coord[0], coord[1], coord[2]))) return;
 
-                world.setBlockIdFromWorldCoordinates(coord, .ice);
+                world.setBlockIdFromWorldCoordinates(coord, .glass);
                 try chunk_manager.updateChunks(allocator, world, chunk_worker, self.position, true);
             }
         }
