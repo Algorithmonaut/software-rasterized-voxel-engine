@@ -14,12 +14,15 @@ const ChunkVersion = @import("../world/chunk.zig").ChunkVersion;
 
 const PlaneSet = [32][32]u32;
 const PosVec = @Vector(3, usize);
-
-const CHUNK_SIZE = constants.CHUNK_SIZE;
+const BitPlaneView = [32][32]u32; // TODO: Remove this from here
 
 const voxelIndex = helpers.voxelIndex;
 
-// BINARY CULLED MESHER | GENERATE PLANES //////////////////////////////////////
+const CHUNK_SIZE = constants.CHUNK_SIZE;
+
+comptime {
+    std.debug.assert(CHUNK_SIZE == 32);
+}
 
 fn visiblePos(source_row: u32, occluder_row: u32, neighbor_first_occluder_bit: u32) u32 {
     const blockers = (occluder_row >> 1) | (neighbor_first_occluder_bit << 31);
@@ -31,128 +34,45 @@ fn visibleNeg(source_row: u32, occluder_row: u32, neighbor_last_occluder_bit: u3
     return source_row & ~blockers;
 }
 
-//// X AXIS ////
-
-fn scatterMaskX(planes: *PlaneSet, y: usize, z: usize, mask_in: u32) void {
+inline fn scatterMask(planes: *PlaneSet, row: usize, col: usize, mask_in: u32) void {
     var mask = mask_in;
+
     while (mask != 0) {
-        const x: usize = @ctz(mask);
+        const fixed: usize = @ctz(mask);
         mask &= mask - 1;
-        planes[x][y] |= (@as(u32, 1)) << @intCast(z);
+
+        planes[fixed][row] |= @as(u32, 1) << @intCast(col);
     }
 }
 
-// TODO: Replace [32][32]u32 with bitfields
-fn buildXPlanes(
-    source_x: *const [32][32]u32,
-    occluder_x: *const [32][32]u32,
-    pos_x_neighbor_occluder_x: ?*const [32][32]u32,
-    neg_x_neighbor_occluder_x: ?*const [32][32]u32,
-    pos_x_planes: *PlaneSet,
-    neg_x_planes: *PlaneSet,
+fn buildAxisPlanes(
+    source: *const BitPlaneView,
+    occluder: *const BitPlaneView,
+    pos_neighbor_occluder: ?*const BitPlaneView,
+    neg_neighbor_occluder: ?*const BitPlaneView,
+    pos_planes: *PlaneSet,
+    neg_planes: *PlaneSet,
 ) void {
     const size = CHUNK_SIZE;
 
-    for (0..size) |y| {
-        for (0..size) |z| {
-            const source_row = source_x[y][z];
-            const occluder_row = occluder_x[y][z];
+    for (0..size) |row| {
+        for (0..size) |col| {
+            const source_row = source[row][col];
+            const occluder_row = occluder[row][col];
 
             const neighbor_pos_occluder_bit =
-                if (pos_x_neighbor_occluder_x) |n| n[y][z] & 1 else 0;
+                if (pos_neighbor_occluder) |n| n[row][col] & 1 else 0;
             const neighbor_neg_occluder_bit =
-                if (neg_x_neighbor_occluder_x) |n| (n[y][z] >> 31) & 1 else 0;
+                if (neg_neighbor_occluder) |n| (n[row][col] >> 31) & 1 else 0;
 
             const pos_mask = visiblePos(source_row, occluder_row, neighbor_pos_occluder_bit);
             const neg_mask = visibleNeg(source_row, occluder_row, neighbor_neg_occluder_bit);
 
-            scatterMaskX(pos_x_planes, y, z, pos_mask);
-            scatterMaskX(neg_x_planes, y, z, neg_mask);
+            scatterMask(pos_planes, row, col, pos_mask);
+            scatterMask(neg_planes, row, col, neg_mask);
         }
     }
 }
-
-//// Y AXIS ////
-
-fn scatterMaskY(planes: *PlaneSet, x: usize, z: usize, mask_in: u32) void {
-    var mask = mask_in;
-    while (mask != 0) {
-        const y: usize = @ctz(mask);
-        mask &= mask - 1;
-        planes[y][x] |= (@as(u32, 1)) << @intCast(z);
-    }
-}
-
-fn buildYPlanes(
-    source_y: *const [32][32]u32,
-    occluder_y: *const [32][32]u32,
-    pos_y_neighbor_occluder_y: ?*const [32][32]u32,
-    neg_y_neighbor_occluder_y: ?*const [32][32]u32,
-    pos_y_planes: *PlaneSet,
-    neg_y_planes: *PlaneSet,
-) void {
-    const size = CHUNK_SIZE;
-
-    for (0..size) |x| {
-        for (0..size) |z| {
-            const source_row = source_y[x][z];
-            const occluder_row = occluder_y[x][z];
-
-            const neighbor_pos_occluder_bit =
-                if (pos_y_neighbor_occluder_y) |n| n[x][z] & 1 else 0;
-            const neighbor_neg_occluder_bit =
-                if (neg_y_neighbor_occluder_y) |n| (n[x][z] >> 31) & 1 else 0;
-
-            const pos_mask = visiblePos(source_row, occluder_row, neighbor_pos_occluder_bit);
-            const neg_mask = visibleNeg(source_row, occluder_row, neighbor_neg_occluder_bit);
-
-            scatterMaskY(pos_y_planes, x, z, pos_mask);
-            scatterMaskY(neg_y_planes, x, z, neg_mask);
-        }
-    }
-}
-
-//// Z AXIS ////
-
-fn scatterMaskZ(planes: *PlaneSet, x: usize, y: usize, mask_in: u32) void {
-    var mask = mask_in;
-    while (mask != 0) {
-        const z: usize = @ctz(mask);
-        mask &= mask - 1;
-        planes[z][x] |= (@as(u32, 1)) << @intCast(y);
-    }
-}
-
-fn buildZPlanes(
-    source_z: *const [32][32]u32,
-    occluder_z: *const [32][32]u32,
-    pos_z_neighbor_occluder_z: ?*const [32][32]u32,
-    neg_z_neighbor_occluder_z: ?*const [32][32]u32,
-    pos_z_planes: *PlaneSet,
-    neg_z_planes: *PlaneSet,
-) void {
-    const size = CHUNK_SIZE;
-
-    for (0..size) |x| {
-        for (0..size) |y| {
-            const source_row = source_z[x][y];
-            const occluder_row = occluder_z[x][y];
-
-            const neighbor_pos_occluder_bit =
-                if (pos_z_neighbor_occluder_z) |n| n[x][y] & 1 else 0;
-            const neighbor_neg_occluder_bit =
-                if (neg_z_neighbor_occluder_z) |n| (n[x][y] >> 31) & 1 else 0;
-
-            const pos_mask = visiblePos(source_row, occluder_row, neighbor_pos_occluder_bit);
-            const neg_mask = visibleNeg(source_row, occluder_row, neighbor_neg_occluder_bit);
-
-            scatterMaskZ(pos_z_planes, x, y, pos_mask);
-            scatterMaskZ(neg_z_planes, x, y, neg_mask);
-        }
-    }
-}
-
-//// GREEDY MESHER /////////////////////////////////////////////////////////////
 
 /// Returns a bitmask with exactly width consecutive 1s starting at bit start.
 fn rectMask(start: usize, width: usize) u32 {
@@ -341,7 +261,7 @@ pub fn processMeshJob(allocator: std.mem.Allocator, job: MeshJob) !MeshResult {
     var pos_z_planes = std.mem.zeroes(PlaneSet);
     var neg_z_planes = std.mem.zeroes(PlaneSet);
 
-    buildXPlanes(
+    buildAxisPlanes(
         &job.center.bitfields.renderable_x,
         &job.center.bitfields.occluder_x,
         if (job.pos_x) |v| &v.bitfields.occluder_x else null,
@@ -350,7 +270,7 @@ pub fn processMeshJob(allocator: std.mem.Allocator, job: MeshJob) !MeshResult {
         &neg_x_planes,
     );
 
-    buildYPlanes(
+    buildAxisPlanes(
         &job.center.bitfields.renderable_y,
         &job.center.bitfields.occluder_y,
         if (job.pos_y) |v| &v.bitfields.occluder_y else null,
@@ -359,7 +279,7 @@ pub fn processMeshJob(allocator: std.mem.Allocator, job: MeshJob) !MeshResult {
         &neg_y_planes,
     );
 
-    buildZPlanes(
+    buildAxisPlanes(
         &job.center.bitfields.renderable_z,
         &job.center.bitfields.occluder_z,
         if (job.pos_z) |v| &v.bitfields.occluder_z else null,
