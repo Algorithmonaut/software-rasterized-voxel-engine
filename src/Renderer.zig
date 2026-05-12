@@ -75,9 +75,13 @@ pub const Renderer = struct {
             // .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 70_000),
             // .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 70_000),
             // .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 280_000),
-            .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 140_000),
-            .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 140_000),
-            .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 560_000),
+            // .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 140_000),
+            // .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 140_000),
+            // .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 560_000),
+
+            .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 280_000),
+            .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 280_000),
+            .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 1_120_000),
 
             .fb_width = conf.width,
             .fb_height = conf.height,

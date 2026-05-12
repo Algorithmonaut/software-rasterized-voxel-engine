@@ -33,6 +33,8 @@ pub const FrameInputs = struct {
     down: bool = false,
     break_block: bool = false,
     place_block: bool = false,
+    next_block: bool = false,
+    previous_block: bool = false,
 
     mouse_dx: i32 = 0,
     mouse_dy: i32 = 0,
@@ -61,6 +63,8 @@ pub const Player = struct {
 
     gravity: f32,
     jump_speed: f32,
+
+    selected_block: BlockId,
 
     fn playerAABB(self: *Player) AABB {
         const position = self.position;
@@ -104,6 +108,8 @@ pub const Player = struct {
 
             .gravity = conf.gravity,
             .jump_speed = conf.jump_speed,
+
+            .selected_block = .dirt,
         };
     }
 
@@ -367,6 +373,19 @@ pub const Player = struct {
 
         const dir_normalized = -vec.normalize(self.camera.from - self.camera.to);
 
+        while (true) {
+            // const selected_i =
+            // const block_count = BlockId.count - 2;
+
+            if (self.frame_inputs.next_block) {
+                self.selected_block = @enumFromInt((@intFromEnum(self.selected_block) + 1) % BlockId.count);
+            } else if (self.frame_inputs.previous_block) {
+                self.selected_block = @enumFromInt((@intFromEnum(self.selected_block) - 1) % BlockId.count);
+            }
+
+            if (self.selected_block != .air and self.selected_block != .unknown) break;
+        }
+
         if (self.frame_inputs.break_block) {
             self.frame_inputs.break_block = false;
             const result = DDA.raycastVoxel(self.camera.from, dir_normalized, 80000, world);
@@ -385,7 +404,7 @@ pub const Player = struct {
                 var box = self.playerAABB();
                 if (box.overlaps(getBlockAABB(coord[0], coord[1], coord[2]))) return;
 
-                world.setBlockIdFromWorldCoordinates(coord, .glass);
+                world.setBlockIdFromWorldCoordinates(coord, self.selected_block);
                 try chunk_manager.updateChunks(allocator, world, chunk_worker, self.position, true);
             }
         }

@@ -84,6 +84,9 @@ pub const SdlPlatform = struct {
         dt: f32,
         player: *Player,
     ) void {
+        var scroll_up = false;
+        var scroll_down = false;
+
         while (sdl.SDL_PollEvent(&self.ev) != 0) {
             switch (self.ev.type) {
                 sdl.SDL_QUIT => self.running = false,
@@ -97,6 +100,14 @@ pub const SdlPlatform = struct {
                         _ = sdl.SDL_SetRelativeMouseMode(if (self.mouse_capture) sdl.SDL_TRUE else sdl.SDL_FALSE);
 
                         if (self.mouse_capture) self.drop_next_mouse_delta = true;
+                    }
+                },
+
+                sdl.SDL_MOUSEWHEEL => {
+                    if (self.ev.wheel.y > 0) {
+                        scroll_up = true;
+                    } else if (self.ev.wheel.y < 0) {
+                        scroll_down = true;
                     }
                 },
 
@@ -134,12 +145,13 @@ pub const SdlPlatform = struct {
                 .left = keys[sdl.SDL_SCANCODE_A] != 0,
                 .up = keys[sdl.SDL_SCANCODE_SPACE] != 0,
                 .down = keys[sdl.SDL_SCANCODE_E] != 0,
+                .place_block = right_down_now and !right_down_before,
+                .break_block = left_down_now and !left_down_before,
+                .next_block = scroll_down,
+                .previous_block = scroll_up,
 
                 .mouse_dx = dx,
                 .mouse_dy = dy,
-
-                .place_block = right_down_now and !right_down_before,
-                .break_block = left_down_now and !left_down_before,
 
                 .dt = dt,
             };

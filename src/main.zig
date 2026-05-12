@@ -5,6 +5,7 @@ const constants = @import("constants.zig");
 const sky_gradient = @import("sky-gradient.zig");
 const helpers = @import("helpers.zig");
 const textures = @import("assets/textures.zig");
+const overlay = @import("UI/overlay.zig");
 
 const Engine = @import("Engine.zig").Engine;
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
@@ -171,7 +172,6 @@ pub fn main(init: std.process.Init) !void {
         if (engine_config.debug_config.show_fps) engine.platform.fps_counter_update();
 
         // Draw the crosshair
-
         const size: usize = 16;
         const pixel_center =
             @Vector(2, usize){ frame.framebuffer.width / 2, frame.framebuffer.height / 2 };
@@ -188,98 +188,7 @@ pub fn main(init: std.process.Init) !void {
             frame.framebuffer.set_pixel_blend(pixel_center[0] + 1, y, 0xA0FFFFFF);
         }
 
-        // Draw the item selector
-        // const padding = 4;
-        // const scale = 3; // try 2, 3, or 4
-        //
-        // const tex_w = engine.atlas.tex_w;
-        // const tex_h = engine.atlas.tex_h;
-        //
-        // const scaled_tex_w = tex_w * scale;
-        // const scaled_tex_h = tex_h * scale;
-        // const scaled_padding = padding * scale;
-        //
-        // const total_width =
-        //     engine.atlas.block_count * scaled_tex_w +
-        //     (engine.atlas.block_count + 1) * scaled_padding;
-        //
-        // const start_x = pixel_center[0] - total_width / 2;
-        // const start_y = frame.framebuffer.height - scaled_tex_h - scaled_padding * 2;
-        //
-        // // Pick which face column to show in the atlas.
-        // // 0 = neg_z, 1 = pos_z, 2 = neg_x, etc. based on PlaneKind.
-        // const preview_face_x = 0 * tex_w;
-        //
-        // const selected_block_i: usize = 1; // replace with your actual selected index
-        // const border_color: u32 = 0xFFFABD2F;
-        // const border_thickness = 2;
-        //
-        // for (0..engine.atlas.block_count) |block_i| {
-        //     const src_y0 = block_i * tex_h;
-        //     const dst_x0 = start_x + scaled_padding + block_i * (scaled_tex_w + scaled_padding);
-        //
-        //     for (0..tex_h) |src_y| {
-        //         const src_i = helpers.pixelIndex(
-        //             engine.atlas.width,
-        //             preview_face_x,
-        //             src_y0 + src_y,
-        //         );
-        //
-        //         const src_row = engine.atlas.atlas[src_i .. src_i + tex_w];
-        //
-        //         for (0..scale) |repeat_y| {
-        //             const dst_y = start_y + src_y * scale + repeat_y;
-        //             const dst_row = frame.framebuffer.getScanline(dst_y);
-        //
-        //             for (0..tex_w) |src_x| {
-        //                 const color = src_row[src_x];
-        //                 const dst_px = dst_x0 + src_x * scale;
-        //
-        //                 for (0..scale) |repeat_x| {
-        //                     dst_row[dst_px + repeat_x] = color;
-        //                 }
-        //             }
-        //         }
-        //     }
-        //
-        //     if (block_i == selected_block_i) {
-        //         drawRectBorder(
-        //             &frame.framebuffer,
-        //             dst_x0 - border_thickness,
-        //             start_y - border_thickness,
-        //             scaled_tex_w + border_thickness * 2,
-        //             scaled_tex_h + border_thickness * 2,
-        //             border_thickness,
-        //             border_color,
-        //         );
-        //     }
-        // }
-    }
-}
-
-fn drawRectBorder(
-    fb: *const Framebuffer,
-    x0: usize,
-    y0: usize,
-    w: usize,
-    h: usize,
-    thickness: usize,
-    color: u32,
-) void {
-    const x1 = x0 + w - 1;
-    const y1 = y0 + h - 1;
-
-    for (0..thickness) |t| {
-        // top + bottom
-        for (x0 + t..x1 - t + 1) |x| {
-            fb.setPixel(x, y0 + t, color);
-            fb.setPixel(x, y1 - t, color);
-        }
-
-        // left + right
-        for (y0 + t..y1 - t + 1) |y| {
-            fb.setPixel(x0 + t, y, color);
-            fb.setPixel(x1 - t, y, color);
-        }
+        overlay.drawScaledTexture(&frame.framebuffer, .front, .dirt, 3, 300, 300);
+        overlay.drawBlockSelector(&frame.framebuffer, .air);
     }
 }

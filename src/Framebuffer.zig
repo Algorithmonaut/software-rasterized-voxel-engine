@@ -74,6 +74,34 @@ pub const Framebuffer = struct {
         }
     }
 
+    // TODO: Fully understand this code
+    pub fn drawRectBorder(
+        fb: *const Framebuffer,
+        x0: usize,
+        y0: usize,
+        w: usize,
+        h: usize,
+        thickness: usize,
+        color: u32,
+    ) void {
+        const x1 = x0 + w - 1;
+        const y1 = y0 + h - 1;
+
+        for (0..thickness) |t| {
+            // top + bottom
+            for (x0 + t..x1 - t + 1) |x| {
+                fb.setPixel(x, y0 + t, color);
+                fb.setPixel(x, y1 - t, color);
+            }
+
+            // left + right
+            for (y0 + t..y1 - t + 1) |y| {
+                fb.setPixel(x0 + t, y, color);
+                fb.setPixel(x1 - t, y, color);
+            }
+        }
+    }
+
     pub fn drawLine(
         self: *Framebuffer,
         x0_in: i32,

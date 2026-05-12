@@ -1,9 +1,9 @@
 const std = @import("std");
-const vec = @import("../math/vector.zig");
 const types = @import("../types.zig");
+const vec = @import("../math/vector.zig");
+const text = @import("../assets/text.zig");
 
 const F3 = types.F3;
-const text = @import("../assets/text.zig");
 const Mat4f = @import("../math/matrix.zig").Mat4f;
 const Framebuffer = @import("../Framebuffer.zig").Framebuffer;
 
