@@ -373,17 +373,21 @@ pub const Player = struct {
 
         const dir_normalized = -vec.normalize(self.camera.from - self.camera.to);
 
-        while (true) {
-            // const selected_i =
-            // const block_count = BlockId.count - 2;
+        const first = @intFromEnum(BlockId.dirt);
+        const last = @intFromEnum(BlockId.ice);
 
-            if (self.frame_inputs.next_block) {
-                self.selected_block = @enumFromInt((@intFromEnum(self.selected_block) + 1) % BlockId.count);
-            } else if (self.frame_inputs.previous_block) {
-                self.selected_block = @enumFromInt((@intFromEnum(self.selected_block) - 1) % BlockId.count);
-            }
+        const selected = @intFromEnum(self.selected_block);
 
-            if (self.selected_block != .air and self.selected_block != .unknown) break;
+        if (self.frame_inputs.next_block) {
+            self.selected_block = if (selected == last)
+                .dirt
+            else
+                @enumFromInt(selected + 1);
+        } else if (self.frame_inputs.previous_block) {
+            self.selected_block = if (selected == first)
+                .ice
+            else
+                @enumFromInt(selected - 1);
         }
 
         if (self.frame_inputs.break_block) {

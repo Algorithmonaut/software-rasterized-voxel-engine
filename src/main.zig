@@ -188,7 +188,6 @@ pub fn main(init: std.process.Init) !void {
             frame.framebuffer.set_pixel_blend(pixel_center[0] + 1, y, 0xA0FFFFFF);
         }
 
-        overlay.drawScaledTexture(&frame.framebuffer, .front, .dirt, 3, 300, 300);
-        overlay.drawBlockSelector(&frame.framebuffer, .air);
+        overlay.drawBlockSelector(&frame.framebuffer, engine.player.selected_block);
     }
 }

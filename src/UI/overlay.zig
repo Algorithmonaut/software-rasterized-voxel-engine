@@ -56,7 +56,7 @@ pub fn drawBlockSelector(fb: *Framebuffer, selected_block: BlockId) void {
 
     const height_offset = 30;
 
-    const border_color: u32 = 0xFF1D2021;
+    const border_color: u32 = 0xFFFFFF00;
 
     // We don't want .air nor .unknown
     const block_count = BlockId.count - 2;
@@ -76,11 +76,12 @@ pub fn drawBlockSelector(fb: *Framebuffer, selected_block: BlockId) void {
         x += tex_slot_dim;
     }
 
+    const selected_i: usize = @intCast(@intFromEnum(selected_block) - 1);
     fb.drawRectBorder(
-        @intFromEnum(selected_block) * tex_slot_dim + start_x - padding,
-        start_y - padding,
-        TEX_SIZE * scale + padding,
-        TEX_SIZE * scale + padding,
+        selected_i * tex_slot_dim + start_x,
+        start_y,
+        TEX_SIZE * scale + padding * 2,
+        TEX_SIZE * scale + padding * 2,
         scale,
         border_color,
     );
