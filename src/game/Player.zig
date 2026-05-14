@@ -1,11 +1,13 @@
 const std = @import("std");
 const types = @import("../types.zig");
 const vec = @import("../math/vector.zig");
+const mat = @import("../math/matrix.zig");
 const constants = @import("../constants.zig");
 
 const F3 = types.F3;
 const BlockId = types.BlockId;
 const DDA = @import("../DDA.zig");
+const FrameInputs = types.FrameInputs;
 const Camera = @import("Camera.zig").Camera;
 const World = @import("../world/World.zig").World;
 const ChunkWorker = @import("../world/ChunkWorker.zig").ChunkWorker;
@@ -24,32 +26,12 @@ const AABB = struct {
     }
 };
 
-pub const FrameInputs = struct {
-    forward: bool = false,
-    back: bool = false,
-    right: bool = false,
-    left: bool = false,
-    up: bool = false,
-    down: bool = false,
-    break_block: bool = false,
-    place_block: bool = false,
-    next_block: bool = false,
-    previous_block: bool = false,
-
-    mouse_dx: i32 = 0,
-    mouse_dy: i32 = 0,
-
-    dt: f32 = 0,
-};
-
 pub const Player = struct {
     /// Feet position
     velocity: F3 = .{ 0.0, 0.0, 0.0 },
     grounded: bool = false,
 
     camera: Camera,
-
-    frame_inputs: FrameInputs,
 
     position: F3,
     half_size: F3, // full height of the player for collisions
@@ -95,7 +77,6 @@ pub const Player = struct {
 
         return .{
             .camera = camera,
-            .frame_inputs = .{},
 
             .position = conf.initial_position,
             .half_size = conf.half_size,
@@ -296,16 +277,18 @@ pub const Player = struct {
         world: *World,
         chunk_worker: *ChunkWorker,
         chunk_manager: *ChunkManager,
+        frame_inputs: *const FrameInputs,
         allocator: std.mem.Allocator,
     ) !void {
         self.camera.updateCameraTarget(
-            self.frame_inputs.mouse_dx,
-            self.frame_inputs.mouse_dy,
+            frame_inputs.mouse_dx,
+            frame_inputs.mouse_dy,
         );
 
         // TODO: Move speed from camera to player
 
         // Compute desired horizontal velocity from input
+
         const world_up = F3{ 0, 1, 0 };
 
         // Already normalized
@@ -322,12 +305,12 @@ pub const Player = struct {
         const right = vec.cross_product(fwd_move, world_up);
 
         var wish = F3{ 0, 0, 0 };
-        if (self.frame_inputs.forward) wish += fwd_move;
-        if (self.frame_inputs.back) wish -= fwd_move;
-        if (self.frame_inputs.right) wish += right;
-        if (self.frame_inputs.left) wish -= right;
-        // if (self.frame_inputs.up) wish += world_up;
-        // if (self.frame_inputs.down) wish -= world_up;
+        if (frame_inputs.forward) wish += fwd_move;
+        if (frame_inputs.back) wish -= fwd_move;
+        if (frame_inputs.right) wish += right;
+        if (frame_inputs.left) wish -= right;
+        // if (frame_inputs.up) wish += world_up;
+        // if (frame_inputs.down) wish -= world_up;
 
         // Normalize wish so diagonals aren't faster
         const wish_len2 = vec.dot_product(wish, wish);
@@ -347,26 +330,26 @@ pub const Player = struct {
         var new_vel = approachHorizontal(
             self.velocity,
             desired_velocity,
-            rate * self.frame_inputs.dt,
+            rate * frame_inputs.dt,
         );
 
-        new_vel[1] -= self.gravity * self.frame_inputs.dt;
+        new_vel[1] -= self.gravity * frame_inputs.dt;
 
-        if (self.grounded and self.frame_inputs.up) {
+        if (self.grounded and frame_inputs.up) {
             new_vel[1] = self.jump_speed;
             self.grounded = false;
         }
 
         self.velocity = new_vel;
 
-        const delta = self.velocity * @as(F3, @splat(self.frame_inputs.dt));
+        const delta = self.velocity * @as(F3, @splat(frame_inputs.dt));
 
         self.grounded = false;
         try self.moveX(world, delta[0]);
         try self.moveY(world, delta[1]);
         try self.moveZ(world, delta[2]);
 
-        // self.position += new_vel * @as(Vec3f, @splat(self.frame_inputs.dt));
+        // self.position += new_vel * @as(Vec3f, @splat(frame_inputs.dt));
         const camera_height = F3{ 0, 1.8, 0 };
         self.camera.from = self.position + camera_height; // set camera position
         self.camera.to = self.camera.from + forward; // set camera target
@@ -378,28 +361,26 @@ pub const Player = struct {
 
         const selected = @intFromEnum(self.selected_block);
 
-        if (self.frame_inputs.next_block) {
+        if (frame_inputs.next_block) {
             self.selected_block = if (selected == last)
                 .dirt
             else
                 @enumFromInt(selected + 1);
-        } else if (self.frame_inputs.previous_block) {
+        } else if (frame_inputs.previous_block) {
             self.selected_block = if (selected == first)
                 .ice
             else
                 @enumFromInt(selected - 1);
         }
 
-        if (self.frame_inputs.break_block) {
-            self.frame_inputs.break_block = false;
-            const result = DDA.raycastVoxel(self.camera.from, dir_normalized, 80000, world);
+        if (frame_inputs.break_block) {
+            const result = DDA.raycastVoxel(self.camera.from, dir_normalized, 5, world);
 
             if (result) |res| world.setBlockIdFromWorldCoordinates(res.cell, .air);
             try chunk_manager.updateChunks(allocator, world, chunk_worker, self.position, true);
         }
 
-        if (self.frame_inputs.place_block) {
-            self.frame_inputs.place_block = false;
+        if (frame_inputs.place_block) {
             const result = DDA.raycastVoxel(self.camera.from, dir_normalized, 80000, world);
 
             if (result) |res| {
@@ -412,5 +393,8 @@ pub const Player = struct {
                 try chunk_manager.updateChunks(allocator, world, chunk_worker, self.position, true);
             }
         }
+
+        self.camera.view_mat = mat.createViewMat(self.camera.from, self.camera.to);
+        self.camera.combined_mat = self.camera.proj_mat.mul(self.camera.view_mat);
     }
 };

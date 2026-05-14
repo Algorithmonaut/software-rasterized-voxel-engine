@@ -90,3 +90,21 @@ pub const BlockId = enum(u8) {
         return @intFromEnum(self);
     }
 };
+
+pub const FrameInputs = struct {
+    forward: bool = false,
+    back: bool = false,
+    right: bool = false,
+    left: bool = false,
+    up: bool = false,
+    down: bool = false,
+    break_block: bool = false,
+    place_block: bool = false,
+    next_block: bool = false,
+    previous_block: bool = false,
+
+    mouse_dx: i32 = 0,
+    mouse_dy: i32 = 0,
+
+    dt: f32 = 0,
+};

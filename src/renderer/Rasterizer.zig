@@ -1,13 +1,14 @@
 const std = @import("std");
+const profiler_mod = @import("../profiler.zig");
 
 const Tile = @import("../tile.zig").Tile;
 const TilePool = @import("../tile.zig").TilePool;
 const Framebuffer = @import("../Framebuffer.zig").Framebuffer;
 
-const Renderer = @import("../Renderer.zig").Renderer;
-const ProjectedVertex = Renderer.ProjectedVertex;
-const MaterialRef = Renderer.MaterialRef;
-const PrimitiveRef = Renderer.PrimitiveRef;
+const PrimitiveBuilder = @import("../PrimitiveBuilder.zig");
+const ProjectedVertex = PrimitiveBuilder.ProjectedVertex;
+const MaterialRef = PrimitiveBuilder.MaterialRef;
+const PrimitiveRef = PrimitiveBuilder.PrimitiveRef;
 
 const AtomicUsize = std.atomic.Value(usize);
 
@@ -32,9 +33,10 @@ fn tileWorker(
         const tile_base = next.fetchAdd(BATCH_SIZE, .monotonic);
         if (tile_base >= tile_pool.count) break;
 
-        for (0..BATCH_SIZE) |incr| {
+        const tile_batch_count = @min(BATCH_SIZE, tile_pool.count - tile_base);
+
+        for (0..tile_batch_count) |incr| {
             const tile_i = tile_base + incr;
-            if (tile_i >= tile_pool.count) break;
 
             const start = tile_offsets[tile_i];
             const end = tile_offsets[tile_i + 1];
@@ -133,8 +135,13 @@ pub const Rasterizer = struct {
         sky_rows: []u32,
         group: *std.Io.Group,
         io: std.Io,
+        timings: ?*profiler_mod.RasterizerTimings,
     ) !void {
+        var timer = profiler_mod.ProfTimer.start(io);
+
         @memset(self.tile_counts, 0);
+
+        if (timings) |tm| tm.clear_ns = timer.lap();
 
         //// FIRST PASS | COUNT THE PRIMITIVES FOR EACH TILE ////
         for (frame_primitives) |prim| {
@@ -149,6 +156,8 @@ pub const Rasterizer = struct {
             }
         }
 
+        if (timings) |tm| tm.count_ns = timer.lap();
+
         var sum: u32 = 0;
         for (0..tile_pool.count) |t| {
             self.tile_offsets[t] = sum;
@@ -156,8 +165,12 @@ pub const Rasterizer = struct {
         }
         self.tile_offsets[tile_pool.count] = sum;
 
+        if (timings) |tm| tm.prefix_ns = timer.lap();
+
         try self.ensureTileRefsCapacity(allocator, sum);
         @memcpy(self.write_pos[0..], self.tile_offsets[0..]);
+
+        if (timings) |tm| tm.ensure_refs_ns = timer.lap();
 
         //// SECOND PASS | SCATTER PRIMITIVE INDICES ////
         for (0..frame_primitives.len) |prim_i| {
@@ -173,6 +186,8 @@ pub const Rasterizer = struct {
                 }
             }
         }
+
+        if (timings) |tm| tm.scatter_ns = timer.lap();
 
         //// THIRD PASS | RENDER TILES ////
         var next = AtomicUsize.init(0);
@@ -209,5 +224,7 @@ pub const Rasterizer = struct {
 
             try group.await(io);
         }
+
+        if (timings) |tm| tm.tiles_ns = timer.lap();
     }
 };

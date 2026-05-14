@@ -10,7 +10,6 @@ pub const Framebuffer = struct {
     width: usize,
     height: usize,
 
-    /// NOTE: Please do not use this shit
     pub inline fn setPixel(self: *const Framebuffer, x: usize, y: usize, color: u32) void {
         const row_ptr: [*]u8 = self.base + @as(usize, @intCast(y)) * self.pitch;
         const row_u32: [*]u32 = @ptrCast(@alignCast(row_ptr));

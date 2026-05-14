@@ -6,6 +6,7 @@ const sky_gradient = @import("sky-gradient.zig");
 const helpers = @import("helpers.zig");
 const textures = @import("assets/textures.zig");
 const overlay = @import("UI/overlay.zig");
+const profiler_mod = @import("profiler.zig");
 
 const Engine = @import("Engine.zig").Engine;
 const Framebuffer = @import("Framebuffer.zig").Framebuffer;
@@ -17,6 +18,8 @@ const CHUNK_SIZE = constants.CHUNK_SIZE;
 
 pub const ENABLE_DEBUG_OVERLAY = true;
 pub var debug_overlay = DebugOverlay{};
+
+var profiler = profiler_mod.RollingProfiler{};
 
 const engine_config = EngineConfig{
     .camera_config = .{
@@ -95,30 +98,57 @@ pub fn main(init: std.process.Init) !void {
         engine.terrain_generator,
     );
 
+    {
+        const cfg = engine_config.world_config;
+
+        var y: i32 = @intCast(cfg.max_world_y - 1);
+        const min_y: i32 = @intCast(cfg.min_world_y);
+
+        while (y >= min_y) : (y -= 1) {
+            const block = engine.world.getBlockIdFromWorldCoordinates(.{ 0, y, 0 });
+
+            if (block != .air and block != .unknown) {
+                engine.player.position = .{
+                    0.5,
+                    @as(f32, @floatFromInt(y)) + 1.001,
+                    0.5,
+                };
+                break;
+            }
+        }
+    }
+
+    engine.platform.resetFrameClock();
+
     var t: usize = 0;
     while (engine.platform.running) : (t += 1) {
-        try engine.chunk_manager.drainWorkerResults(allocator, &engine.world, engine.chunk_worker);
+        var timer = profiler_mod.ProfTimer.start(init.io);
+        var timings = profiler_mod.FrameTimings{};
+
+        try engine.chunk_manager.drainWorkerResults(
+            allocator,
+            &engine.world,
+            engine.chunk_worker,
+        );
+        timings.drain_chunks_ns = timer.lap();
 
         var frame = try engine.beginFrame(sky_rows);
-        defer engine.endFrame(&frame);
+        timings.begin_frame_ns = timer.lap();
 
-        engine.platform.processInputs(
-            frame.dt,
-            &engine.player,
+        const frame_inputs = engine.platform.processInputs(frame.dt);
+        timings.input_ns = timer.lap();
+
+        try engine.player.update(
+            &engine.world,
+            engine.chunk_worker,
+            &engine.chunk_manager,
+            &frame_inputs,
+            allocator,
         );
-
-        try engine.player.update(&engine.world, engine.chunk_worker, &engine.chunk_manager, allocator);
-
-        engine.player.camera.view_mat = mat.createViewMat(
-            engine.player.camera.from,
-            engine.player.camera.to,
-        );
-
-        engine.player.camera.combined_mat = engine.player.camera.proj_mat.mul(
-            engine.player.camera.view_mat,
-        );
+        timings.player_update_ns = timer.lap();
 
         sky_gradient.buildSkyRowsForCamera(sky_rows, &engine.player.camera);
+        timings.sky_ns = timer.lap();
 
         try engine.chunk_manager.updateChunks(
             allocator,
@@ -127,21 +157,30 @@ pub fn main(init: std.process.Init) !void {
             engine.player.camera.from,
             false,
         );
+        timings.update_chunks_ns = timer.lap();
 
         const visible_chunks = engine.chunk_manager.getVisibleActiveChunks(
             engine.player.camera.combined_mat,
         );
+        timings.visible_chunks_ns = timer.lap();
+        timings.visible_chunks = visible_chunks.len;
 
-        for (visible_chunks) |slot|
-            try renderer.generatePrimitivesFromChunk(
-                &engine.renderer,
-                slot,
-                engine.player.camera.from,
-                engine.player.camera.combined_mat,
-            );
+        try engine.primitive_builder.buildPrimitives(
+            visible_chunks,
+            engine.player.camera.from,
+            engine.player.camera.combined_mat,
+            allocator,
+            &group,
+            init.io,
+        );
+
+        timings.primitive_build_ns = timer.lap();
+
+        timings.primitives = engine.primitive_builder.frame_primitives.items.len;
+        timings.vertices = engine.primitive_builder.frame_vertices.items.len;
 
         if (ENABLE_DEBUG_OVERLAY) {
-            for (engine.renderer.frame_primitives.items) |prim| {
+            for (engine.primitive_builder.frame_primitives.items) |prim| {
                 debug_overlay.triangles_after_clipping += prim.vertex_count - 2;
             }
 
@@ -150,26 +189,32 @@ pub fn main(init: std.process.Init) !void {
             debug_overlay.player_grounded = engine.player.grounded;
         }
 
+        timings.debug_overlay_ns = timer.lap();
+
         try engine.rasterizer.render(
             allocator,
             &engine.tile_pool,
             frame.framebuffer,
-            engine.renderer.frame_primitives.items,
-            engine.renderer.frame_materials.items,
-            engine.renderer.frame_vertices.items,
+            engine.primitive_builder.frame_primitives.items,
+            engine.primitive_builder.frame_materials.items,
+            engine.primitive_builder.frame_vertices.items,
             sky_rows,
             &group,
             init.io,
+            &timings.rasterizer,
         );
 
+        _ = timer.lap();
+
+        timings.tile_refs = engine.rasterizer.tile_offsets[engine.tile_pool.count];
+
         try debug_overlay.render(&frame.framebuffer);
-        debug_overlay.renderGizmo(&frame.framebuffer, engine.player.camera.from, engine.player.camera.to);
+        debug_overlay.renderGizmo(
+            &frame.framebuffer,
+            engine.player.camera.from,
+            engine.player.camera.to,
+        );
         debug_overlay.frameReset();
-
-        // if (engine_config.debug_config.show_tex_atlas) engine.atlas.debugShowAtlas(&frame.framebuffer);
-        if (engine_config.debug_config.show_occupied_tiles) engine.tile_pool.debug_show_tiles_border(frame.framebuffer);
-
-        if (engine_config.debug_config.show_fps) engine.platform.fps_counter_update();
 
         // Draw the crosshair
         const size: usize = 16;
@@ -189,5 +234,28 @@ pub fn main(init: std.process.Init) !void {
         }
 
         overlay.drawBlockSelector(&frame.framebuffer, engine.player.selected_block);
+
+        timings.overlay_render_ns = timer.lap();
+
+        engine.endFrame(&frame);
+
+        timings.end_frame_ns = timer.lap();
+
+        timings.frame_ns =
+            timings.drain_chunks_ns +
+            timings.begin_frame_ns +
+            timings.input_ns +
+            timings.player_update_ns +
+            timings.camera_ns +
+            timings.sky_ns +
+            timings.update_chunks_ns +
+            timings.visible_chunks_ns +
+            timings.primitive_build_ns +
+            timings.debug_overlay_ns +
+            timings.rasterizer.total() +
+            timings.overlay_render_ns +
+            timings.end_frame_ns;
+
+        profiler.push(timings);
     }
 }

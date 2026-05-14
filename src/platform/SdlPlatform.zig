@@ -6,6 +6,7 @@ const types = @import("../types.zig");
 
 const SdlGraphics = @import("SdlGraphics.zig").SdlGraphics;
 const Player = @import("../game/Player.zig").Player;
+const FrameInputs = types.FrameInputs;
 
 const F3 = types.F3;
 
@@ -17,7 +18,6 @@ pub const SdlPlatform = struct {
     frames: u64, // frame counter
     running: bool,
     drop_next_mouse_delta: bool,
-
     mouse_capture: bool,
     ev: sdl.SDL_Event,
 
@@ -45,14 +45,14 @@ pub const SdlPlatform = struct {
     }
 
     /// Returns dt in seconds
-    pub fn begin_frame(self: *SdlPlatform) f32 {
+    pub fn beginFrame(self: *SdlPlatform) f32 {
         const now: u64 = sdl.SDL_GetPerformanceCounter();
         const delta_counts: u64 = now - self.last_frame;
         self.last_frame = now;
         return @as(f32, @floatFromInt(delta_counts)) / @as(f32, @floatFromInt(self.freq));
     }
 
-    pub fn fps_counter_update(self: *SdlPlatform) void {
+    pub fn fpsCounterUpdate(self: *SdlPlatform) void {
         self.frames += 1;
 
         const now: u64 = sdl.SDL_GetPerformanceCounter();
@@ -70,6 +70,12 @@ pub const SdlPlatform = struct {
         }
     }
 
+    pub fn resetFrameClock(self: *SdlPlatform) void {
+        const now = sdl.SDL_GetPerformanceCounter();
+        self.last_frame = now;
+        self.last_fps = now;
+    }
+
     fn pressedThisFrame(
         keys: [*c]const u8,
         prev_keys: *const [sdl.SDL_NUM_SCANCODES]u8,
@@ -82,8 +88,7 @@ pub const SdlPlatform = struct {
     pub fn processInputs(
         self: *SdlPlatform,
         dt: f32,
-        player: *Player,
-    ) void {
+    ) FrameInputs {
         var scroll_up = false;
         var scroll_down = false;
 
@@ -138,7 +143,9 @@ pub const SdlPlatform = struct {
             const right_down_now = (mouse_buttons & sdl.SDL_BUTTON_RMASK) != 0;
             const right_down_before = (self.prev_mouse_buttons & sdl.SDL_BUTTON_RMASK) != 0;
 
-            player.frame_inputs = .{
+            self.prev_mouse_buttons = mouse_buttons;
+
+            return .{
                 .forward = keys[sdl.SDL_SCANCODE_W] != 0,
                 .back = keys[sdl.SDL_SCANCODE_S] != 0,
                 .right = keys[sdl.SDL_SCANCODE_D] != 0,
@@ -155,8 +162,6 @@ pub const SdlPlatform = struct {
 
                 .dt = dt,
             };
-
-            self.prev_mouse_buttons = mouse_buttons;
         }
     }
 };

@@ -7,10 +7,10 @@ const textures = @import("../assets/textures.zig");
 const UV = types.UV;
 const Face = types.Face;
 const BlockId = types.BlockId;
-const Renderer = @import("../Renderer.zig").Renderer;
-const ProjectedVertex = Renderer.ProjectedVertex;
-const MaterialRef = Renderer.MaterialRef;
-const PrimitiveRef = Renderer.PrimitiveRef;
+const PrimitiveBuilder = @import("../PrimitiveBuilder.zig");
+const ProjectedVertex = PrimitiveBuilder.ProjectedVertex;
+const MaterialRef = PrimitiveBuilder.MaterialRef;
+const PrimitiveRef = PrimitiveBuilder.PrimitiveRef;
 
 const Tile = @import("../tile.zig").Tile;
 const TilePool = @import("../tile.zig").TilePool;

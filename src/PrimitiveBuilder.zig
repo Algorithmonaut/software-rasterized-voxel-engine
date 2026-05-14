@@ -1,29 +1,32 @@
 const std = @import("std");
 const main = @import("main.zig");
 const types = @import("types.zig");
-const chunk = @import("world/chunk.zig");
+const mat = @import("math/matrix.zig");
 const constants = @import("constants.zig");
+const chunk_mod = @import("world/chunk.zig");
 
-const Mat4f = @import("math/matrix.zig").Mat4f;
-const PlaneKind = @import("mesh/Mesh.zig").PlaneKind;
-const ChunkSlot = chunk.ChunkSlot;
-const RenderQuad = @import("mesh/Mesh.zig").RenderQuad;
-const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
-
-const UV = types.UV;
 const F3 = types.F3;
 const F4 = types.F4;
+const UV = types.UV;
 const FX2 = types.FX2;
 const Face = types.Face;
 const BlockId = types.BlockId;
 const WorldVertex = types.WorldVertex;
+const ChunkSlot = chunk_mod.ChunkSlot;
+const Mat4f = @import("math/matrix.zig").Mat4f;
+const World = @import("world/World.zig").World;
+const PlaneKind = @import("mesh/Mesh.zig").PlaneKind;
+const RenderQuad = @import("mesh/Mesh.zig").RenderQuad;
+const FramebufferConfig = @import("EngineConfig.zig").EngineConfig.FramebufferConfig;
 
 const TEX_SIZE = constants.TEX_SIZE;
 const CHUNK_SIZE = constants.CHUNK_SIZE;
 const SUBPIXEL_SCALE = constants.SUBPIXEL_SCALE;
 const SUBPIXEL_MASK = (1 << constants.SUBPIXEL_BITS) - 1;
 
-// TODO: Centralize this
+const AtomicUsize = std.atomic.Value(usize);
+
+const BATCH_SIZE = 16;
 
 const eps: f32 = 0.0001;
 
@@ -36,21 +39,161 @@ const plane_kind_to_face_map = [_]Face{
     .top, // pos_y = 5
 };
 
-pub const Renderer = struct {
-    pub const ProjectedVertex = struct { xy: FX2, q: f32, uv: UV };
-    pub const MaterialRef = struct { id: BlockId, face: Face };
-    pub const PrimitiveRef = struct {
-        base_vertex: u32 = undefined,
-        vertex_count: u8 = undefined,
-        min_tx: u16 = 0,
-        max_tx: u16 = std.math.maxInt(u16),
-        min_ty: u16 = 0,
-        max_ty: u16 = std.math.maxInt(u16),
-    };
+// In order to keep front to back rendering, we need a per-chunk segment table
+const ChunkBuildSegment = struct {
+    worker_id: u16 = 0,
+    valid: bool = false, // move valid out of this struct
 
-    frame_primitives: std.ArrayList(PrimitiveRef),
-    frame_materials: std.ArrayList(MaterialRef),
-    frame_vertices: std.ArrayList(ProjectedVertex),
+    vertex_start: u32 = 0,
+    vertex_count: u32 = 0,
+
+    primitive_start: u32 = 0,
+    primitive_count: u32 = 0,
+
+    final_vertex_start: u32 = 0,
+    final_primitive_start: u32 = 0,
+};
+
+const VisibleChunk = struct {
+    chunk_i: usize,
+    slot: *const ChunkSlot,
+};
+
+pub const ProjectedVertex = struct { xy: FX2, q: f32, uv: UV };
+pub const MaterialRef = struct { id: BlockId, face: Face };
+pub const PrimitiveRef = struct {
+    base_vertex: u32 = undefined,
+    vertex_count: u8 = undefined,
+    min_tx: u16 = 0,
+    max_tx: u16 = std.math.maxInt(u16),
+    min_ty: u16 = 0,
+    max_ty: u16 = std.math.maxInt(u16),
+};
+
+inline fn isChunkInFrustum(chunk: *const ChunkSlot, planes: *const [5]F4) bool {
+    const world_max: F3 = @floatFromInt(chunk.world_max);
+    const world_min: F3 = @floatFromInt(chunk.world_min);
+
+    var inside = true;
+
+    for (planes) |plane| {
+        const point = F4{
+            if (plane[0] >= 0) world_max[0] else world_min[0],
+            if (plane[1] >= 0) world_max[1] else world_min[1],
+            if (plane[2] >= 0) world_max[2] else world_min[2],
+            1,
+        };
+
+        const dist = @reduce(.Add, point * plane);
+        if (dist < 0) {
+            inside = false;
+            break;
+        }
+    }
+
+    return inside;
+}
+
+fn buildingWorker(
+    worker_id: usize,
+    next: *AtomicUsize,
+    planes: *const [5]F4,
+    chunks: []const *const ChunkSlot,
+    allocator: std.mem.Allocator,
+    primitive_builder: *PrimitiveBuilder,
+    camera_pos: F3,
+    combined_mat: Mat4f,
+) void {
+    var prims = &primitive_builder.workers_frame_primitives[worker_id];
+    var mats = &primitive_builder.workers_frame_materials[worker_id];
+    var verts = &primitive_builder.workers_frame_vertices[worker_id];
+
+    while (true) {
+        const chunk_base = next.fetchAdd(BATCH_SIZE, .monotonic);
+        if (chunk_base >= chunks.len) break;
+
+        var count: usize = 0;
+        var visible_chunks: [BATCH_SIZE]VisibleChunk = undefined;
+
+        // Find visible chunks
+
+        const chunk_count = @min(BATCH_SIZE, chunks.len - chunk_base);
+
+        for (0..chunk_count) |incr| {
+            const chunk_i = chunk_base + incr;
+            const chunk = chunks[chunk_i];
+
+            if (isChunkInFrustum(chunk, planes) and chunk.mesh != null) {
+                visible_chunks[count] = .{
+                    .chunk_i = chunk_i,
+                    .slot = chunk,
+                };
+                count += 1;
+            }
+        }
+
+        // Ensure total capacity of ArrayLists
+
+        const max_vertices_per_clipped_primitive = 9;
+        var primitives_sum: usize = 0;
+        for (0..count) |i| {
+            const mesh = visible_chunks[i].slot.mesh.?;
+            primitives_sum +=
+                mesh.neg_x_faces.items.len +
+                mesh.pos_x_faces.items.len +
+                mesh.neg_y_faces.items.len +
+                mesh.pos_y_faces.items.len +
+                mesh.neg_z_faces.items.len +
+                mesh.pos_z_faces.items.len;
+        }
+
+        prims.ensureUnusedCapacity(allocator, primitives_sum) catch @panic("OOM");
+        mats.ensureUnusedCapacity(allocator, primitives_sum) catch @panic("OOM");
+        verts.ensureUnusedCapacity(
+            allocator,
+            primitives_sum * max_vertices_per_clipped_primitive,
+        ) catch @panic("OOM");
+
+        // Generate primitives for all chunks
+
+        for (0..count) |i| {
+            const vc = visible_chunks[i];
+            const chunk = vc.slot;
+
+            const v_start: u32 =
+                @intCast(primitive_builder.workers_frame_vertices[worker_id].items.len);
+            const p_start: u32 =
+                @intCast(primitive_builder.workers_frame_primitives[worker_id].items.len);
+
+            generatePrimitivesFromChunk(
+                primitive_builder,
+                worker_id,
+                chunk,
+                camera_pos,
+                combined_mat,
+            ) catch @panic("Failed to generate primitives from chunk");
+
+            const v_end: u32 =
+                @intCast(primitive_builder.workers_frame_vertices[worker_id].items.len);
+            const p_end: u32 =
+                @intCast(primitive_builder.workers_frame_primitives[worker_id].items.len);
+
+            primitive_builder.chunk_segments.items[vc.chunk_i] = .{
+                .worker_id = @intCast(worker_id),
+                .valid = true,
+
+                .vertex_start = v_start,
+                .vertex_count = v_end - v_start,
+
+                .primitive_start = p_start,
+                .primitive_count = p_end - p_start,
+            };
+        }
+    }
+}
+
+pub const PrimitiveBuilder = struct {
+    cpu_count: usize,
 
     fb_width: usize,
     fb_height: usize,
@@ -58,30 +201,42 @@ pub const Renderer = struct {
     tiles_count_w: usize,
     tiles_count_h: usize,
 
+    workers_frame_primitives: []std.ArrayList(PrimitiveRef),
+    workers_frame_materials: []std.ArrayList(MaterialRef),
+    workers_frame_vertices: []std.ArrayList(ProjectedVertex),
+
+    frame_primitives: std.ArrayList(PrimitiveRef),
+    frame_materials: std.ArrayList(MaterialRef),
+    frame_vertices: std.ArrayList(ProjectedVertex),
+
+    chunk_segments: std.ArrayList(ChunkBuildSegment),
+
     planes: [5]F4 = undefined,
 
     pub fn init(
         allocator: std.mem.Allocator,
         conf: FramebufferConfig,
-        view_distance: f32,
-    ) !Renderer {
-        _ = view_distance;
-
+    ) !PrimitiveBuilder {
         const tiles_count_w = try std.math.divCeil(usize, conf.width, conf.tile_dimensions);
         const tiles_count_h = try std.math.divCeil(usize, conf.height, conf.tile_dimensions);
 
-        return .{
-            // TODO: I presume that these are good estimates, but please investigate
-            // .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 70_000),
-            // .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 70_000),
-            // .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 280_000),
-            // .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 140_000),
-            // .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 140_000),
-            // .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 560_000),
+        const cpu_count = try std.Thread.getCpuCount();
 
-            .frame_primitives = try std.ArrayList(PrimitiveRef).initCapacity(allocator, 280_000),
-            .frame_materials = try std.ArrayList(MaterialRef).initCapacity(allocator, 280_000),
-            .frame_vertices = try std.ArrayList(ProjectedVertex).initCapacity(allocator, 1_120_000),
+        const workers_frame_primitives =
+            try allocator.alloc(std.ArrayList(PrimitiveRef), cpu_count);
+        const workers_frame_materials =
+            try allocator.alloc(std.ArrayList(MaterialRef), cpu_count);
+        const workers_frame_vertices =
+            try allocator.alloc(std.ArrayList(ProjectedVertex), cpu_count);
+
+        for (0..cpu_count) |i| {
+            workers_frame_primitives[i] = .empty;
+            workers_frame_materials[i] = .empty;
+            workers_frame_vertices[i] = .empty;
+        }
+
+        return .{
+            .cpu_count = cpu_count,
 
             .fb_width = conf.width,
             .fb_height = conf.height,
@@ -89,38 +244,34 @@ pub const Renderer = struct {
 
             .tiles_count_w = tiles_count_w,
             .tiles_count_h = tiles_count_h,
+
+            .workers_frame_primitives = workers_frame_primitives,
+            .workers_frame_materials = workers_frame_materials,
+            .workers_frame_vertices = workers_frame_vertices,
+
+            .frame_primitives = .empty,
+            .frame_materials = .empty,
+            .frame_vertices = .empty,
+
+            .chunk_segments = .empty,
         };
     }
 
-    pub fn deinit(self: *Renderer, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *PrimitiveBuilder, allocator: std.mem.Allocator) void {
+        for (0..self.cpu_count) |i| {
+            self.workers_frame_primitives[i].deinit(allocator);
+            self.workers_frame_materials[i].deinit(allocator);
+            self.workers_frame_vertices[i].deinit(allocator);
+        }
+        allocator.free(self.workers_frame_primitives);
+        allocator.free(self.workers_frame_materials);
+        allocator.free(self.workers_frame_vertices);
+
         self.frame_primitives.deinit(allocator);
         self.frame_materials.deinit(allocator);
         self.frame_vertices.deinit(allocator);
-        self.chunk_entries.deinit(allocator);
-    }
 
-    pub fn beginFrame(self: *Renderer) void {
-        self.frame_primitives.clearRetainingCapacity();
-        self.frame_materials.clearRetainingCapacity();
-        self.frame_vertices.clearRetainingCapacity();
-    }
-
-    inline fn ndcToScreenFixedPoint(
-        x_ndc: f32,
-        y_ndc: f32,
-        fb_width: usize,
-        fb_height: usize,
-    ) FX2 {
-        const fw: f32 = @floatFromInt(fb_width);
-        const fh: f32 = @floatFromInt(fb_height);
-
-        const sx = (x_ndc + 1.0) * 0.5 * fw;
-        const sy = (1.0 - (y_ndc + 1.0) * 0.5) * fh;
-
-        return .{
-            @intFromFloat(@floor(sx * SUBPIXEL_SCALE)),
-            @intFromFloat(@floor(sy * SUBPIXEL_SCALE)),
-        };
+        self.chunk_segments.deinit(allocator);
     }
 
     inline fn floorFixed(x: i32) i32 {
@@ -132,9 +283,21 @@ pub const Renderer = struct {
         return @intCast(-@divFloor(-xi, SUBPIXEL_SCALE));
     }
 
-    // TODO: Understand this code
+    inline fn ndcToScreenFixedPoint(self: *PrimitiveBuilder, x_ndc: f32, y_ndc: f32) FX2 {
+        const fw: f32 = @floatFromInt(self.fb_width);
+        const fh: f32 = @floatFromInt(self.fb_height);
+
+        const sx = (x_ndc + 1.0) * 0.5 * fw;
+        const sy = (1.0 - (y_ndc + 1.0) * 0.5) * fh;
+
+        return .{
+            @intFromFloat(@floor(sx * SUBPIXEL_SCALE)),
+            @intFromFloat(@floor(sy * SUBPIXEL_SCALE)),
+        };
+    }
+
     inline fn clampTileRange(
-        self: *const Renderer,
+        self: *const PrimitiveBuilder,
         min_x_fx: i32,
         max_x_fx: i32,
         min_y_fx: i32,
@@ -170,9 +333,9 @@ pub const Renderer = struct {
         };
     }
 
-    /// No need to do backface culling anymore
     inline fn emitQuad(
-        self: *Renderer,
+        self: *PrimitiveBuilder,
+        worker_id: usize,
         verts_coord: *const [4]F4,
         verts_uv: *const [4]UV,
         id: BlockId,
@@ -184,12 +347,7 @@ pub const Renderer = struct {
         vertices[0].q = rec_w;
         var v = verts_coord[0] * @as(F4, @splat(rec_w));
 
-        var p = ndcToScreenFixedPoint(
-            v[0],
-            v[1],
-            self.fb_width,
-            self.fb_height,
-        );
+        var p = self.ndcToScreenFixedPoint(v[0], v[1]);
 
         var min_x = p[0];
         var max_x = p[0];
@@ -204,12 +362,7 @@ pub const Renderer = struct {
             vertices[i].q = rec_w;
             v = verts_coord[i] * @as(F4, @splat(rec_w));
 
-            p = ndcToScreenFixedPoint(
-                v[0],
-                v[1],
-                self.fb_width,
-                self.fb_height,
-            );
+            p = self.ndcToScreenFixedPoint(v[0], v[1]);
 
             min_x = @min(min_x, p[0]);
             max_x = @max(max_x, p[0]);
@@ -222,9 +375,9 @@ pub const Renderer = struct {
 
         const tr = self.clampTileRange(min_x, max_x, min_y, max_y);
 
-        const base: u32 = @intCast(self.frame_vertices.items.len);
-        self.frame_vertices.appendSliceAssumeCapacity(&vertices);
-        self.frame_primitives.appendAssumeCapacity(.{
+        const base: u32 = @intCast(self.workers_frame_vertices[worker_id].items.len);
+        self.workers_frame_vertices[worker_id].appendSliceAssumeCapacity(&vertices);
+        self.workers_frame_primitives[worker_id].appendAssumeCapacity(.{
             .base_vertex = base,
             .vertex_count = 4,
             .min_tx = tr.min_tx,
@@ -232,14 +385,15 @@ pub const Renderer = struct {
             .min_ty = tr.min_ty,
             .max_ty = tr.max_ty,
         });
-        self.frame_materials.appendAssumeCapacity(.{
+        self.workers_frame_materials[worker_id].appendAssumeCapacity(.{
             .id = id,
             .face = face,
         });
     }
 
     inline fn emitPolygon(
-        self: *Renderer,
+        self: *PrimitiveBuilder,
+        worker_id: usize,
         polygon: *ClippedPolygon,
         id: BlockId,
         face: Face,
@@ -255,12 +409,7 @@ pub const Renderer = struct {
         vertices[0].q = rec_w;
         var v = polygon.verts[0].pos * @as(F4, @splat(rec_w));
 
-        var p = ndcToScreenFixedPoint(
-            v[0],
-            v[1],
-            self.fb_width,
-            self.fb_height,
-        );
+        var p = self.ndcToScreenFixedPoint(v[0], v[1]);
 
         var min_x = p[0];
         var max_x = p[0];
@@ -275,12 +424,7 @@ pub const Renderer = struct {
             vertices[i].q = rec_w;
             v = polygon.verts[i].pos * @as(F4, @splat(rec_w));
 
-            p = ndcToScreenFixedPoint(
-                v[0],
-                v[1],
-                self.fb_width,
-                self.fb_height,
-            );
+            p = self.ndcToScreenFixedPoint(v[0], v[1]);
 
             min_x = @min(min_x, p[0]);
             max_x = @max(max_x, p[0]);
@@ -293,9 +437,9 @@ pub const Renderer = struct {
 
         const tr = self.clampTileRange(min_x, max_x, min_y, max_y);
 
-        const base: u32 = @intCast(self.frame_vertices.items.len);
-        self.frame_vertices.appendSliceAssumeCapacity(vertices[0..len]);
-        self.frame_primitives.appendAssumeCapacity(.{
+        const base: u32 = @intCast(self.workers_frame_vertices[worker_id].items.len);
+        self.workers_frame_vertices[worker_id].appendSliceAssumeCapacity(vertices[0..len]);
+        self.workers_frame_primitives[worker_id].appendAssumeCapacity(.{
             .base_vertex = base,
             .vertex_count = @intCast(len),
             .min_tx = tr.min_tx,
@@ -303,10 +447,125 @@ pub const Renderer = struct {
             .min_ty = tr.min_ty,
             .max_ty = tr.max_ty,
         });
-        self.frame_materials.appendAssumeCapacity(.{
+        self.workers_frame_materials[worker_id].appendAssumeCapacity(.{
             .id = id,
             .face = face,
         });
+    }
+
+    pub fn buildPrimitives(
+        self: *PrimitiveBuilder,
+        chunks: []const *const ChunkSlot,
+        camera_pos: F3,
+        combined_mat: Mat4f,
+        allocator: std.mem.Allocator,
+        group: *std.Io.Group,
+        io: std.Io,
+    ) !void {
+        self.frame_primitives.clearRetainingCapacity();
+        self.frame_materials.clearRetainingCapacity();
+        self.frame_vertices.clearRetainingCapacity();
+
+        for (0..self.cpu_count) |i| {
+            self.workers_frame_primitives[i].clearRetainingCapacity();
+            self.workers_frame_materials[i].clearRetainingCapacity();
+            self.workers_frame_vertices[i].clearRetainingCapacity();
+        }
+
+        try self.chunk_segments.ensureTotalCapacity(allocator, chunks.len);
+        self.chunk_segments.clearRetainingCapacity();
+        self.chunk_segments.appendNTimesAssumeCapacity(.{}, chunks.len);
+
+        const planes = [5]F4{
+            combined_mat.r[3] + combined_mat.r[0], // left
+            combined_mat.r[3] - combined_mat.r[0], // right
+            combined_mat.r[3] + combined_mat.r[1], // bottom
+            combined_mat.r[3] - combined_mat.r[1], // top
+            combined_mat.r[2], // near
+        };
+
+        var next = AtomicUsize.init(0);
+
+        for (0..self.cpu_count) |i| {
+            group.async(io, buildingWorker, .{
+                i,
+                &next,
+                &planes,
+                chunks,
+                allocator,
+                self,
+                camera_pos,
+                combined_mat,
+            });
+        }
+
+        try group.await(io);
+
+        // Understand this code, too tired today
+
+        var total_length_primitives: u32 = 0;
+        var total_length_vertices: u32 = 0;
+
+        for (self.chunk_segments.items) |*seg| {
+            if (!seg.valid) continue;
+
+            seg.final_vertex_start = total_length_vertices;
+            seg.final_primitive_start = total_length_primitives;
+
+            total_length_vertices += seg.vertex_count;
+            total_length_primitives += seg.primitive_count;
+        }
+
+        try self.frame_primitives.ensureTotalCapacity(allocator, total_length_primitives);
+        try self.frame_materials.ensureTotalCapacity(allocator, total_length_primitives);
+        try self.frame_vertices.ensureTotalCapacity(allocator, total_length_vertices);
+
+        self.frame_primitives.items.len = total_length_primitives;
+        self.frame_materials.items.len = total_length_primitives;
+        self.frame_vertices.items.len = total_length_vertices;
+
+        for (self.chunk_segments.items) |seg| {
+            if (!seg.valid or seg.primitive_count == 0) continue;
+
+            const worker_id: usize = seg.worker_id;
+
+            const worker_vertices = self.workers_frame_vertices[worker_id].items;
+            const worker_prims = self.workers_frame_primitives[worker_id].items;
+            const worker_mats = self.workers_frame_materials[worker_id].items;
+
+            const src_v0: usize = seg.vertex_start;
+            const src_v1: usize = src_v0 + seg.vertex_count;
+
+            const src_p0: usize = seg.primitive_start;
+            const src_p1: usize = src_p0 + seg.primitive_count;
+
+            const dst_v0: usize = seg.final_vertex_start;
+            const dst_v1: usize = dst_v0 + seg.vertex_count;
+
+            const dst_p0: usize = seg.final_primitive_start;
+            const dst_p1: usize = dst_p0 + seg.primitive_count;
+
+            @memcpy(
+                self.frame_vertices.items[dst_v0..dst_v1],
+                worker_vertices[src_v0..src_v1],
+            );
+
+            @memcpy(
+                self.frame_materials.items[dst_p0..dst_p1],
+                worker_mats[src_p0..src_p1],
+            );
+
+            for (worker_prims[src_p0..src_p1], 0..) |p, i| {
+                var fixed = p;
+
+                fixed.base_vertex =
+                    p.base_vertex -
+                    @as(u32, @intCast(seg.vertex_start)) +
+                    seg.final_vertex_start;
+
+                self.frame_primitives.items[dst_p0 + i] = fixed;
+            }
+        }
     }
 };
 
@@ -410,7 +669,8 @@ fn emitRenderQuad(
     rq: RenderQuad,
     chunk_min: F3,
     combined_mat: Mat4f,
-    renderer: *Renderer,
+    primitive_builder: *PrimitiveBuilder,
+    worker_id: usize,
 ) !void {
     const fx = chunk_min[0];
     const fy = chunk_min[1];
@@ -500,7 +760,7 @@ fn emitRenderQuad(
 
     // Quad trivially inside
     if (or_code == 0) {
-        renderer.emitQuad(&verts_coord, &verts_uv, rq.voxel.id, face);
+        primitive_builder.emitQuad(worker_id, &verts_coord, &verts_uv, rq.voxel.id, face);
         return;
     }
 
@@ -536,7 +796,7 @@ fn emitRenderQuad(
         if (clipped_polygon.len < 3) return;
     }
 
-    renderer.emitPolygon(&clipped_polygon, rq.voxel.id, face);
+    primitive_builder.emitPolygon(worker_id, &clipped_polygon, rq.voxel.id, face);
 }
 
 //// TRIVIAL, PLANE NORMAL BASED CULLING | AXIS BUCKET CULL ////////////////////
@@ -549,7 +809,8 @@ fn emitBucket(
     slab_max: f32,
     chunk_min: F3,
     combined_mat: Mat4f,
-    renderer: *Renderer,
+    primitive_builder: *PrimitiveBuilder,
+    worker_id: usize,
 ) !void {
     // POSITIVE AXIS (box is chunk):
     //             ┌───┐
@@ -579,7 +840,8 @@ fn emitBucket(
             quad,
             chunk_min,
             combined_mat,
-            renderer,
+            primitive_builder,
+            worker_id,
         );
         return;
     }
@@ -607,32 +869,21 @@ fn emitBucket(
             if (cam_axis > axis_world_coord + eps) {
                 if (main.ENABLE_DEBUG_OVERLAY) main.debug_overlay.triangles_after_bucket_cull += 2;
 
-                try emitRenderQuad(
-                    kind,
-                    quad,
-                    chunk_min,
-                    combined_mat,
-                    renderer,
-                );
+                try emitRenderQuad(kind, quad, chunk_min, combined_mat, primitive_builder, worker_id);
             }
         } else {
             if (cam_axis < axis_world_coord - eps) {
                 if (main.ENABLE_DEBUG_OVERLAY) main.debug_overlay.triangles_after_bucket_cull += 2;
 
-                try emitRenderQuad(
-                    kind,
-                    quad,
-                    chunk_min,
-                    combined_mat,
-                    renderer,
-                );
+                try emitRenderQuad(kind, quad, chunk_min, combined_mat, primitive_builder, worker_id);
             }
         }
     }
 }
 
 pub fn generatePrimitivesFromChunk(
-    renderer: *Renderer,
+    primitive_builder: *PrimitiveBuilder,
+    worker_id: usize,
     slot: *const ChunkSlot,
     camera_pos: F3,
     combined_mat: Mat4f,
@@ -648,10 +899,10 @@ pub fn generatePrimitivesFromChunk(
             mesh.pos_y_faces.items.len + mesh.neg_y_faces.items.len +
             mesh.pos_z_faces.items.len + mesh.neg_z_faces.items.len) * 2;
 
-    try emitBucket(.pos_x, mesh.pos_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer);
-    try emitBucket(.pos_y, mesh.pos_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer);
-    try emitBucket(.pos_z, mesh.pos_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer);
-    try emitBucket(.neg_x, mesh.neg_x_faces.items, pos[0], min[0], max[0], min, combined_mat, renderer);
-    try emitBucket(.neg_y, mesh.neg_y_faces.items, pos[1], min[1], max[1], min, combined_mat, renderer);
-    try emitBucket(.neg_z, mesh.neg_z_faces.items, pos[2], min[2], max[2], min, combined_mat, renderer);
+    try emitBucket(.pos_x, mesh.pos_x_faces.items, pos[0], min[0], max[0], min, combined_mat, primitive_builder, worker_id);
+    try emitBucket(.pos_y, mesh.pos_y_faces.items, pos[1], min[1], max[1], min, combined_mat, primitive_builder, worker_id);
+    try emitBucket(.pos_z, mesh.pos_z_faces.items, pos[2], min[2], max[2], min, combined_mat, primitive_builder, worker_id);
+    try emitBucket(.neg_x, mesh.neg_x_faces.items, pos[0], min[0], max[0], min, combined_mat, primitive_builder, worker_id);
+    try emitBucket(.neg_y, mesh.neg_y_faces.items, pos[1], min[1], max[1], min, combined_mat, primitive_builder, worker_id);
+    try emitBucket(.neg_z, mesh.neg_z_faces.items, pos[2], min[2], max[2], min, combined_mat, primitive_builder, worker_id);
 }

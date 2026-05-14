@@ -67,7 +67,7 @@ pub const SdlGraphics = struct {
         _ = self;
     }
 
-    pub fn begin_frame(self: *SdlGraphics) !Framebuffer {
+    pub fn beginFrame(self: *SdlGraphics) !Framebuffer {
         var pixels: ?*anyopaque = null;
         var pitch_c: c_int = 0;
 
@@ -86,7 +86,7 @@ pub const SdlGraphics = struct {
         }; // Returns a framebuffer object
     }
 
-    pub fn end_frame(self: *SdlGraphics) void {
+    pub fn endFrame(self: *SdlGraphics) void {
         sdl.SDL_UnlockTexture(self.texture);
     }
 
