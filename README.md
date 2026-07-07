@@ -6,6 +6,12 @@ The renderer does not use GPU rasterization. SDL2 is used for windowing, input, 
 Status: experimental engine / learning project. Some systems are still in development.
 
 What is crazy is that for a rendering distance of  30 chunks, I get around 100FPS with my 7800X3D. CPUs are powerfull!
+
+<img width="1922" height="1078" alt="2026-05-14-165510_hyprshot" src="https://github.com/user-attachments/assets/1f6541bd-5144-4099-ab13-48673d4dd184" />
+<img width="1920" height="1080" alt="2026-05-12-164923_hyprshot" src="https://github.com/user-attachments/assets/6cbd4ba2-5aa6-4476-8e85-83a91ba79418" />
+
+
+
 # Highlights
 - **Fully software rasterized world renderer**
 	- CPU-side projection, clipping, primitive binning, depth testing, texture sampling, and framebuffer writes.
