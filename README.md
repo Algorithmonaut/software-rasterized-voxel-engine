@@ -7,6 +7,31 @@ Status: experimental engine / learning project. Some systems are still in develo
 
 What is crazy is that for a rendering distance of  30 chunks, I get around 100FPS with my 7800X3D. CPUs are powerfull!
 
+___
+
+# Disclaimer
+
+My intention with this project was to learn how to have a scientific approach while designing systems. Yet:
+- The performance impact of the features / feature iterations wasn't efficiently measured.
+- The codebase wasn't tested and validated.
+- My findings weren't properly documented.
+
+It is fair to say that doing such a large project trained me to:
+- design a large system
+- integrate many subsystems
+- debug difficult rendering and concurrency problems
+- persist through a long project
+  
+*But* merely keeping the whole system operational consumed most of my attention, and prevented me from developing a disciplined experimental workflow.
+
+Consequently I'am going to put the project on hold, and focus on a smaller project, a simple optimized software rasterized textured hello cube. The reduced complexity will allow me to focus on my approach.
+
+Once this small project finished, I will be able to return to this one, and then document it, harden it, and of course add some features:
+- Lighting!
+- I would also very much like to write a simple kernel such that my engine does not need SDL nor Linux to run, but I am not able to estimate the complexity of such feature, because my knowledge of OS is only theoretical.
+
+___
+
 <img width="1922" height="1078" alt="2026-05-14-165510_hyprshot" src="https://github.com/user-attachments/assets/1f6541bd-5144-4099-ab13-48673d4dd184" />
 <img width="1920" height="1080" alt="2026-05-12-164923_hyprshot" src="https://github.com/user-attachments/assets/6cbd4ba2-5aa6-4476-8e85-83a91ba79418" />
 
