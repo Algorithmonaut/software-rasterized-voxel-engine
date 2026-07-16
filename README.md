@@ -104,7 +104,7 @@ ___
 
 # Problem
 
-Around $90\%$ of all the geometry in the scene of my voxel engine is occluded at any time. We want to find a way to easily reject such geometry without having to:
+Around $90$% of all the geometry in the scene of my voxel engine is occluded at any time. We want to find a way to easily reject such geometry without having to:
 
 - Decode each compressed quad descriptor into its four world-space vertices, material information, texture coordinates, and other per-primitive data.
 - Transform the vertices into clip space, perform near-plane and viewport clipping, and compute the projected screen-space bounds.
@@ -140,7 +140,7 @@ The `coverage` bitset removes the need to clear the `depth_buffer` and `winner_b
 - Clear the `converage` bitset at the end of each frame.
 - Probe the bit associated to a position $P$ to know if the value at position $P$ belongs to the current frame.
 
-This could reduce frame time up to $0.5$ms (i.e. the average of frame clear time according to the profiler).
+This could reduce frame time up to 0.5ms (i.e. the average of frame clear time according to the profiler).
 
 But most importantly, the `coverage` bitset is a form of *Hi-Z* (hierarchical depth buffer):
 
@@ -149,6 +149,7 @@ But most importantly, the `coverage` bitset is a form of *Hi-Z* (hierarchical de
 ## Fast rejection of hierarchical world nodes using *Hi-Z*
 
 Once all $64$ pixels of the tile $T$ are covered (i.e. when `converage` $= \underbrace{\text{11...1}}_{\text{64 times}})$:
+
 $$q_{far}(T) = min_{p \in T}q(p)$$
 
 For a world hierarchy node $N$ (i.e. a chunk or a compact superset of chunks), we calculate a conservative closest possible reciprocal depth:
@@ -157,7 +158,9 @@ $$q_{near}(N) = max_{x \in N}\ \frac{1}{w(x)}$$
 Because $w$ is affine over an axis-aligned bounding-box (AABB), and the node is entirely in front of the near plane, this can be bounded from its eight corners.
 
 The node is occluded over a tile when:
+
 $$(q_{near}(N) \leq q_{far}(T))\ \land (\text{coverage} = \underbrace{\text{11...1}}_{\text{64 times}})$$
+
 Thus, the entire node can be skipped for the tile.
 
 ## Covering tiles *quickly*
